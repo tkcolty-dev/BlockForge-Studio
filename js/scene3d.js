@@ -166,7 +166,18 @@ class Scene3D {
     initRaycaster() {
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
+
+        // Drag state
+        this._isDragging = false;
+        this._dragObject = null;
+        this._dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        this._dragOffset = new THREE.Vector3();
+        this._dragIntersect = new THREE.Vector3();
+        this._pointerDownPos = new THREE.Vector2();
+
         this.canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+        this.canvas.addEventListener('pointermove', (e) => this.onPointerMove(e));
+        this.canvas.addEventListener('pointerup', (e) => this.onPointerUp(e));
     }
 
     initDefaultScene() {
@@ -681,20 +692,15 @@ class Scene3D {
 
     // ===== Interaction =====
 
-    onPointerDown(event) {
-        if (this.isPlaying) return;
-        if (this.transformControls.dragging) return;
-
-        // Only handle left click for selection
-        if (event.button !== 0) return;
-
+    _getMouseNDC(event) {
         const rect = this.canvas.getBoundingClientRect();
-        this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        return new THREE.Vector2(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1
+        );
+    }
 
-        this.raycaster.setFromCamera(this.mouse, this.camera);
-
-        // Get all meshes from our objects
+    _getSceneMeshes() {
         const meshes = [];
         this.objects.forEach(obj => {
             if (obj.isMesh) {
@@ -707,21 +713,102 @@ class Scene3D {
                 });
             }
         });
+        return meshes;
+    }
 
+    _findRootObject(mesh) {
+        let target = mesh;
+        while (target.parent && !this.objects.includes(target)) {
+            target = target.parent;
+        }
+        return this.objects.includes(target) ? target : null;
+    }
+
+    onPointerDown(event) {
+        if (this.isPlaying) return;
+        if (this.transformControls.dragging) return;
+        if (event.button !== 0) return;
+
+        this.mouse.copy(this._getMouseNDC(event));
+        this._pointerDownPos.copy(this.mouse);
+
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        const meshes = this._getSceneMeshes();
         const intersects = this.raycaster.intersectObjects(meshes, false);
 
         if (intersects.length > 0) {
-            // Find the root object (from our objects array)
-            let target = intersects[0].object;
-            while (target.parent && !this.objects.includes(target)) {
-                target = target.parent;
-            }
-            if (this.objects.includes(target) && !target.userData.locked) {
+            const target = this._findRootObject(intersects[0].object);
+            if (target && !target.userData.locked) {
                 this.selectObject(target);
+
+                // Set up drag plane at object's Y, facing up
+                this._dragPlane.set(new THREE.Vector3(0, 1, 0), -target.position.y);
+
+                // Compute offset between hit point and object position on the drag plane
+                const hitPoint = new THREE.Vector3();
+                this.raycaster.ray.intersectPlane(this._dragPlane, hitPoint);
+                this._dragOffset.subVectors(target.position, hitPoint);
+
+                this._dragObject = target;
+                this._isDragging = false; // Will become true on move beyond threshold
             }
         } else {
             this.deselect();
+            this._dragObject = null;
         }
+    }
+
+    onPointerMove(event) {
+        if (this.isPlaying) return;
+        if (!this._dragObject) return;
+        if (this.transformControls.dragging) return;
+
+        this.mouse.copy(this._getMouseNDC(event));
+
+        // Require a small movement threshold before starting drag
+        if (!this._isDragging) {
+            const dx = this.mouse.x - this._pointerDownPos.x;
+            const dy = this.mouse.y - this._pointerDownPos.y;
+            if (Math.sqrt(dx * dx + dy * dy) < 0.01) return;
+            this._isDragging = true;
+            this.orbitControls.enabled = false;
+            // Hide transform gizmo while direct-dragging
+            this.transformControls.detach();
+        }
+
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        if (this.raycaster.ray.intersectPlane(this._dragPlane, this._dragIntersect)) {
+            let newX = this._dragIntersect.x + this._dragOffset.x;
+            let newZ = this._dragIntersect.z + this._dragOffset.z;
+
+            // Apply snap
+            if (this.snapEnabled) {
+                newX = Math.round(newX / this.snapSize) * this.snapSize;
+                newZ = Math.round(newZ / this.snapSize) * this.snapSize;
+            }
+
+            this._dragObject.position.x = newX;
+            this._dragObject.position.z = newZ;
+
+            if (this.onObjectChanged) {
+                this.onObjectChanged(this._dragObject);
+            }
+        }
+    }
+
+    onPointerUp(event) {
+        if (!this._dragObject) return;
+
+        if (this._isDragging) {
+            this.orbitControls.enabled = true;
+            // Re-attach transform gizmo
+            if (this.selectedObject) {
+                this.transformControls.attach(this.selectedObject);
+            }
+        }
+
+        this._isDragging = false;
+        this._dragObject = null;
     }
 
     // ===== Tool Management =====

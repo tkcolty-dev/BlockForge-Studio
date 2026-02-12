@@ -764,6 +764,7 @@ input[type="checkbox"] {
     right: 0;
     bottom: 0;
     z-index: 50;
+    pointer-events: none;
 }
 
 .play-hud {
@@ -772,15 +773,14 @@ input[type="checkbox"] {
     position: relative;
 }
 
-.crosshair {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 24px;
-    color: rgba(255,255,255,0.7);
-    text-shadow: 0 0 4px rgba(0,0,0,0.5);
+/* ===== Custom Game Crosshair ===== */
+#game-crosshair {
+    position: fixed;
     pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.7));
+    transition: none;
 }
 
 .play-info {
@@ -995,7 +995,7 @@ input[type="checkbox"] {
 }
 
 .c-block-body:empty::after {
-    content: 'drag blocks here';
+    content: 'click to add blocks here';
     color: rgba(255,255,255,0.2);
     font-size: 11px;
     font-weight: 500;
@@ -1289,6 +1289,246 @@ input[type="checkbox"] {
 @keyframes toastOut {
     from { opacity: 1; }
     to { opacity: 0; }
+}
+
+/* ===== Settings Modal ===== */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.15s ease;
+}
+
+.modal {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 520px;
+    max-width: 90vw;
+    max-height: 85vh;
+    overflow: hidden;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    font-size: 14px;
+    background: var(--bg-medium);
+}
+
+.modal-header .material-icons-round {
+    font-size: 20px;
+    color: var(--accent);
+}
+
+.modal-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+}
+
+.modal-close:hover {
+    background: var(--bg-lighter);
+    color: var(--text);
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.settings-section {
+    margin-bottom: 24px;
+}
+
+.settings-section:last-child {
+    margin-bottom: 0;
+}
+
+.settings-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+.control-schemes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.control-scheme {
+    cursor: pointer;
+    display: block;
+}
+
+.control-scheme input[type="radio"] {
+    display: none;
+}
+
+.scheme-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    background: var(--bg-medium);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    transition: all 0.15s;
+}
+
+.control-scheme:hover .scheme-card {
+    border-color: var(--bg-hover);
+    background: var(--bg-light);
+}
+
+.control-scheme.selected .scheme-card {
+    border-color: var(--accent);
+    background: rgba(76, 151, 255, 0.08);
+}
+
+.scheme-icon {
+    font-size: 28px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+}
+
+.control-scheme.selected .scheme-icon {
+    color: var(--accent);
+}
+
+.scheme-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.scheme-name {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 2px;
+}
+
+.scheme-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+}
+
+.scheme-keys {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: var(--bg-darkest);
+    padding: 4px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.control-scheme.selected .scheme-keys {
+    background: var(--accent-dim);
+    color: var(--text-bright);
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.settings-row label {
+    font-size: 12px;
+    color: var(--text-dim);
+    min-width: 120px;
+    flex-shrink: 0;
+}
+
+.settings-row input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+}
+
+.settings-row .key-bind-select {
+    flex: 1;
+    max-width: 160px;
+}
+
+.setting-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    min-width: 24px;
+    text-align: right;
+}
+
+/* ===== Workspace Block Wrappers & Delete Buttons ===== */
+.workspace-block-wrapper {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+}
+
+.workspace-block-wrapper:hover > .block-delete-btn {
+    opacity: 1;
+}
+
+.block-delete-btn {
+    position: absolute;
+    top: 2px;
+    right: -22px;
+    width: 20px;
+    height: 20px;
+    background: var(--danger);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s, transform 0.12s;
+    z-index: 10;
+    box-shadow: 0 2px 6px rgba(231,76,60,0.4);
+}
+
+.block-delete-btn:hover {
+    transform: scale(1.15);
+    background: #c0392b;
+}
+
+.c-block-body.c-block-active {
+    border-color: var(--accent) !important;
+    border-style: solid !important;
+    background: rgba(76, 151, 255, 0.12) !important;
+    box-shadow: inset 0 0 8px rgba(76, 151, 255, 0.2);
 }
 
 /* ===== Responsive ===== */

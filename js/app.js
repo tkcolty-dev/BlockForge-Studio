@@ -25,6 +25,7 @@ class App {
         this.initKeyboard();
         this.initEnvironment();
         this.initSaveLoad();
+        this.initSettings();
 
         this.scene3d.onObjectSelected = (obj) => this.onObjectSelected(obj);
         this.scene3d.onObjectDeselected = () => this.onObjectDeselected();
@@ -82,7 +83,7 @@ class App {
     }
 
     startPlay() {
-        this.runtime.start();
+        this.runtime.start(this.gameSettings);
     }
 
     stopPlay() {
@@ -734,6 +735,112 @@ class App {
         document.getElementById('btn-save').addEventListener('click', () => this.saveProject());
         document.getElementById('btn-load').addEventListener('click', () => this.loadProject());
         document.getElementById('btn-export').addEventListener('click', () => this.exportGame());
+    }
+
+    // ===== Settings =====
+
+    initSettings() {
+        // Available keys for binding
+        this.bindableKeys = [
+            { code: 'KeyW', label: 'W' },
+            { code: 'KeyA', label: 'A' },
+            { code: 'KeyS', label: 'S' },
+            { code: 'KeyD', label: 'D' },
+            { code: 'KeyQ', label: 'Q' },
+            { code: 'KeyE', label: 'E' },
+            { code: 'KeyR', label: 'R' },
+            { code: 'KeyF', label: 'F' },
+            { code: 'KeyI', label: 'I' },
+            { code: 'KeyJ', label: 'J' },
+            { code: 'KeyK', label: 'K' },
+            { code: 'KeyL', label: 'L' },
+            { code: 'ArrowUp', label: 'Arrow Up' },
+            { code: 'ArrowDown', label: 'Arrow Down' },
+            { code: 'ArrowLeft', label: 'Arrow Left' },
+            { code: 'ArrowRight', label: 'Arrow Right' },
+            { code: 'Space', label: 'Space' },
+            { code: 'ShiftLeft', label: 'Left Shift' },
+            { code: 'ControlLeft', label: 'Left Ctrl' },
+            { code: 'Numpad8', label: 'Numpad 8' },
+            { code: 'Numpad2', label: 'Numpad 2' },
+            { code: 'Numpad4', label: 'Numpad 4' },
+            { code: 'Numpad6', label: 'Numpad 6' },
+            { code: 'Numpad0', label: 'Numpad 0' }
+        ];
+
+        // Default key bindings
+        const defaultBindings = {
+            moveForward: 'KeyW',
+            moveBack: 'KeyS',
+            moveLeft: 'KeyA',
+            moveRight: 'KeyD',
+            lookUp: 'ArrowUp',
+            lookDown: 'ArrowDown',
+            lookLeft: 'ArrowLeft',
+            lookRight: 'ArrowRight',
+            jump: 'Space'
+        };
+
+        this.gameSettings = {
+            controlScheme: 'first-person',
+            speed: 6,
+            jumpForce: 8,
+            sensitivity: 5,
+            keyBindings: { ...defaultBindings }
+        };
+
+        // Populate key binding selects
+        document.querySelectorAll('.key-bind-select').forEach(select => {
+            const action = select.dataset.action;
+            this.bindableKeys.forEach(key => {
+                const opt = document.createElement('option');
+                opt.value = key.code;
+                opt.textContent = key.label;
+                select.appendChild(opt);
+            });
+            select.value = defaultBindings[action] || '';
+            select.addEventListener('change', () => {
+                this.gameSettings.keyBindings[action] = select.value;
+            });
+        });
+
+        const modal = document.getElementById('settings-modal');
+        document.getElementById('btn-settings').addEventListener('click', () => {
+            modal.classList.remove('hidden');
+        });
+        document.getElementById('settings-close').addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.add('hidden');
+        });
+
+        // Control scheme selection
+        document.querySelectorAll('.control-scheme').forEach(label => {
+            label.addEventListener('click', () => {
+                document.querySelectorAll('.control-scheme').forEach(l => l.classList.remove('selected'));
+                label.classList.add('selected');
+                this.gameSettings.controlScheme = label.dataset.scheme;
+            });
+        });
+
+        // Sliders
+        const speedSlider = document.getElementById('setting-speed');
+        const jumpSlider = document.getElementById('setting-jump');
+        const sensSlider = document.getElementById('setting-sensitivity');
+
+        speedSlider.addEventListener('input', (e) => {
+            this.gameSettings.speed = parseInt(e.target.value);
+            document.getElementById('setting-speed-val').textContent = e.target.value;
+        });
+        jumpSlider.addEventListener('input', (e) => {
+            this.gameSettings.jumpForce = parseInt(e.target.value);
+            document.getElementById('setting-jump-val').textContent = e.target.value;
+        });
+        sensSlider.addEventListener('input', (e) => {
+            this.gameSettings.sensitivity = parseInt(e.target.value);
+            document.getElementById('setting-sensitivity-val').textContent = e.target.value;
+        });
     }
 
     saveProject() {

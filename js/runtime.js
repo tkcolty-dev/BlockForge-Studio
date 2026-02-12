@@ -28,7 +28,7 @@ class Runtime {
 
     // ===== Start/Stop =====
 
-    start() {
+    start(settings = {}) {
         if (this.isRunning) return;
         this.isRunning = true;
         this.gameTimer = 0;
@@ -36,6 +36,26 @@ class Runtime {
         this.activeAnimations = [];
         this.hudElements = [];
         this.runningScripts = [];
+
+        // Apply settings
+        this.controlScheme = settings.controlScheme || 'first-person';
+        this.playerSpeed = settings.speed || 6;
+        this.playerJumpForce = settings.jumpForce || 8;
+        this.lookSpeed = (settings.sensitivity || 5) * 0.04;
+        this._moveTarget = null; // for point-click
+
+        // Key bindings (customizable)
+        this.keyBindings = settings.keyBindings || {
+            moveForward: 'KeyW',
+            moveBack: 'KeyS',
+            moveLeft: 'KeyA',
+            moveRight: 'KeyD',
+            lookUp: 'ArrowUp',
+            lookDown: 'ArrowDown',
+            lookLeft: 'ArrowLeft',
+            lookRight: 'ArrowRight',
+            jump: 'Space'
+        };
 
         // Save object states
         this.objectStates.clear();
@@ -49,6 +69,11 @@ class Runtime {
                 opacity: obj.material ? obj.material.opacity : 1
             });
         });
+
+        // Save editor camera state
+        this._savedCameraPos = this.scene3d.camera.position.clone();
+        this._savedCameraRot = this.scene3d.camera.quaternion.clone();
+        this._savedOrbitTarget = this.scene3d.orbitControls.target.clone();
 
         // Disable editor controls
         this.scene3d.isPlaying = true;
@@ -69,13 +94,19 @@ class Runtime {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
 
-        // Setup pointer lock
-        this.scene3d.canvas.addEventListener('click', this._requestPointerLock = () => {
-            this.scene3d.canvas.requestPointerLock();
-        });
-        this.scene3d.canvas.requestPointerLock();
+        // Click handler for in-game object interaction (all modes) and point-click movement
+        const viewportContainer = this.scene3d.canvas.parentElement;
+        this._boundClick = (e) => this.onGameClick(e);
+        viewportContainer.addEventListener('click', this._boundClick);
 
-        document.addEventListener('mousemove', this._boundMouseMove = (e) => this.onMouseMove(e));
+        // Track mouse position for custom crosshair
+        this._boundMouseMove = (e) => this.onMouseMove(e);
+        document.addEventListener('mousemove', this._boundMouseMove);
+
+        // Show custom crosshair, hide system cursor on viewport
+        this._gameCrosshair = document.getElementById('game-crosshair');
+        if (this._gameCrosshair) this._gameCrosshair.classList.remove('hidden');
+        viewportContainer.style.cursor = 'none';
 
         // Compile and start scripts
         this.scene3d.objects.forEach(obj => {
@@ -103,11 +134,20 @@ class Runtime {
         };
         requestAnimationFrame(this._gameLoop);
 
-        // Show play overlay
+        // Show play overlay with controls hint
         document.getElementById('play-overlay').classList.remove('hidden');
         document.getElementById('btn-play').classList.add('hidden');
         document.getElementById('btn-stop').classList.remove('hidden');
         document.getElementById('status-mode').textContent = 'Play Mode';
+
+        // Update controls hint
+        const hints = {
+            'first-person': 'WASD to move | Arrows to look | Space to jump | Click objects | ESC to stop',
+            'third-person': 'WASD to move | Arrows to orbit | Space to jump | Click objects | ESC to stop',
+            'top-down': 'WASD to move | Space to jump | Click objects | ESC to stop',
+            'point-click': 'Click to move | Space to jump | Click objects | ESC to stop'
+        };
+        document.querySelector('.play-info span').textContent = hints[this.controlScheme] || hints['first-person'];
     }
 
     stop() {
@@ -140,19 +180,51 @@ class Runtime {
         this.activeAnimations = [];
         this.runningScripts = [];
 
-        document.removeEventListener('keydown', this._boundKeyDown);
-        document.removeEventListener('keyup', this._boundKeyUp);
-        document.removeEventListener('mousemove', this._boundMouseMove);
-        this.scene3d.canvas.removeEventListener('click', this._requestPointerLock);
-
-        if (document.pointerLockElement) {
-            document.exitPointerLock();
+        // Restore editor camera
+        if (this._savedCameraPos) {
+            const cam = this.scene3d.camera;
+            cam.rotation.order = 'XYZ';
+            cam.up.set(0, 1, 0);
+            cam.position.copy(this._savedCameraPos);
+            cam.quaternion.copy(this._savedCameraRot);
+            this.scene3d.orbitControls.target.copy(this._savedOrbitTarget);
+            this.scene3d.orbitControls.update();
         }
 
-        // Remove player
+        const viewportContainer = this.scene3d.canvas.parentElement;
+        document.removeEventListener('keydown', this._boundKeyDown);
+        document.removeEventListener('keyup', this._boundKeyUp);
+        if (this._boundMouseMove) {
+            document.removeEventListener('mousemove', this._boundMouseMove);
+            this._boundMouseMove = null;
+        }
+        if (this._boundClick) {
+            viewportContainer.removeEventListener('click', this._boundClick);
+            this._boundClick = null;
+        }
+
+        // Hide custom crosshair, restore cursor
+        if (this._gameCrosshair) {
+            this._gameCrosshair.classList.add('hidden');
+            this._gameCrosshair = null;
+        }
+        viewportContainer.style.cursor = '';
+
+        // Remove player mesh and click marker
         if (this.playerController) {
+            // Dispose player mesh and children
+            this.playerController.mesh.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
             this.scene3d.scene.remove(this.playerController.mesh);
             this.playerController = null;
+        }
+        if (this._moveMarker) {
+            this.scene3d.scene.remove(this._moveMarker);
+            this._moveMarker.geometry.dispose();
+            this._moveMarker.material.dispose();
+            this._moveMarker = null;
         }
 
         // Clean up HUD
@@ -189,66 +261,215 @@ class Runtime {
             }
         });
 
-        // Create player body (invisible, just for physics)
+        const isThirdPerson = this.controlScheme === 'third-person';
+        const isTopDown = this.controlScheme === 'top-down';
+        const isPointClick = this.controlScheme === 'point-click';
+        const showBody = isThirdPerson || isTopDown || isPointClick;
+
+        // Create player body
         const playerGeom = new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8);
-        const playerMat = new THREE.MeshBasicMaterial({ visible: false });
+        const playerMat = showBody
+            ? new THREE.MeshStandardMaterial({ color: 0x4c97ff, roughness: 0.6 })
+            : new THREE.MeshBasicMaterial({ visible: false });
         const playerMesh = new THREE.Mesh(playerGeom, playerMat);
         playerMesh.position.copy(spawnPos);
+        playerMesh.castShadow = showBody;
+        playerMesh.receiveShadow = showBody;
         this.scene3d.scene.add(playerMesh);
+
+        // For visible modes, add a head so orientation is clear
+        if (showBody) {
+            const headGeom = new THREE.SphereGeometry(0.25, 12, 8);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xf5cba7, roughness: 0.6 });
+            const head = new THREE.Mesh(headGeom, headMat);
+            head.position.y = 1.05;
+            head.castShadow = true;
+            playerMesh.add(head);
+
+            const noseGeom = new THREE.BoxGeometry(0.08, 0.08, 0.12);
+            const noseMat = new THREE.MeshStandardMaterial({ color: 0xe0b090 });
+            const nose = new THREE.Mesh(noseGeom, noseMat);
+            nose.position.set(0, 1.03, 0.28);
+            playerMesh.add(nose);
+        }
 
         this.playerController = {
             mesh: playerMesh,
             velocity: new THREE.Vector3(),
-            speed: 6,
-            jumpForce: 8,
+            speed: this.playerSpeed,
+            jumpForce: this.playerJumpForce,
             gravity: -20,
             isGrounded: false,
             yaw: 0,
             pitch: 0,
-            height: 1.6
+            height: 1.6,
+            tpDistance: 8,
+            tpAngle: 0.5
         };
 
-        // Set camera to first person
-        this.scene3d.camera.position.copy(spawnPos);
-        this.scene3d.camera.rotation.set(0, 0, 0);
+        // Fully reset camera state for play mode
+        const cam = this.scene3d.camera;
+        cam.rotation.order = 'YXZ';
+        cam.rotation.set(0, 0, 0);
+        cam.quaternion.identity();
+        cam.up.set(0, 1, 0);
+
+        // Set camera based on scheme
+        if (this.controlScheme === 'first-person') {
+            cam.position.copy(spawnPos);
+            cam.position.y += 0.3;
+        } else if (isThirdPerson) {
+            this._updateThirdPersonCamera();
+        } else if (isTopDown) {
+            cam.position.set(spawnPos.x, 25, spawnPos.z);
+            cam.rotation.set(-Math.PI / 2, 0, 0);
+        } else if (isPointClick) {
+            cam.position.set(spawnPos.x + 10, 12, spawnPos.z + 10);
+            cam.lookAt(spawnPos.x, 0, spawnPos.z);
+            this._moveTarget = null;
+        }
+    }
+
+    _updateThirdPersonCamera() {
+        const pc = this.playerController;
+        if (!pc) return;
+        // Use cos(angle) for horizontal distance so the total distance stays correct
+        const hDist = pc.tpDistance * Math.cos(pc.tpAngle);
+        const vDist = pc.tpDistance * Math.sin(pc.tpAngle);
+        const offset = new THREE.Vector3(
+            -Math.sin(pc.yaw) * hDist,
+            vDist,
+            -Math.cos(pc.yaw) * hDist
+        );
+        const target = pc.mesh.position.clone();
+        target.y += 1;
+        this.scene3d.camera.position.copy(target).add(offset);
+        this.scene3d.camera.lookAt(target);
+    }
+
+    onPointClick(e) {
+        if (!this.isRunning || !this.playerController) return;
+
+        const rect = this.scene3d.canvas.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+            ((e.clientX - rect.left) / rect.width) * 2 - 1,
+            -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, this.scene3d.camera);
+
+        // Raycast against ground plane and objects
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const hit = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(plane, hit)) {
+            this._moveTarget = hit.clone();
+            this._moveTarget.y = this.playerController.mesh.position.y;
+
+            // Show click marker
+            if (this._moveMarker) {
+                this.scene3d.scene.remove(this._moveMarker);
+            }
+            const markerGeom = new THREE.RingGeometry(0.3, 0.5, 16);
+            markerGeom.rotateX(-Math.PI / 2);
+            const markerMat = new THREE.MeshBasicMaterial({
+                color: 0x4c97ff,
+                transparent: true,
+                opacity: 0.6,
+                side: THREE.DoubleSide
+            });
+            this._moveMarker = new THREE.Mesh(markerGeom, markerMat);
+            this._moveMarker.position.copy(this._moveTarget);
+            this._moveMarker.position.y = 0.05;
+            this.scene3d.scene.add(this._moveMarker);
+
+            // Fade marker
+            setTimeout(() => {
+                if (this._moveMarker) {
+                    this.scene3d.scene.remove(this._moveMarker);
+                    this._moveMarker.geometry.dispose();
+                    this._moveMarker.material.dispose();
+                    this._moveMarker = null;
+                }
+            }, 1000);
+        }
     }
 
     onKeyDown(e) {
-        this.keys[e.key] = true;
         this.keys[e.code] = true;
+
+        // Prevent default for arrow keys and space to avoid page scroll
+        if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
+            e.preventDefault();
+        }
 
         if (e.key === 'Escape') {
             this.stop();
             return;
         }
 
-        // Trigger key events
-        const keyMap = {
-            'w': 'W', 'a': 'A', 's': 'S', 'd': 'D',
-            ' ': 'Space', 'e': 'E', 'q': 'Q',
-            '1': '1', '2': '2', '3': '3',
+        // Trigger block code key events using display names
+        const codeToLabel = {
+            'KeyW': 'W', 'KeyA': 'A', 'KeyS': 'S', 'KeyD': 'D',
+            'Space': 'Space', 'KeyE': 'E', 'KeyQ': 'Q',
+            'Digit1': '1', 'Digit2': '2', 'Digit3': '3',
             'ArrowUp': 'ArrowUp', 'ArrowDown': 'ArrowDown',
             'ArrowLeft': 'ArrowLeft', 'ArrowRight': 'ArrowRight',
-            'Shift': 'Shift'
+            'ShiftLeft': 'Shift', 'ShiftRight': 'Shift'
         };
-
-        const mappedKey = keyMap[e.key] || e.key;
-        this.triggerEvent('onKey', { key: mappedKey });
+        const label = codeToLabel[e.code] || e.key;
+        this.triggerEvent('onKey', { key: label });
     }
 
     onKeyUp(e) {
-        this.keys[e.key] = false;
         this.keys[e.code] = false;
     }
 
     onMouseMove(e) {
-        if (!this.isRunning || !this.playerController) return;
-        if (!document.pointerLockElement) return;
+        if (!this.isRunning) return;
 
-        const sensitivity = 0.002;
-        this.playerController.yaw -= e.movementX * sensitivity;
-        this.playerController.pitch -= e.movementY * sensitivity;
-        this.playerController.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, this.playerController.pitch));
+        // Move custom crosshair to mouse position
+        if (this._gameCrosshair) {
+            this._gameCrosshair.style.left = e.clientX + 'px';
+            this._gameCrosshair.style.top = e.clientY + 'px';
+        }
+    }
+
+    onGameClick(e) {
+        if (!this.isRunning || !this.playerController) return;
+
+        const rect = this.scene3d.canvas.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+            ((e.clientX - rect.left) / rect.width) * 2 - 1,
+            -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, this.scene3d.camera);
+
+        // Check for object clicks first
+        const meshes = [];
+        this.scene3d.objects.forEach(obj => {
+            if (!obj.visible) return;
+            if (obj.isMesh) meshes.push(obj);
+            else obj.traverse(child => { if (child.isMesh) meshes.push(child); });
+        });
+        const hits = raycaster.intersectObjects(meshes, false);
+        if (hits.length > 0) {
+            // Find the root scene object
+            let target = hits[0].object;
+            while (target.parent && !this.scene3d.objects.includes(target)) {
+                target = target.parent;
+            }
+            if (this.scene3d.objects.includes(target)) {
+                this.triggerEvent('onClick', {}, target);
+            }
+        }
+
+        // Point-click movement: raycast against ground plane
+        if (this.controlScheme === 'point-click') {
+            this.onPointClick(e);
+        }
     }
 
     // ===== Game Loop =====
@@ -263,25 +484,75 @@ class Runtime {
         this.updateHUD();
     }
 
+    _isKeyBound(action) {
+        const code = this.keyBindings[action];
+        return this.keys[code];
+    }
+
     updatePlayer(dt) {
         const pc = this.playerController;
         if (!pc) return;
 
-        // Movement
-        const forward = new THREE.Vector3(0, 0, -1);
-        forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), pc.yaw);
-        const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
-
         const moveDir = new THREE.Vector3();
-        const sprint = this.keys['Shift'] || this.keys['ShiftLeft'] ? 1.6 : 1;
+        const sprint = this.keys['ShiftLeft'] || this.keys['ShiftRight'] ? 1.6 : 1;
+        const lookSpd = this.lookSpeed || 2;
 
-        if (this.keys['w'] || this.keys['W'] || this.keys['ArrowUp']) moveDir.add(forward);
-        if (this.keys['s'] || this.keys['S'] || this.keys['ArrowDown']) moveDir.sub(forward);
-        if (this.keys['a'] || this.keys['A'] || this.keys['ArrowLeft']) moveDir.sub(right);
-        if (this.keys['d'] || this.keys['D'] || this.keys['ArrowRight']) moveDir.add(right);
+        // Arrow-key (or custom key) looking for first-person / third-person
+        if (this.controlScheme === 'first-person' || this.controlScheme === 'third-person') {
+            if (this._isKeyBound('lookLeft'))  pc.yaw += lookSpd * dt;
+            if (this._isKeyBound('lookRight')) pc.yaw -= lookSpd * dt;
+            if (this._isKeyBound('lookUp'))    pc.pitch += lookSpd * dt;
+            if (this._isKeyBound('lookDown'))  pc.pitch -= lookSpd * dt;
+            pc.pitch = Math.max(-1.5, Math.min(1.5, pc.pitch));
 
-        if (moveDir.length() > 0) {
-            moveDir.normalize().multiplyScalar(pc.speed * sprint * dt);
+            if (this.controlScheme === 'third-person') {
+                // Remap pitch to tp angle (higher pitch = look up = lower angle)
+                pc.tpAngle = Math.max(0.1, Math.min(1.2, 0.5 - pc.pitch * 0.5 + 0.5));
+            }
+        }
+
+        if (this.controlScheme === 'first-person' || this.controlScheme === 'third-person') {
+            // Movement relative to yaw direction
+            const forward = new THREE.Vector3(0, 0, -1);
+            forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), pc.yaw);
+            const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+
+            if (this._isKeyBound('moveForward')) moveDir.add(forward);
+            if (this._isKeyBound('moveBack'))    moveDir.sub(forward);
+            if (this._isKeyBound('moveLeft'))    moveDir.sub(right);
+            if (this._isKeyBound('moveRight'))   moveDir.add(right);
+
+            if (moveDir.length() > 0) {
+                moveDir.normalize().multiplyScalar(pc.speed * sprint * dt);
+                if (this.controlScheme === 'third-person') {
+                    pc.mesh.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+                }
+            }
+        } else if (this.controlScheme === 'top-down') {
+            // World-axis movement with WASD
+            if (this._isKeyBound('moveForward')) moveDir.z -= 1;
+            if (this._isKeyBound('moveBack'))    moveDir.z += 1;
+            if (this._isKeyBound('moveLeft'))    moveDir.x -= 1;
+            if (this._isKeyBound('moveRight'))   moveDir.x += 1;
+
+            if (moveDir.length() > 0) {
+                moveDir.normalize().multiplyScalar(pc.speed * sprint * dt);
+                pc.mesh.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+            }
+        } else if (this.controlScheme === 'point-click') {
+            // Move toward click target
+            if (this._moveTarget) {
+                const toTarget = new THREE.Vector3().subVectors(this._moveTarget, pc.mesh.position);
+                toTarget.y = 0;
+                const dist = toTarget.length();
+                if (dist > 0.3) {
+                    toTarget.normalize().multiplyScalar(pc.speed * dt);
+                    moveDir.copy(toTarget);
+                    pc.mesh.rotation.y = Math.atan2(toTarget.x, toTarget.z);
+                } else {
+                    this._moveTarget = null;
+                }
+            }
         }
 
         // Apply horizontal movement
@@ -291,7 +562,7 @@ class Runtime {
         pc.velocity.y += pc.gravity * dt;
 
         // Jump
-        if ((this.keys[' '] || this.keys['Space']) && pc.isGrounded) {
+        if (this._isKeyBound('jump') && pc.isGrounded) {
             pc.velocity.y = pc.jumpForce;
             pc.isGrounded = false;
         }
@@ -358,7 +629,6 @@ class Runtime {
 
         // Death plane
         if (newPos.y < -50) {
-            // Respawn
             let spawnPos = new THREE.Vector3(0, 2, 0);
             this.scene3d.objects.forEach(obj => {
                 if (obj.userData.type === 'spawn') {
@@ -372,12 +642,24 @@ class Runtime {
 
         pc.mesh.position.copy(newPos);
 
-        // Update camera
-        this.scene3d.camera.position.copy(newPos);
-        this.scene3d.camera.position.y = newPos.y + 0.3; // Eye height offset
-
-        const euler = new THREE.Euler(pc.pitch, pc.yaw, 0, 'YXZ');
-        this.scene3d.camera.quaternion.setFromEuler(euler);
+        // Update camera based on scheme
+        const cam = this.scene3d.camera;
+        if (this.controlScheme === 'first-person') {
+            cam.position.set(newPos.x, newPos.y + 0.3, newPos.z);
+            const euler = new THREE.Euler(pc.pitch, pc.yaw, 0, 'YXZ');
+            cam.quaternion.setFromEuler(euler);
+        } else if (this.controlScheme === 'third-person') {
+            this._updateThirdPersonCamera();
+        } else if (this.controlScheme === 'top-down') {
+            // Fixed top-down: set position directly, use manual rotation to look straight down
+            cam.position.set(newPos.x, 25, newPos.z);
+            cam.rotation.set(-Math.PI / 2, 0, 0);
+        } else if (this.controlScheme === 'point-click') {
+            // Smooth follow camera (isometric-ish)
+            const camTarget = new THREE.Vector3(newPos.x + 10, 12, newPos.z + 10);
+            cam.position.lerp(camTarget, 0.05);
+            cam.lookAt(newPos.x, 0, newPos.z);
+        }
     }
 
     updateAnimations(dt) {

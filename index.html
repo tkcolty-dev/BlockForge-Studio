@@ -64,6 +64,9 @@
             <button class="tool-btn" id="btn-export" title="Export Game">
                 <span class="material-icons-round">publish</span>
             </button>
+            <button class="tool-btn" id="btn-settings" title="Game Settings">
+                <span class="material-icons-round">settings</span>
+            </button>
             <div class="toolbar-divider"></div>
             <button class="tool-btn" id="btn-undo" title="Undo (Ctrl+Z)">
                 <span class="material-icons-round">undo</span>
@@ -284,14 +287,23 @@
             <!-- Play mode overlay -->
             <div id="play-overlay" class="hidden">
                 <div class="play-hud">
-                    <div class="crosshair">+</div>
                     <div class="play-info">
-                        <span>WASD to move | Space to jump | Mouse to look | ESC to stop</span>
+                        <span>WASD to move | Arrows to look | Space to jump | ESC to stop</span>
                     </div>
                     <div class="game-hud" id="game-hud">
                         <!-- Dynamic HUD elements -->
                     </div>
                 </div>
+            </div>
+            <!-- Custom game crosshair (follows mouse) -->
+            <div id="game-crosshair" class="hidden">
+                <svg width="24" height="24" viewBox="0 0 24 24">
+                    <line x1="12" y1="4" x2="12" y2="10" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="12" y1="14" x2="12" y2="20" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="4" y1="12" x2="10" y2="12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="14" y1="12" x2="20" y2="12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    <circle cx="12" cy="12" r="2" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+                </svg>
             </div>
         </div>
 
@@ -564,6 +576,127 @@
         </div>
         <div class="context-item" data-action="properties">
             <span class="material-icons-round">tune</span> Properties
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="material-icons-round">settings</span>
+                <span>Game Settings</span>
+                <button class="modal-close" id="settings-close">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <div class="settings-section-title">Controls</div>
+                    <div class="control-schemes">
+                        <label class="control-scheme selected" data-scheme="first-person">
+                            <input type="radio" name="control-scheme" value="first-person" checked>
+                            <div class="scheme-card">
+                                <span class="material-icons-round scheme-icon">videogame_asset</span>
+                                <div class="scheme-info">
+                                    <div class="scheme-name">First Person</div>
+                                    <div class="scheme-desc">WASD to move, arrows to look. Click to interact with objects.</div>
+                                </div>
+                                <div class="scheme-keys">WASD + Arrows</div>
+                            </div>
+                        </label>
+                        <label class="control-scheme" data-scheme="third-person">
+                            <input type="radio" name="control-scheme" value="third-person">
+                            <div class="scheme-card">
+                                <span class="material-icons-round scheme-icon">person</span>
+                                <div class="scheme-info">
+                                    <div class="scheme-name">Third Person</div>
+                                    <div class="scheme-desc">Camera orbits behind player. Arrows to orbit, click to interact.</div>
+                                </div>
+                                <div class="scheme-keys">WASD + Arrows</div>
+                            </div>
+                        </label>
+                        <label class="control-scheme" data-scheme="top-down">
+                            <input type="radio" name="control-scheme" value="top-down">
+                            <div class="scheme-card">
+                                <span class="material-icons-round scheme-icon">grid_view</span>
+                                <div class="scheme-info">
+                                    <div class="scheme-name">Top Down</div>
+                                    <div class="scheme-desc">Overhead camera view. WASD to move. Click to interact.</div>
+                                </div>
+                                <div class="scheme-keys">WASD + Click</div>
+                            </div>
+                        </label>
+                        <label class="control-scheme" data-scheme="point-click">
+                            <input type="radio" name="control-scheme" value="point-click">
+                            <div class="scheme-card">
+                                <span class="material-icons-round scheme-icon">mouse</span>
+                                <div class="scheme-info">
+                                    <div class="scheme-name">Point & Click</div>
+                                    <div class="scheme-desc">Click ground to move. Click objects to interact.</div>
+                                </div>
+                                <div class="scheme-keys">Click</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <div class="settings-section-title">Key Bindings</div>
+                    <div class="settings-row">
+                        <label>Move Forward</label>
+                        <select class="prop-input key-bind-select" id="bind-moveForward" data-action="moveForward"></select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Move Back</label>
+                        <select class="prop-input key-bind-select" id="bind-moveBack" data-action="moveBack"></select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Move Left</label>
+                        <select class="prop-input key-bind-select" id="bind-moveLeft" data-action="moveLeft"></select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Move Right</label>
+                        <select class="prop-input key-bind-select" id="bind-moveRight" data-action="moveRight"></select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Look Up</label>
+                        <select class="prop-input key-bind-select" id="bind-lookUp" data-action="lookUp"></select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Look Down</label>
+                        <select class="prop-input key-bind-select" id="bind-lookDown" data-action="lookDown"></select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Look Left</label>
+                        <select class="prop-input key-bind-select" id="bind-lookLeft" data-action="lookLeft"></select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Look Right</label>
+                        <select class="prop-input key-bind-select" id="bind-lookRight" data-action="lookRight"></select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Jump</label>
+                        <select class="prop-input key-bind-select" id="bind-jump" data-action="jump"></select>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <div class="settings-section-title">Player</div>
+                    <div class="settings-row">
+                        <label>Move Speed</label>
+                        <input type="range" id="setting-speed" min="1" max="20" value="6">
+                        <span class="setting-value" id="setting-speed-val">6</span>
+                    </div>
+                    <div class="settings-row">
+                        <label>Jump Force</label>
+                        <input type="range" id="setting-jump" min="1" max="20" value="8">
+                        <span class="setting-value" id="setting-jump-val">8</span>
+                    </div>
+                    <div class="settings-row">
+                        <label>Look Speed</label>
+                        <input type="range" id="setting-sensitivity" min="1" max="10" value="5">
+                        <span class="setting-value" id="setting-sensitivity-val">5</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
