@@ -1,0 +1,1229 @@
+/**
+ * Runtime - Game play mode engine
+ * Handles player controller, physics, script execution, and game logic
+ */
+class Runtime {
+    constructor(scene3d, blockCode) {
+        this.scene3d = scene3d;
+        this.blockCode = blockCode;
+        this.isRunning = false;
+        this.keys = {};
+        this.variables = {};
+        this.gameTimer = 0;
+        this.playerController = null;
+        this.runningScripts = [];
+        this.objectStates = new Map(); // Store original states for reset
+        this.activeAnimations = [];
+        this.hudElements = [];
+        this.soundVolume = 1.0;
+
+        // Audio context for sound effects
+        this.audioCtx = null;
+
+        this.onStop = null;
+
+        this._boundKeyDown = (e) => this.onKeyDown(e);
+        this._boundKeyUp = (e) => this.onKeyUp(e);
+    }
+
+    // ===== Start/Stop =====
+
+    start() {
+        if (this.isRunning) return;
+        this.isRunning = true;
+        this.gameTimer = 0;
+        this.variables = { score: 0, health: 100, coins: 0, speed: 5, level: 1 };
+        this.activeAnimations = [];
+        this.hudElements = [];
+        this.runningScripts = [];
+
+        // Save object states
+        this.objectStates.clear();
+        this.scene3d.objects.forEach(obj => {
+            this.objectStates.set(obj.userData.id, {
+                position: obj.position.clone(),
+                rotation: obj.rotation.clone(),
+                scale: obj.scale.clone(),
+                visible: obj.visible,
+                color: obj.material ? obj.material.color.clone() : null,
+                opacity: obj.material ? obj.material.opacity : 1
+            });
+        });
+
+        // Disable editor controls
+        this.scene3d.isPlaying = true;
+        this.scene3d.orbitControls.enabled = false;
+        this.scene3d.transformControls.detach();
+        this.scene3d.transformControls.visible = false;
+        this.scene3d.deselect();
+
+        // Setup player
+        this.initPlayer();
+
+        // Setup input
+        document.addEventListener('keydown', this._boundKeyDown);
+        document.addEventListener('keyup', this._boundKeyUp);
+
+        // Init audio
+        if (!this.audioCtx) {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Setup pointer lock
+        this.scene3d.canvas.addEventListener('click', this._requestPointerLock = () => {
+            this.scene3d.canvas.requestPointerLock();
+        });
+        this.scene3d.canvas.requestPointerLock();
+
+        document.addEventListener('mousemove', this._boundMouseMove = (e) => this.onMouseMove(e));
+
+        // Compile and start scripts
+        this.scene3d.objects.forEach(obj => {
+            const compiled = this.blockCode.compileScripts(obj);
+            compiled.forEach(script => {
+                this.runningScripts.push({
+                    object: obj,
+                    script: script,
+                    state: 'pending'
+                });
+            });
+        });
+
+        // Start game events
+        this.triggerEvent('onStart');
+
+        // Start timers
+        this.startTimers();
+
+        // Main game loop
+        this._gameLoop = () => {
+            if (!this.isRunning) return;
+            this.update();
+            requestAnimationFrame(this._gameLoop);
+        };
+        requestAnimationFrame(this._gameLoop);
+
+        // Show play overlay
+        document.getElementById('play-overlay').classList.remove('hidden');
+        document.getElementById('btn-play').classList.add('hidden');
+        document.getElementById('btn-stop').classList.remove('hidden');
+        document.getElementById('status-mode').textContent = 'Play Mode';
+    }
+
+    stop() {
+        if (!this.isRunning) return;
+        this.isRunning = false;
+
+        // Restore object states
+        this.scene3d.objects.forEach(obj => {
+            const state = this.objectStates.get(obj.userData.id);
+            if (state) {
+                obj.position.copy(state.position);
+                obj.rotation.copy(state.rotation);
+                obj.scale.copy(state.scale);
+                obj.visible = state.visible;
+                if (state.color && obj.material) {
+                    obj.material.color.copy(state.color);
+                    obj.material.opacity = state.opacity;
+                    obj.material.transparent = state.opacity < 1;
+                }
+            }
+        });
+
+        // Remove dynamically created objects
+        const toRemove = this.scene3d.objects.filter(obj => obj.userData.isClone);
+        toRemove.forEach(obj => this.scene3d.removeObject(obj));
+
+        // Clean up
+        this.scene3d.isPlaying = false;
+        this.scene3d.orbitControls.enabled = true;
+        this.activeAnimations = [];
+        this.runningScripts = [];
+
+        document.removeEventListener('keydown', this._boundKeyDown);
+        document.removeEventListener('keyup', this._boundKeyUp);
+        document.removeEventListener('mousemove', this._boundMouseMove);
+        this.scene3d.canvas.removeEventListener('click', this._requestPointerLock);
+
+        if (document.pointerLockElement) {
+            document.exitPointerLock();
+        }
+
+        // Remove player
+        if (this.playerController) {
+            this.scene3d.scene.remove(this.playerController.mesh);
+            this.playerController = null;
+        }
+
+        // Clean up HUD
+        const hud = document.getElementById('game-hud');
+        hud.innerHTML = '';
+
+        // Remove speech bubbles
+        document.querySelectorAll('.speech-bubble-3d').forEach(el => el.remove());
+
+        // Hide play overlay
+        document.getElementById('play-overlay').classList.add('hidden');
+        document.getElementById('btn-play').classList.remove('hidden');
+        document.getElementById('btn-stop').classList.add('hidden');
+        document.getElementById('status-mode').textContent = 'Edit Mode';
+
+        // Clear timers
+        if (this._timerIntervals) {
+            this._timerIntervals.forEach(id => clearInterval(id));
+            this._timerIntervals = [];
+        }
+
+        if (this.onStop) this.onStop();
+    }
+
+    // ===== Player Controller =====
+
+    initPlayer() {
+        // Find spawn point
+        let spawnPos = new THREE.Vector3(0, 1.5, 0);
+        this.scene3d.objects.forEach(obj => {
+            if (obj.userData.type === 'spawn') {
+                spawnPos.copy(obj.position);
+                spawnPos.y += 1.5;
+            }
+        });
+
+        // Create player body (invisible, just for physics)
+        const playerGeom = new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8);
+        const playerMat = new THREE.MeshBasicMaterial({ visible: false });
+        const playerMesh = new THREE.Mesh(playerGeom, playerMat);
+        playerMesh.position.copy(spawnPos);
+        this.scene3d.scene.add(playerMesh);
+
+        this.playerController = {
+            mesh: playerMesh,
+            velocity: new THREE.Vector3(),
+            speed: 6,
+            jumpForce: 8,
+            gravity: -20,
+            isGrounded: false,
+            yaw: 0,
+            pitch: 0,
+            height: 1.6
+        };
+
+        // Set camera to first person
+        this.scene3d.camera.position.copy(spawnPos);
+        this.scene3d.camera.rotation.set(0, 0, 0);
+    }
+
+    onKeyDown(e) {
+        this.keys[e.key] = true;
+        this.keys[e.code] = true;
+
+        if (e.key === 'Escape') {
+            this.stop();
+            return;
+        }
+
+        // Trigger key events
+        const keyMap = {
+            'w': 'W', 'a': 'A', 's': 'S', 'd': 'D',
+            ' ': 'Space', 'e': 'E', 'q': 'Q',
+            '1': '1', '2': '2', '3': '3',
+            'ArrowUp': 'ArrowUp', 'ArrowDown': 'ArrowDown',
+            'ArrowLeft': 'ArrowLeft', 'ArrowRight': 'ArrowRight',
+            'Shift': 'Shift'
+        };
+
+        const mappedKey = keyMap[e.key] || e.key;
+        this.triggerEvent('onKey', { key: mappedKey });
+    }
+
+    onKeyUp(e) {
+        this.keys[e.key] = false;
+        this.keys[e.code] = false;
+    }
+
+    onMouseMove(e) {
+        if (!this.isRunning || !this.playerController) return;
+        if (!document.pointerLockElement) return;
+
+        const sensitivity = 0.002;
+        this.playerController.yaw -= e.movementX * sensitivity;
+        this.playerController.pitch -= e.movementY * sensitivity;
+        this.playerController.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, this.playerController.pitch));
+    }
+
+    // ===== Game Loop =====
+
+    update() {
+        const dt = 1 / 60; // Fixed timestep
+        this.gameTimer += dt;
+
+        this.updatePlayer(dt);
+        this.updateAnimations(dt);
+        this.checkCollisions();
+        this.updateHUD();
+    }
+
+    updatePlayer(dt) {
+        const pc = this.playerController;
+        if (!pc) return;
+
+        // Movement
+        const forward = new THREE.Vector3(0, 0, -1);
+        forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), pc.yaw);
+        const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+
+        const moveDir = new THREE.Vector3();
+        const sprint = this.keys['Shift'] || this.keys['ShiftLeft'] ? 1.6 : 1;
+
+        if (this.keys['w'] || this.keys['W'] || this.keys['ArrowUp']) moveDir.add(forward);
+        if (this.keys['s'] || this.keys['S'] || this.keys['ArrowDown']) moveDir.sub(forward);
+        if (this.keys['a'] || this.keys['A'] || this.keys['ArrowLeft']) moveDir.sub(right);
+        if (this.keys['d'] || this.keys['D'] || this.keys['ArrowRight']) moveDir.add(right);
+
+        if (moveDir.length() > 0) {
+            moveDir.normalize().multiplyScalar(pc.speed * sprint * dt);
+        }
+
+        // Apply horizontal movement
+        const newPos = pc.mesh.position.clone().add(moveDir);
+
+        // Gravity
+        pc.velocity.y += pc.gravity * dt;
+
+        // Jump
+        if ((this.keys[' '] || this.keys['Space']) && pc.isGrounded) {
+            pc.velocity.y = pc.jumpForce;
+            pc.isGrounded = false;
+        }
+
+        newPos.y += pc.velocity.y * dt;
+
+        // Simple ground collision
+        pc.isGrounded = false;
+        const playerRadius = 0.3;
+        const playerBottom = newPos.y - pc.height / 2;
+
+        // Check collisions with objects
+        this.scene3d.objects.forEach(obj => {
+            if (!obj.userData.collidable || !obj.visible) return;
+            if (obj.userData.type === 'spawn') return;
+            if (obj.userData.type === 'coin' || obj.userData.type === 'light-point') return;
+
+            const box = new THREE.Box3().setFromObject(obj);
+
+            // Simple AABB collision for ground
+            if (newPos.x + playerRadius > box.min.x && newPos.x - playerRadius < box.max.x &&
+                newPos.z + playerRadius > box.min.z && newPos.z - playerRadius < box.max.z) {
+
+                // Landing on top
+                if (playerBottom <= box.max.y && playerBottom >= box.max.y - 0.5 && pc.velocity.y <= 0) {
+                    newPos.y = box.max.y + pc.height / 2;
+                    pc.velocity.y = 0;
+                    pc.isGrounded = true;
+                }
+                // Hitting from below
+                else if (newPos.y + 0.2 >= box.min.y && newPos.y + 0.2 <= box.min.y + 0.3 && pc.velocity.y > 0) {
+                    pc.velocity.y = 0;
+                }
+                // Side collision
+                else if (playerBottom < box.max.y - 0.3) {
+                    // Push out
+                    const centerX = (box.min.x + box.max.x) / 2;
+                    const centerZ = (box.min.z + box.max.z) / 2;
+                    const dx = newPos.x - centerX;
+                    const dz = newPos.z - centerZ;
+                    const halfW = (box.max.x - box.min.x) / 2 + playerRadius;
+                    const halfD = (box.max.z - box.min.z) / 2 + playerRadius;
+
+                    const overlapX = halfW - Math.abs(dx);
+                    const overlapZ = halfD - Math.abs(dz);
+
+                    if (overlapX > 0 && overlapZ > 0) {
+                        if (overlapX < overlapZ) {
+                            newPos.x += Math.sign(dx) * overlapX;
+                        } else {
+                            newPos.z += Math.sign(dz) * overlapZ;
+                        }
+                    }
+                }
+            }
+        });
+
+        // World ground
+        if (newPos.y - pc.height / 2 < 0) {
+            newPos.y = pc.height / 2;
+            pc.velocity.y = 0;
+            pc.isGrounded = true;
+        }
+
+        // Death plane
+        if (newPos.y < -50) {
+            // Respawn
+            let spawnPos = new THREE.Vector3(0, 2, 0);
+            this.scene3d.objects.forEach(obj => {
+                if (obj.userData.type === 'spawn') {
+                    spawnPos.copy(obj.position);
+                    spawnPos.y += 1.5;
+                }
+            });
+            newPos.copy(spawnPos);
+            pc.velocity.set(0, 0, 0);
+        }
+
+        pc.mesh.position.copy(newPos);
+
+        // Update camera
+        this.scene3d.camera.position.copy(newPos);
+        this.scene3d.camera.position.y = newPos.y + 0.3; // Eye height offset
+
+        const euler = new THREE.Euler(pc.pitch, pc.yaw, 0, 'YXZ');
+        this.scene3d.camera.quaternion.setFromEuler(euler);
+    }
+
+    updateAnimations(dt) {
+        for (let i = this.activeAnimations.length - 1; i >= 0; i--) {
+            const anim = this.activeAnimations[i];
+            if (!anim.object || !anim.object.parent) {
+                this.activeAnimations.splice(i, 1);
+                continue;
+            }
+
+            anim.elapsed += dt;
+
+            switch (anim.type) {
+                case 'spin':
+                    const axis = anim.axis.toLowerCase();
+                    anim.object.rotation[axis] += anim.speed * dt;
+                    break;
+
+                case 'bounce': {
+                    const t = anim.elapsed * anim.speed;
+                    anim.object.position.y = anim.baseY + Math.abs(Math.sin(t)) * anim.height;
+                    break;
+                }
+
+                case 'glide': {
+                    const progress = Math.min(anim.elapsed / anim.duration, 1);
+                    const eased = progress < 0.5
+                        ? 2 * progress * progress
+                        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+                    anim.object.position.lerpVectors(anim.startPos, anim.endPos, eased);
+                    if (progress >= 1) {
+                        this.activeAnimations.splice(i, 1);
+                    }
+                    break;
+                }
+
+                case 'patrol': {
+                    const t2 = Math.sin(anim.elapsed * anim.speed * 0.5);
+                    anim.object.position.x = anim.baseX + t2 * anim.distance;
+                    break;
+                }
+
+                case 'followPlayer': {
+                    if (!this.playerController) break;
+                    const playerPos = this.playerController.mesh.position;
+                    const dir = new THREE.Vector3().subVectors(playerPos, anim.object.position);
+                    dir.y = 0;
+                    if (dir.length() > 1) {
+                        dir.normalize().multiplyScalar(anim.speed * dt);
+                        anim.object.position.add(dir);
+                        // Face player
+                        anim.object.lookAt(playerPos.x, anim.object.position.y, playerPos.z);
+                    }
+                    break;
+                }
+
+                case 'colorShift': {
+                    if (!anim.object.material) break;
+                    const hue = (anim.elapsed * anim.speed * 0.1) % 1;
+                    anim.object.material.color.setHSL(hue, 0.8, 0.5);
+                    break;
+                }
+
+                case 'gravity': {
+                    if (!anim.object.userData.anchored) {
+                        anim.velocity += -20 * dt;
+                        anim.object.position.y += anim.velocity * dt;
+                        // Ground collision
+                        const box = new THREE.Box3().setFromObject(anim.object);
+                        if (box.min.y <= 0) {
+                            anim.object.position.y += (0 - box.min.y);
+                            anim.velocity = 0;
+                        }
+                    }
+                    break;
+                }
+
+                case 'orbit': {
+                    const angle = anim.elapsed * anim.speed;
+                    anim.object.position.x = anim.centerX + Math.cos(angle) * anim.radius;
+                    anim.object.position.z = anim.centerZ + Math.sin(angle) * anim.radius;
+                    break;
+                }
+
+                case 'scalePulse': {
+                    const t = Math.sin(anim.elapsed * anim.speed * Math.PI);
+                    const s = anim.min + (anim.max - anim.min) * (t * 0.5 + 0.5);
+                    anim.object.scale.copy(anim.baseScale).multiplyScalar(s);
+                    break;
+                }
+
+                case 'trail': {
+                    if (anim.elapsed - anim.lastSpawn > 0.05) {
+                        anim.lastSpawn = anim.elapsed;
+                        const dot = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.08, 4, 4),
+                            new THREE.MeshBasicMaterial({
+                                color: new THREE.Color(anim.color),
+                                transparent: true, opacity: 0.8
+                            })
+                        );
+                        dot.position.copy(anim.object.position);
+                        this.scene3d.scene.add(dot);
+                        // Fade and remove
+                        const fadeStart = anim.elapsed;
+                        const fadeDot = () => {
+                            const age = (performance.now() / 1000) - fadeStart;
+                            if (age > 1 || !this.isRunning) {
+                                this.scene3d.scene.remove(dot);
+                                dot.geometry.dispose();
+                                dot.material.dispose();
+                                return;
+                            }
+                            dot.material.opacity = 0.8 * (1 - age);
+                            dot.scale.setScalar(1 - age * 0.5);
+                            requestAnimationFrame(fadeDot);
+                        };
+                        requestAnimationFrame(fadeDot);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    checkCollisions() {
+        if (!this.playerController) return;
+        const playerPos = this.playerController.mesh.position;
+        const playerRadius = 0.8;
+
+        this.scene3d.objects.forEach(obj => {
+            if (!obj.visible) return;
+            const box = new THREE.Box3().setFromObject(obj);
+            const closestPoint = new THREE.Vector3(
+                Math.max(box.min.x, Math.min(playerPos.x, box.max.x)),
+                Math.max(box.min.y, Math.min(playerPos.y, box.max.y)),
+                Math.max(box.min.z, Math.min(playerPos.z, box.max.z))
+            );
+
+            const dist = playerPos.distanceTo(closestPoint);
+
+            if (dist < playerRadius) {
+                // Trigger collision scripts
+                this.triggerEvent('onCollide', { object: 'player' }, obj);
+            }
+        });
+    }
+
+    // ===== Script Execution =====
+
+    triggerEvent(eventType, eventData = {}, specificObject = null) {
+        this.runningScripts.forEach(rs => {
+            if (rs.script.trigger !== eventType) return;
+            if (specificObject && rs.object !== specificObject) return;
+
+            // Check trigger conditions
+            if (eventType === 'onKey') {
+                if (rs.script.triggerValues.key !== eventData.key) return;
+            }
+            if (eventType === 'onCollide') {
+                if (rs.script.triggerValues.object !== 'any' &&
+                    rs.script.triggerValues.object !== eventData.object) return;
+            }
+
+            // Execute commands
+            this.executeCommands(rs.object, rs.script.commands);
+        });
+    }
+
+    startTimers() {
+        this._timerIntervals = [];
+        this.runningScripts.forEach(rs => {
+            if (rs.script.trigger === 'onTimer') {
+                const seconds = parseFloat(rs.script.triggerValues.seconds) || 1;
+                const id = setInterval(() => {
+                    if (!this.isRunning) return;
+                    this.executeCommands(rs.object, rs.script.commands);
+                }, seconds * 1000);
+                this._timerIntervals.push(id);
+            }
+        });
+    }
+
+    async executeCommands(obj, commands) {
+        if (!commands || !this.isRunning) return;
+
+        for (const cmd of commands) {
+            if (!cmd || !this.isRunning) break;
+            await this.executeCommand(obj, cmd);
+        }
+    }
+
+    async executeCommand(obj, cmd) {
+        if (!this.isRunning || !obj) return;
+
+        const v = cmd.values || {};
+
+        switch (cmd.code) {
+            // Motion
+            case 'move': {
+                const amount = parseFloat(v.amount) || 1;
+                const dir = v.direction || 'forward';
+                switch (dir) {
+                    case 'forward': obj.position.z -= amount; break;
+                    case 'backward': obj.position.z += amount; break;
+                    case 'left': obj.position.x -= amount; break;
+                    case 'right': obj.position.x += amount; break;
+                    case 'up': obj.position.y += amount; break;
+                    case 'down': obj.position.y -= amount; break;
+                }
+                break;
+            }
+            case 'moveTo': {
+                obj.position.set(
+                    parseFloat(v.x) || 0,
+                    parseFloat(v.y) || 0,
+                    parseFloat(v.z) || 0
+                );
+                break;
+            }
+            case 'rotate': {
+                const deg = parseFloat(v.degrees) || 15;
+                const axis = (v.axis || 'Y').toLowerCase();
+                obj.rotation[axis] += THREE.MathUtils.degToRad(deg);
+                break;
+            }
+            case 'spin': {
+                this.activeAnimations.push({
+                    type: 'spin',
+                    object: obj,
+                    axis: v.axis || 'Y',
+                    speed: parseFloat(v.speed) || 1,
+                    elapsed: 0
+                });
+                break;
+            }
+            case 'glide': {
+                this.activeAnimations.push({
+                    type: 'glide',
+                    object: obj,
+                    startPos: obj.position.clone(),
+                    endPos: new THREE.Vector3(
+                        parseFloat(v.x) || 0,
+                        parseFloat(v.y) || 0,
+                        parseFloat(v.z) || 0
+                    ),
+                    duration: parseFloat(v.time) || 1,
+                    elapsed: 0
+                });
+                await this.sleep((parseFloat(v.time) || 1) * 1000);
+                break;
+            }
+            case 'bounce': {
+                this.activeAnimations.push({
+                    type: 'bounce',
+                    object: obj,
+                    baseY: obj.position.y,
+                    height: parseFloat(v.height) || 2,
+                    speed: parseFloat(v.speed) || 2,
+                    elapsed: 0
+                });
+                break;
+            }
+            case 'followPlayer': {
+                this.activeAnimations.push({
+                    type: 'followPlayer',
+                    object: obj,
+                    speed: parseFloat(v.speed) || 2,
+                    elapsed: 0
+                });
+                break;
+            }
+            case 'patrol': {
+                this.activeAnimations.push({
+                    type: 'patrol',
+                    object: obj,
+                    baseX: obj.position.x,
+                    distance: parseFloat(v.dist) || 5,
+                    speed: parseFloat(v.speed) || 2,
+                    elapsed: 0
+                });
+                break;
+            }
+
+            // Control
+            case 'wait': {
+                await this.sleep((parseFloat(v.seconds) || 1) * 1000);
+                break;
+            }
+            case 'repeat': {
+                const times = parseInt(v.times) || 10;
+                for (let i = 0; i < times && this.isRunning; i++) {
+                    if (cmd.children) {
+                        await this.executeCommands(obj, cmd.children);
+                    }
+                }
+                break;
+            }
+            case 'forever': {
+                const foreverLoop = async () => {
+                    while (this.isRunning) {
+                        if (cmd.children) {
+                            await this.executeCommands(obj, cmd.children);
+                        }
+                        await this.sleep(16); // ~60fps
+                    }
+                };
+                foreverLoop(); // Don't await - runs in background
+                break;
+            }
+            case 'if': {
+                let condition = false;
+                switch (v.condition) {
+                    case 'touching player':
+                        if (this.playerController) {
+                            const dist = obj.position.distanceTo(this.playerController.mesh.position);
+                            condition = dist < 2;
+                        }
+                        break;
+                    case 'key pressed':
+                        condition = Object.values(this.keys).some(k => k);
+                        break;
+                    case 'variable > 0':
+                        condition = (this.variables.score || 0) > 0;
+                        break;
+                    case 'random chance':
+                        condition = Math.random() > 0.5;
+                        break;
+                }
+                if (condition && cmd.children) {
+                    await this.executeCommands(obj, cmd.children);
+                }
+                break;
+            }
+            case 'stop': {
+                // Stop script execution
+                return;
+            }
+
+            // Looks
+            case 'setColor': {
+                if (obj.material) {
+                    obj.material.color.set(v.color || '#ff0000');
+                }
+                obj.traverse(child => {
+                    if (child.material && child !== obj) {
+                        child.material.color.set(v.color || '#ff0000');
+                    }
+                });
+                break;
+            }
+            case 'setSize': {
+                const percent = (parseFloat(v.percent) || 100) / 100;
+                const origState = this.objectStates.get(obj.userData.id);
+                if (origState) {
+                    obj.scale.copy(origState.scale).multiplyScalar(percent);
+                }
+                break;
+            }
+            case 'show': {
+                obj.visible = true;
+                break;
+            }
+            case 'hide': {
+                obj.visible = false;
+                break;
+            }
+            case 'glow': {
+                if (obj.material) {
+                    obj.material.emissive = new THREE.Color(v.color || '#ffffff');
+                    obj.material.emissiveIntensity = parseFloat(v.val) || 0.5;
+                }
+                break;
+            }
+            case 'setOpacity': {
+                const opacity = (parseFloat(v.percent) || 100) / 100;
+                if (obj.material) {
+                    obj.material.opacity = opacity;
+                    obj.material.transparent = opacity < 1;
+                }
+                break;
+            }
+            case 'say': {
+                this.showSpeechBubble(obj, v.text || 'Hello!', parseFloat(v.time) || 2);
+                await this.sleep((parseFloat(v.time) || 2) * 1000);
+                break;
+            }
+            case 'colorShift': {
+                this.activeAnimations.push({
+                    type: 'colorShift',
+                    object: obj,
+                    speed: parseFloat(v.speed) || 1,
+                    elapsed: 0
+                });
+                break;
+            }
+
+            // Physics
+            case 'enableGravity': {
+                obj.userData.anchored = false;
+                this.activeAnimations.push({
+                    type: 'gravity',
+                    object: obj,
+                    velocity: 0,
+                    elapsed: 0
+                });
+                break;
+            }
+            case 'disableGravity': {
+                obj.userData.anchored = true;
+                break;
+            }
+            case 'setVelocity': {
+                // Find or create gravity animation
+                let gravAnim = this.activeAnimations.find(a => a.type === 'gravity' && a.object === obj);
+                if (!gravAnim) {
+                    gravAnim = { type: 'gravity', object: obj, velocity: 0, elapsed: 0 };
+                    this.activeAnimations.push(gravAnim);
+                    obj.userData.anchored = false;
+                }
+                obj.position.x += (parseFloat(v.x) || 0) * 0.016;
+                obj.position.z += (parseFloat(v.z) || 0) * 0.016;
+                gravAnim.velocity = parseFloat(v.y) || 0;
+                break;
+            }
+            case 'impulse': {
+                const force = parseFloat(v.force) || 5;
+                const dir2 = v.direction || 'up';
+                switch (dir2) {
+                    case 'up': obj.position.y += force * 0.1; break;
+                    case 'forward': obj.position.z -= force * 0.1; break;
+                    case 'backward': obj.position.z += force * 0.1; break;
+                    case 'left': obj.position.x -= force * 0.1; break;
+                    case 'right': obj.position.x += force * 0.1; break;
+                }
+                break;
+            }
+            case 'setAnchored': {
+                obj.userData.anchored = v.state === 'true';
+                break;
+            }
+            case 'destroy': {
+                obj.visible = false;
+                obj.userData.collidable = false;
+                break;
+            }
+            case 'clone': {
+                const clone = this.scene3d.duplicateObject(obj);
+                if (clone) {
+                    clone.userData.isClone = true;
+                    clone.position.y += 1;
+                }
+                break;
+            }
+            case 'teleportPlayer': {
+                if (this.playerController) {
+                    this.playerController.mesh.position.set(
+                        parseFloat(v.x) || 0,
+                        parseFloat(v.y) || 0,
+                        parseFloat(v.z) || 0
+                    );
+                    this.playerController.velocity.set(0, 0, 0);
+                }
+                break;
+            }
+
+            // Sound
+            case 'playSound': {
+                this.playSynthSound(v.sound || 'pop');
+                break;
+            }
+            case 'setVolume': {
+                this.soundVolume = (parseFloat(v.percent) || 100) / 100;
+                break;
+            }
+
+            // Variables
+            case 'setVar': {
+                const varName = v.var || 'score';
+                this.variables[varName] = parseFloat(v.value) || 0;
+                break;
+            }
+            case 'changeVar': {
+                const varName2 = v.var || 'score';
+                this.variables[varName2] = (this.variables[varName2] || 0) + (parseFloat(v.amount) || 1);
+                break;
+            }
+            case 'showVar': {
+                const varName3 = v.var || 'score';
+                this.addHUDElement(varName3);
+                break;
+            }
+            case 'resetVars': {
+                this.variables = { score: 0, health: 100, coins: 0, speed: 5, level: 1 };
+                break;
+            }
+            case 'ifVar': {
+                const varVal = this.variables[v.var] || 0;
+                const checkVal = parseFloat(v.value) || 0;
+                let cond = false;
+                switch (v.op) {
+                    case '>': cond = varVal > checkVal; break;
+                    case '<': cond = varVal < checkVal; break;
+                    case '=': cond = varVal === checkVal; break;
+                    case '>=': cond = varVal >= checkVal; break;
+                    case '<=': cond = varVal <= checkVal; break;
+                }
+                if (cond && cmd.children) {
+                    await this.executeCommands(obj, cmd.children);
+                }
+                break;
+            }
+
+            // New motion blocks
+            case 'orbit': {
+                this.activeAnimations.push({
+                    type: 'orbit', object: obj,
+                    centerX: obj.position.x, centerZ: obj.position.z,
+                    radius: parseFloat(v.r) || 3,
+                    speed: parseFloat(v.s) || 1,
+                    elapsed: 0
+                });
+                break;
+            }
+            case 'lookAtPlayer': {
+                if (this.playerController) {
+                    const pp = this.playerController.mesh.position;
+                    obj.lookAt(pp.x, obj.position.y, pp.z);
+                }
+                break;
+            }
+            case 'randomPos': {
+                const range = parseFloat(v.range) || 10;
+                obj.position.x = (Math.random() - 0.5) * range * 2;
+                obj.position.z = (Math.random() - 0.5) * range * 2;
+                break;
+            }
+            case 'pushFromPlayer': {
+                if (this.playerController) {
+                    const dir = new THREE.Vector3().subVectors(obj.position, this.playerController.mesh.position);
+                    dir.y = 0;
+                    dir.normalize().multiplyScalar(parseFloat(v.f) || 3);
+                    obj.position.add(dir);
+                }
+                break;
+            }
+
+            // New control
+            case 'ifElse': {
+                let cond2 = false;
+                switch (v.condition) {
+                    case 'touching player':
+                        if (this.playerController) cond2 = obj.position.distanceTo(this.playerController.mesh.position) < 2;
+                        break;
+                    case 'key pressed': cond2 = Object.values(this.keys).some(k => k); break;
+                    case 'variable > 0': cond2 = (this.variables.score || 0) > 0; break;
+                    case 'health < 50': cond2 = (this.variables.health || 100) < 50; break;
+                    case 'random chance': cond2 = Math.random() > 0.5; break;
+                    case 'distance < 3':
+                        if (this.playerController) cond2 = obj.position.distanceTo(this.playerController.mesh.position) < 3;
+                        break;
+                }
+                if (cond2 && cmd.children) await this.executeCommands(obj, cmd.children);
+                break;
+            }
+            case 'waitUntil': {
+                const checkCond = async () => {
+                    while (this.isRunning) {
+                        let met = false;
+                        switch (v.condition) {
+                            case 'touching player':
+                                if (this.playerController) met = obj.position.distanceTo(this.playerController.mesh.position) < 2;
+                                break;
+                            case 'key pressed': met = Object.values(this.keys).some(k => k); break;
+                            case 'timer > 5': met = this.gameTimer > 5; break;
+                        }
+                        if (met) break;
+                        await this.sleep(50);
+                    }
+                };
+                await checkCond();
+                break;
+            }
+
+            // New looks
+            case 'scalePulse': {
+                this.activeAnimations.push({
+                    type: 'scalePulse', object: obj,
+                    min: (parseFloat(v.min) || 80) / 100,
+                    max: (parseFloat(v.max) || 120) / 100,
+                    speed: parseFloat(v.spd) || 2,
+                    baseScale: obj.scale.clone(),
+                    elapsed: 0
+                });
+                break;
+            }
+            case 'trail': {
+                // Simplified particle trail
+                this.activeAnimations.push({
+                    type: 'trail', object: obj,
+                    color: v.color || '#ffff00',
+                    elapsed: 0, lastSpawn: 0
+                });
+                break;
+            }
+
+            // New physics
+            case 'explode': {
+                const force = parseFloat(v.force) || 10;
+                const radius = parseFloat(v.radius) || 5;
+                this.scene3d.objects.forEach(other => {
+                    if (other === obj) return;
+                    const dist = other.position.distanceTo(obj.position);
+                    if (dist < radius && dist > 0.1) {
+                        const pushDir = new THREE.Vector3().subVectors(other.position, obj.position).normalize();
+                        const strength = (1 - dist / radius) * force * 0.1;
+                        other.position.add(pushDir.multiplyScalar(strength));
+                        other.position.y += strength * 0.5;
+                    }
+                });
+                if (this.playerController) {
+                    const pd = this.playerController.mesh.position.distanceTo(obj.position);
+                    if (pd < radius) {
+                        this.playerController.velocity.y += (1 - pd / radius) * force;
+                    }
+                }
+                this.playSynthSound('boom');
+                break;
+            }
+            case 'launchPlayer': {
+                if (this.playerController) {
+                    this.playerController.velocity.y = parseFloat(v.force) || 15;
+                    this.playerController.isGrounded = false;
+                }
+                break;
+            }
+            case 'setPlayerSpeed': {
+                if (this.playerController) {
+                    this.playerController.speed = parseFloat(v.speed) || 6;
+                }
+                break;
+            }
+
+            // New sound
+            case 'playTone': {
+                if (this.audioCtx) {
+                    const osc = this.audioCtx.createOscillator();
+                    const g = this.audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.value = parseFloat(v.freq) || 440;
+                    g.gain.value = this.soundVolume * 0.3;
+                    const now = this.audioCtx.currentTime;
+                    const dur = parseFloat(v.dur) || 0.3;
+                    g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+                    osc.connect(g); g.connect(this.audioCtx.destination);
+                    osc.start(now); osc.stop(now + dur);
+                }
+                break;
+            }
+        }
+    }
+
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // ===== HUD =====
+
+    addHUDElement(varName) {
+        if (this.hudElements.includes(varName)) return;
+        this.hudElements.push(varName);
+    }
+
+    updateHUD() {
+        const hud = document.getElementById('game-hud');
+        hud.innerHTML = '';
+
+        this.hudElements.forEach(varName => {
+            const el = document.createElement('div');
+            el.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;backdrop-filter:blur(8px);';
+            el.textContent = `${varName}: ${this.variables[varName] ?? 0}`;
+            hud.appendChild(el);
+        });
+    }
+
+    // ===== Speech Bubbles =====
+
+    showSpeechBubble(obj, text, duration) {
+        // Create a simple HTML overlay speech bubble
+        const bubble = document.createElement('div');
+        bubble.className = 'speech-bubble-3d';
+        bubble.textContent = text;
+        bubble.style.cssText = `
+            position: fixed;
+            background: white;
+            color: #333;
+            padding: 8px 14px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            pointer-events: none;
+            z-index: 1000;
+            transform: translate(-50%, -100%);
+            white-space: nowrap;
+        `;
+        document.body.appendChild(bubble);
+
+        // Update position each frame
+        const updatePos = () => {
+            if (!bubble.parentElement || !this.isRunning) {
+                bubble.remove();
+                return;
+            }
+            const pos = obj.position.clone();
+            pos.y += 2;
+            pos.project(this.scene3d.camera);
+            const rect = this.scene3d.canvas.getBoundingClientRect();
+            bubble.style.left = ((pos.x + 1) / 2 * rect.width + rect.left) + 'px';
+            bubble.style.top = ((-pos.y + 1) / 2 * rect.height + rect.top) + 'px';
+            requestAnimationFrame(updatePos);
+        };
+        updatePos();
+
+        setTimeout(() => bubble.remove(), duration * 1000);
+    }
+
+    // ===== Sound Synthesis =====
+
+    playSynthSound(type) {
+        if (!this.audioCtx) return;
+        const ctx = this.audioCtx;
+        const now = ctx.currentTime;
+        const gain = ctx.createGain();
+        gain.connect(ctx.destination);
+        gain.gain.value = this.soundVolume * 0.3;
+
+        switch (type) {
+            case 'pop': {
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(200, now + 0.1);
+                osc.connect(gain);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+                break;
+            }
+            case 'ding': {
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, now);
+                osc.connect(gain);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+                break;
+            }
+            case 'whoosh': {
+                const bufferSize = ctx.sampleRate * 0.3;
+                const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+                }
+                const source = ctx.createBufferSource();
+                source.buffer = buffer;
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(1000, now);
+                filter.frequency.exponentialRampToValueAtTime(100, now + 0.3);
+                source.connect(filter);
+                filter.connect(gain);
+                source.start(now);
+                break;
+            }
+            case 'boom': {
+                const osc = ctx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+                osc.connect(gain);
+                gain.gain.setValueAtTime(this.soundVolume * 0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+                break;
+            }
+            case 'jump': {
+                const osc = ctx.createOscillator();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+                osc.connect(gain);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+                break;
+            }
+            case 'coin': {
+                const osc1 = ctx.createOscillator();
+                osc1.type = 'square';
+                osc1.frequency.setValueAtTime(988, now);
+                osc1.connect(gain);
+                const osc2 = ctx.createOscillator();
+                osc2.type = 'square';
+                osc2.frequency.setValueAtTime(1319, now + 0.08);
+                const gain2 = ctx.createGain();
+                gain2.connect(ctx.destination);
+                gain2.gain.value = this.soundVolume * 0.3;
+                osc2.connect(gain2);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                osc1.start(now);
+                osc1.stop(now + 0.1);
+                osc2.start(now + 0.08);
+                osc2.stop(now + 0.3);
+                break;
+            }
+            case 'hurt': {
+                const osc = ctx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.2);
+                osc.connect(gain);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+                break;
+            }
+            case 'powerup': {
+                for (let i = 0; i < 4; i++) {
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400 + i * 200, now + i * 0.08);
+                    const g = ctx.createGain();
+                    g.connect(ctx.destination);
+                    g.gain.value = this.soundVolume * 0.2;
+                    g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.2);
+                    osc.connect(g);
+                    osc.start(now + i * 0.08);
+                    osc.stop(now + i * 0.08 + 0.2);
+                }
+                break;
+            }
+        }
+    }
+}

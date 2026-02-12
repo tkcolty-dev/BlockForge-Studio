@@ -1,0 +1,880 @@
+/**
+ * Scene3D - Core 3D scene management for BlockForge Studio
+ * Handles rendering, objects, selection, and camera
+ */
+class Scene3D {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.objects = [];
+        this.selectedObject = null;
+        this.nextId = 1;
+        this.snapEnabled = true;
+        this.snapSize = 0.5;
+        this.currentTool = 'select';
+        this.isPlaying = false;
+
+        this.initRenderer();
+        this.initScene();
+        this.initCamera();
+        this.initLights();
+        this.initGrid();
+        this.initControls();
+        this.initRaycaster();
+        this.initDefaultScene();
+
+        this.onObjectSelected = null;
+        this.onObjectDeselected = null;
+        this.onObjectChanged = null;
+
+        this.animate();
+        window.addEventListener('resize', () => this.onResize());
+        this.onResize();
+    }
+
+    initRenderer() {
+        this.renderer = new THREE.WebGLRenderer({
+            canvas: this.canvas,
+            antialias: true,
+            alpha: false
+        });
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.outputEncoding = THREE.sRGBEncoding;
+        this.renderer.setClearColor(0x1a1a2e);
+    }
+
+    initScene() {
+        this.scene = new THREE.Scene();
+        this.scene.fog = null;
+    }
+
+    initCamera() {
+        const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+        this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
+        this.camera.position.set(12, 10, 12);
+        this.camera.lookAt(0, 0, 0);
+    }
+
+    initLights() {
+        // Ambient
+        this.ambientLight = new THREE.AmbientLight(0x6688cc, 0.5);
+        this.scene.add(this.ambientLight);
+
+        // Hemisphere
+        this.hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x362d1e, 0.4);
+        this.scene.add(this.hemisphereLight);
+
+        // Directional (sun)
+        this.sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        this.sunLight.position.set(15, 25, 15);
+        this.sunLight.castShadow = true;
+        this.sunLight.shadow.mapSize.width = 2048;
+        this.sunLight.shadow.mapSize.height = 2048;
+        this.sunLight.shadow.camera.near = 0.5;
+        this.sunLight.shadow.camera.far = 100;
+        this.sunLight.shadow.camera.left = -30;
+        this.sunLight.shadow.camera.right = 30;
+        this.sunLight.shadow.camera.top = 30;
+        this.sunLight.shadow.camera.bottom = -30;
+        this.sunLight.shadow.bias = -0.001;
+        this.scene.add(this.sunLight);
+    }
+
+    initGrid() {
+        // Main grid
+        this.gridHelper = new THREE.GridHelper(100, 100, 0x3a3a5c, 0x2a2a44);
+        this.gridHelper.position.y = 0;
+        this.scene.add(this.gridHelper);
+
+        // Center axes
+        const axisSize = 50;
+        const axesMat = {
+            x: new THREE.LineBasicMaterial({ color: 0xff4444, opacity: 0.4, transparent: true }),
+            z: new THREE.LineBasicMaterial({ color: 0x4444ff, opacity: 0.4, transparent: true })
+        };
+
+        const xPoints = [new THREE.Vector3(-axisSize, 0.01, 0), new THREE.Vector3(axisSize, 0.01, 0)];
+        const zPoints = [new THREE.Vector3(0, 0.01, -axisSize), new THREE.Vector3(0, 0.01, axisSize)];
+
+        this.scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(xPoints), axesMat.x));
+        this.scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(zPoints), axesMat.z));
+
+        // Ground plane (for shadows and base)
+        const groundGeo = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.ShadowMaterial({ opacity: 0.15 });
+        this.groundPlane = new THREE.Mesh(groundGeo, groundMat);
+        this.groundPlane.rotation.x = -Math.PI / 2;
+        this.groundPlane.receiveShadow = true;
+        this.groundPlane.userData.isGround = true;
+        this.scene.add(this.groundPlane);
+
+        // Sky gradient
+        const skyGeo = new THREE.SphereGeometry(400, 32, 15);
+        const skyMat = new THREE.ShaderMaterial({
+            uniforms: {
+                topColor: { value: new THREE.Color(0x0077ff) },
+                bottomColor: { value: new THREE.Color(0x1a1a2e) },
+                offset: { value: 20 },
+                exponent: { value: 0.4 }
+            },
+            vertexShader: `
+                varying vec3 vWorldPosition;
+                void main() {
+                    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                    vWorldPosition = worldPosition.xyz;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 topColor;
+                uniform vec3 bottomColor;
+                uniform float offset;
+                uniform float exponent;
+                varying vec3 vWorldPosition;
+                void main() {
+                    float h = normalize(vWorldPosition + offset).y;
+                    gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+                }
+            `,
+            side: THREE.BackSide
+        });
+        this.sky = new THREE.Mesh(skyGeo, skyMat);
+        this.scene.add(this.sky);
+    }
+
+    initControls() {
+        this.orbitControls = new THREE.OrbitControls(this.camera, this.canvas);
+        this.orbitControls.enableDamping = true;
+        this.orbitControls.dampingFactor = 0.08;
+        this.orbitControls.target.set(0, 0, 0);
+
+        this.transformControls = new THREE.TransformControls(this.camera, this.canvas);
+        this.scene.add(this.transformControls);
+
+        this.transformControls.addEventListener('dragging-changed', (e) => {
+            this.orbitControls.enabled = !e.value;
+        });
+
+        this.transformControls.addEventListener('objectChange', () => {
+            if (this.onObjectChanged && this.selectedObject) {
+                this.onObjectChanged(this.selectedObject);
+            }
+        });
+    }
+
+    initRaycaster() {
+        this.raycaster = new THREE.Raycaster();
+        this.mouse = new THREE.Vector2();
+        this.canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+    }
+
+    initDefaultScene() {
+        // Create a base platform
+        const platform = this.addObject('box', {
+            name: 'Baseplate',
+            position: { x: 0, y: -0.25, z: 0 },
+            scale: { x: 20, y: 0.5, z: 20 },
+            color: '#4a7c3f',
+            anchored: true
+        });
+
+        // Spawn point indicator
+        this.addObject('spawn', {
+            name: 'SpawnPoint',
+            position: { x: 0, y: 0.5, z: 0 }
+        });
+    }
+
+    // ===== Object Management =====
+
+    addObject(type, options = {}) {
+        let mesh;
+        const color = options.color || '#4a90d9';
+        const material = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(color),
+            roughness: 0.6,
+            metalness: 0.1
+        });
+
+        switch (type) {
+            case 'box':
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+                break;
+            case 'sphere':
+                mesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 16), material);
+                break;
+            case 'cylinder':
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 32), material);
+                break;
+            case 'cone':
+                mesh = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 32), material);
+                break;
+            case 'plane':
+                mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+                mesh.rotation.x = -Math.PI / 2;
+                break;
+            case 'torus':
+                mesh = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.15, 16, 32), material);
+                break;
+            case 'wedge': {
+                const shape = new THREE.Shape();
+                shape.moveTo(0, 0);
+                shape.lineTo(1, 0);
+                shape.lineTo(0, 1);
+                shape.lineTo(0, 0);
+                const extrudeSettings = { depth: 1, bevelEnabled: false };
+                const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                geom.center();
+                mesh = new THREE.Mesh(geom, material);
+                break;
+            }
+            case 'stairs': {
+                const stairGroup = new THREE.Group();
+                const steps = 5;
+                for (let i = 0; i < steps; i++) {
+                    const step = new THREE.Mesh(
+                        new THREE.BoxGeometry(2, 0.25, 0.5),
+                        material.clone()
+                    );
+                    step.position.set(0, i * 0.25 + 0.125, -i * 0.5);
+                    step.castShadow = true;
+                    step.receiveShadow = true;
+                    stairGroup.add(step);
+                }
+                mesh = stairGroup;
+                break;
+            }
+            case 'pyramid': {
+                const pyrGeom = new THREE.ConeGeometry(0.7, 1, 4);
+                pyrGeom.rotateY(Math.PI / 4);
+                mesh = new THREE.Mesh(pyrGeom, material);
+                break;
+            }
+            case 'dome': {
+                const domeGeom = new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+                mesh = new THREE.Mesh(domeGeom, material);
+                break;
+            }
+            case 'arch': {
+                const archGroup = new THREE.Group();
+                // Left pillar
+                const pillarL = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.5, 0.3), material.clone());
+                pillarL.position.set(-0.6, 0.75, 0);
+                pillarL.castShadow = true; pillarL.receiveShadow = true;
+                archGroup.add(pillarL);
+                // Right pillar
+                const pillarR = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.5, 0.3), material.clone());
+                pillarR.position.set(0.6, 0.75, 0);
+                pillarR.castShadow = true; pillarR.receiveShadow = true;
+                archGroup.add(pillarR);
+                // Curved top
+                const archCurve = new THREE.Mesh(
+                    new THREE.TorusGeometry(0.6, 0.15, 8, 16, Math.PI),
+                    material.clone()
+                );
+                archCurve.position.set(0, 1.5, 0);
+                archCurve.castShadow = true;
+                archGroup.add(archCurve);
+                mesh = archGroup;
+                break;
+            }
+            case 'tube': {
+                const tubeGeom = new THREE.TorusGeometry(0.5, 0.15, 12, 32);
+                tubeGeom.rotateX(Math.PI / 2);
+                mesh = new THREE.Mesh(tubeGeom, material);
+                break;
+            }
+            case 'wall': {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 0.3), material);
+                break;
+            }
+            case 'corner': {
+                const cornerGroup = new THREE.Group();
+                const wallA = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 0.3), material.clone());
+                wallA.position.set(1, 1, 0);
+                wallA.castShadow = true; wallA.receiveShadow = true;
+                cornerGroup.add(wallA);
+                const wallB = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2, 2), material.clone());
+                wallB.position.set(0, 1, 1);
+                wallB.castShadow = true; wallB.receiveShadow = true;
+                cornerGroup.add(wallB);
+                mesh = cornerGroup;
+                break;
+            }
+            case 'tree': {
+                const treeGroup = new THREE.Group();
+                // Trunk
+                const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.9 });
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 1.2, 8), trunkMat);
+                trunk.position.y = 0.6;
+                trunk.castShadow = true;
+                treeGroup.add(trunk);
+                // Foliage layers
+                const leafMat = new THREE.MeshStandardMaterial({ color: 0x27ae60, roughness: 0.8 });
+                const foliage1 = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1, 8), leafMat);
+                foliage1.position.y = 1.5;
+                foliage1.castShadow = true;
+                treeGroup.add(foliage1);
+                const foliage2 = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.8, 8), leafMat.clone());
+                foliage2.position.y = 2.1;
+                foliage2.castShadow = true;
+                treeGroup.add(foliage2);
+                mesh = treeGroup;
+                break;
+            }
+            case 'house': {
+                const houseGroup = new THREE.Group();
+                // Walls
+                const wallMat = new THREE.MeshStandardMaterial({ color: 0xe67e22, roughness: 0.7 });
+                const walls = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 2), wallMat);
+                walls.position.y = 0.75;
+                walls.castShadow = true; walls.receiveShadow = true;
+                houseGroup.add(walls);
+                // Roof
+                const roofMat = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.6 });
+                const roofGeom = new THREE.ConeGeometry(1.6, 1, 4);
+                roofGeom.rotateY(Math.PI / 4);
+                const roof = new THREE.Mesh(roofGeom, roofMat);
+                roof.position.y = 2;
+                roof.castShadow = true;
+                houseGroup.add(roof);
+                // Door
+                const doorMat = new THREE.MeshStandardMaterial({ color: 0x6B4226 });
+                const door = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.8, 0.05), doorMat);
+                door.position.set(0, 0.4, 1.03);
+                houseGroup.add(door);
+                mesh = houseGroup;
+                break;
+            }
+            case 'platform': {
+                const platMat = new THREE.MeshStandardMaterial({ color: 0x1abc9c, roughness: 0.5, metalness: 0.2 });
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(3, 0.3, 3), platMat);
+                material = platMat;
+                break;
+            }
+            case 'bridge': {
+                const bridgeGroup = new THREE.Group();
+                const plankMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.9 });
+                // Planks
+                for (let i = 0; i < 6; i++) {
+                    const plank = new THREE.Mesh(new THREE.BoxGeometry(2, 0.1, 0.3), plankMat.clone());
+                    plank.position.set(0, 0, i * 0.35 - 0.875);
+                    plank.castShadow = true; plank.receiveShadow = true;
+                    bridgeGroup.add(plank);
+                }
+                // Rails
+                const railMat = new THREE.MeshStandardMaterial({ color: 0x6B4F12, roughness: 0.8 });
+                const railL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 2.2), railMat);
+                railL.position.set(-0.9, 0.3, 0);
+                railL.castShadow = true;
+                bridgeGroup.add(railL);
+                const railR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 2.2), railMat.clone());
+                railR.position.set(0.9, 0.3, 0);
+                railR.castShadow = true;
+                bridgeGroup.add(railR);
+                // Posts
+                for (let s = -1; s <= 1; s += 2) {
+                    for (let p = -1; p <= 1; p += 2) {
+                        const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 0.1), railMat.clone());
+                        post.position.set(s * 0.9, 0.25, p * 0.9);
+                        post.castShadow = true;
+                        bridgeGroup.add(post);
+                    }
+                }
+                mesh = bridgeGroup;
+                break;
+            }
+            case 'crate': {
+                const crateMat = new THREE.MeshStandardMaterial({ color: 0xd4a24e, roughness: 0.85 });
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), crateMat);
+                material = crateMat;
+                // Cross detail via edges
+                const edgeMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.9 });
+                const edgeH = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.06, 0.82), edgeMat);
+                edgeH.position.y = 0;
+                mesh.add(edgeH);
+                const edgeV = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.82, 0.82), edgeMat.clone());
+                edgeV.position.x = 0;
+                mesh.add(edgeV);
+                break;
+            }
+            case 'gem': {
+                const gemMat = new THREE.MeshStandardMaterial({
+                    color: 0xe74c3c, roughness: 0.1, metalness: 0.6,
+                    emissive: 0xe74c3c, emissiveIntensity: 0.15
+                });
+                const gemGeom = new THREE.OctahedronGeometry(0.3, 0);
+                mesh = new THREE.Mesh(gemGeom, gemMat);
+                material = gemMat;
+                break;
+            }
+            case 'spawn': {
+                // Spawn point marker
+                const spawnMat = new THREE.MeshStandardMaterial({
+                    color: 0x2ecc71,
+                    emissive: 0x2ecc71,
+                    emissiveIntensity: 0.3,
+                    transparent: true,
+                    opacity: 0.6
+                });
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.1, 32), spawnMat);
+                // Add arrow indicator
+                const arrow = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.15, 0.5, 12),
+                    new THREE.MeshStandardMaterial({ color: 0x2ecc71, emissive: 0x2ecc71, emissiveIntensity: 0.5 })
+                );
+                arrow.position.y = 0.8;
+                mesh.add(arrow);
+                break;
+            }
+            case 'light-point': {
+                const lightMat = new THREE.MeshStandardMaterial({
+                    color: 0xf1c40f,
+                    emissive: 0xf1c40f,
+                    emissiveIntensity: 0.8
+                });
+                mesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 8), lightMat);
+                // Add actual point light
+                const pointLight = new THREE.PointLight(0xf1c40f, 1, 15);
+                pointLight.castShadow = true;
+                mesh.add(pointLight);
+                break;
+            }
+            case 'coin': {
+                const coinMat = new THREE.MeshStandardMaterial({
+                    color: 0xf1c40f,
+                    metalness: 0.8,
+                    roughness: 0.2,
+                    emissive: 0xf1c40f,
+                    emissiveIntensity: 0.1
+                });
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 32), coinMat);
+                mesh.rotation.x = Math.PI / 2;
+                break;
+            }
+            case 'npc': {
+                const npcGroup = new THREE.Group();
+                // Body
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3498db });
+                const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.4), bodyMat);
+                body.position.y = 0.4;
+                body.castShadow = true;
+                npcGroup.add(body);
+                // Head
+                const headMat = new THREE.MeshStandardMaterial({ color: 0xf5cba7 });
+                const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMat);
+                head.position.y = 1.05;
+                head.castShadow = true;
+                npcGroup.add(head);
+                // Legs
+                const legMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50 });
+                const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.4), legMat);
+                legL.position.set(-0.15, -0.3, 0);
+                legL.castShadow = true;
+                npcGroup.add(legL);
+                const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.4), legMat);
+                legR.position.set(0.15, -0.3, 0);
+                legR.castShadow = true;
+                npcGroup.add(legR);
+                mesh = npcGroup;
+                break;
+            }
+            default:
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+        }
+
+        const id = this.nextId++;
+        const name = options.name || `${type.charAt(0).toUpperCase() + type.slice(1)}_${id}`;
+
+        // Setup mesh
+        if (mesh.isMesh) {
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+        } else {
+            mesh.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+        }
+
+        // Apply transforms
+        if (options.position) {
+            mesh.position.set(
+                options.position.x || 0,
+                options.position.y || 0,
+                options.position.z || 0
+            );
+        }
+        if (options.scale) {
+            mesh.scale.set(
+                options.scale.x || 1,
+                options.scale.y || 1,
+                options.scale.z || 1
+            );
+        }
+        if (options.rotation) {
+            mesh.rotation.set(
+                THREE.MathUtils.degToRad(options.rotation.x || 0),
+                THREE.MathUtils.degToRad(options.rotation.y || 0),
+                THREE.MathUtils.degToRad(options.rotation.z || 0)
+            );
+        }
+
+        // Store metadata
+        mesh.userData = {
+            id: id,
+            name: name,
+            type: type,
+            anchored: options.anchored !== undefined ? options.anchored : false,
+            collidable: options.collidable !== undefined ? options.collidable : true,
+            mass: options.mass || 1,
+            locked: false,
+            visible: true,
+            scripts: [],
+            isPrefab: ['spawn', 'light-point', 'coin', 'npc', 'tree', 'house', 'platform', 'bridge', 'crate', 'gem'].includes(type)
+        };
+
+        this.scene.add(mesh);
+        this.objects.push(mesh);
+
+        return mesh;
+    }
+
+    removeObject(obj) {
+        if (!obj) return;
+        const idx = this.objects.indexOf(obj);
+        if (idx !== -1) {
+            this.objects.splice(idx, 1);
+        }
+        if (this.selectedObject === obj) {
+            this.deselect();
+        }
+        this.scene.remove(obj);
+
+        // Dispose geometries and materials
+        obj.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(m => m.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        });
+    }
+
+    duplicateObject(obj) {
+        if (!obj) return null;
+
+        const type = obj.userData.type;
+        let color = '#4a90d9';
+        if (obj.material && obj.material.color) {
+            color = '#' + obj.material.color.getHexString();
+        }
+
+        const dup = this.addObject(type, {
+            name: obj.userData.name + '_copy',
+            position: {
+                x: obj.position.x + 1,
+                y: obj.position.y,
+                z: obj.position.z + 1
+            },
+            scale: {
+                x: obj.scale.x,
+                y: obj.scale.y,
+                z: obj.scale.z
+            },
+            color: color,
+            anchored: obj.userData.anchored,
+            collidable: obj.userData.collidable,
+            mass: obj.userData.mass
+        });
+
+        dup.rotation.copy(obj.rotation);
+        dup.userData.scripts = JSON.parse(JSON.stringify(obj.userData.scripts));
+
+        // Copy material properties
+        if (obj.material && dup.material) {
+            dup.material.roughness = obj.material.roughness;
+            dup.material.metalness = obj.material.metalness;
+            dup.material.opacity = obj.material.opacity;
+            dup.material.transparent = obj.material.transparent;
+        }
+
+        return dup;
+    }
+
+    // ===== Selection =====
+
+    selectObject(obj) {
+        if (this.selectedObject === obj) return;
+        this.deselect();
+
+        this.selectedObject = obj;
+        this.transformControls.attach(obj);
+
+        // Highlight
+        this.addSelectionOutline(obj);
+
+        if (this.onObjectSelected) {
+            this.onObjectSelected(obj);
+        }
+    }
+
+    deselect() {
+        if (this.selectedObject) {
+            this.removeSelectionOutline(this.selectedObject);
+            this.selectedObject = null;
+            this.transformControls.detach();
+
+            if (this.onObjectDeselected) {
+                this.onObjectDeselected();
+            }
+        }
+    }
+
+    addSelectionOutline(obj) {
+        // Simple outline using wireframe overlay
+        const createOutline = (mesh) => {
+            if (!mesh.geometry) return;
+            const outlineMat = new THREE.MeshBasicMaterial({
+                color: 0x4c97ff,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.3
+            });
+            const outline = new THREE.Mesh(mesh.geometry.clone(), outlineMat);
+            outline.scale.multiplyScalar(1.02);
+            outline.userData.isOutline = true;
+            outline.renderOrder = 998;
+            mesh.add(outline);
+        };
+
+        if (obj.isMesh) {
+            createOutline(obj);
+        } else {
+            obj.traverse(child => {
+                if (child.isMesh && !child.userData.isOutline) {
+                    createOutline(child);
+                }
+            });
+        }
+    }
+
+    removeSelectionOutline(obj) {
+        const toRemove = [];
+        obj.traverse(child => {
+            if (child.userData.isOutline) {
+                toRemove.push(child);
+            }
+        });
+        toRemove.forEach(outline => {
+            if (outline.parent) outline.parent.remove(outline);
+            if (outline.geometry) outline.geometry.dispose();
+            if (outline.material) outline.material.dispose();
+        });
+    }
+
+    // ===== Interaction =====
+
+    onPointerDown(event) {
+        if (this.isPlaying) return;
+        if (this.transformControls.dragging) return;
+
+        // Only handle left click for selection
+        if (event.button !== 0) return;
+
+        const rect = this.canvas.getBoundingClientRect();
+        this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+
+        // Get all meshes from our objects
+        const meshes = [];
+        this.objects.forEach(obj => {
+            if (obj.isMesh) {
+                meshes.push(obj);
+            } else {
+                obj.traverse(child => {
+                    if (child.isMesh && !child.userData.isOutline) {
+                        meshes.push(child);
+                    }
+                });
+            }
+        });
+
+        const intersects = this.raycaster.intersectObjects(meshes, false);
+
+        if (intersects.length > 0) {
+            // Find the root object (from our objects array)
+            let target = intersects[0].object;
+            while (target.parent && !this.objects.includes(target)) {
+                target = target.parent;
+            }
+            if (this.objects.includes(target) && !target.userData.locked) {
+                this.selectObject(target);
+            }
+        } else {
+            this.deselect();
+        }
+    }
+
+    // ===== Tool Management =====
+
+    setTool(tool) {
+        this.currentTool = tool;
+        switch (tool) {
+            case 'move':
+                this.transformControls.setMode('translate');
+                break;
+            case 'rotate':
+                this.transformControls.setMode('rotate');
+                break;
+            case 'scale':
+                this.transformControls.setMode('scale');
+                break;
+            default:
+                // Select mode - keep current gizmo mode
+                break;
+        }
+    }
+
+    setSnap(enabled, size) {
+        this.snapEnabled = enabled;
+        if (size !== undefined) this.snapSize = size;
+        this.transformControls.snap = enabled ? this.snapSize : null;
+    }
+
+    // ===== Environment =====
+
+    setSkyColor(color) {
+        this.sky.material.uniforms.topColor.value.set(color);
+    }
+
+    setAmbientIntensity(value) {
+        this.ambientLight.intensity = value;
+    }
+
+    setFog(density) {
+        if (density > 0) {
+            this.scene.fog = new THREE.FogExp2(0x1a1a2e, density * 0.002);
+        } else {
+            this.scene.fog = null;
+        }
+    }
+
+    setShadows(enabled) {
+        this.renderer.shadowMap.enabled = enabled;
+        this.sunLight.castShadow = enabled;
+        this.objects.forEach(obj => {
+            obj.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = enabled;
+                    child.receiveShadow = enabled;
+                }
+            });
+        });
+    }
+
+    // ===== Rendering =====
+
+    onResize() {
+        const container = this.canvas.parentElement;
+        const width = container.clientWidth || window.innerWidth;
+        const height = container.clientHeight || window.innerHeight;
+
+        if (width === 0 || height === 0) return;
+
+        this.camera.aspect = width / height;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(width, height);
+    }
+
+    animate() {
+        requestAnimationFrame(() => this.animate());
+
+        if (!this.isPlaying) {
+            this.orbitControls.update();
+        }
+
+        this.renderer.render(this.scene, this.camera);
+
+        // Update FPS counter
+        if (this._fpsCallback) {
+            this._frameCount = (this._frameCount || 0) + 1;
+            const now = performance.now();
+            if (!this._lastFPSTime) this._lastFPSTime = now;
+            if (now - this._lastFPSTime >= 1000) {
+                this._fpsCallback(this._frameCount);
+                this._frameCount = 0;
+                this._lastFPSTime = now;
+            }
+        }
+    }
+
+    onFPSUpdate(callback) {
+        this._fpsCallback = callback;
+    }
+
+    // ===== Serialization =====
+
+    serialize() {
+        return this.objects.map(obj => {
+            let color = '#4a90d9';
+            if (obj.material && obj.material.color) {
+                color = '#' + obj.material.color.getHexString();
+            }
+            return {
+                type: obj.userData.type,
+                name: obj.userData.name,
+                position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+                rotation: {
+                    x: THREE.MathUtils.radToDeg(obj.rotation.x),
+                    y: THREE.MathUtils.radToDeg(obj.rotation.y),
+                    z: THREE.MathUtils.radToDeg(obj.rotation.z)
+                },
+                scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
+                color: color,
+                anchored: obj.userData.anchored,
+                collidable: obj.userData.collidable,
+                mass: obj.userData.mass,
+                scripts: obj.userData.scripts,
+                material: obj.material ? {
+                    roughness: obj.material.roughness,
+                    metalness: obj.material.metalness,
+                    opacity: obj.material.opacity
+                } : null
+            };
+        });
+    }
+
+    deserialize(data) {
+        // Clear existing objects
+        [...this.objects].forEach(obj => this.removeObject(obj));
+
+        data.forEach(item => {
+            const obj = this.addObject(item.type, {
+                name: item.name,
+                position: item.position,
+                rotation: item.rotation,
+                scale: item.scale,
+                color: item.color,
+                anchored: item.anchored,
+                collidable: item.collidable,
+                mass: item.mass
+            });
+            obj.userData.scripts = item.scripts || [];
+            if (item.material && obj.material) {
+                obj.material.roughness = item.material.roughness;
+                obj.material.metalness = item.material.metalness;
+                obj.material.opacity = item.material.opacity;
+                obj.material.transparent = item.material.opacity < 1;
+            }
+        });
+    }
+}

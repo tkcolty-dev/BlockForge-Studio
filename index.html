@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BlockForge Studio</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+</head>
+<body class="editor-expanded">
+    <!-- Top Toolbar -->
+    <div id="toolbar">
+        <div class="toolbar-left">
+            <div class="logo">
+                <span class="logo-icon">&#9670;</span>
+                <span class="logo-text">BlockForge Studio</span>
+            </div>
+            <div class="toolbar-divider"></div>
+            <div class="toolbar-group">
+                <button class="tool-btn" id="btn-select" title="Select (V)" data-tool="select">
+                    <span class="material-icons-round">near_me</span>
+                </button>
+                <button class="tool-btn" id="btn-move" title="Move (G)" data-tool="move">
+                    <span class="material-icons-round">open_with</span>
+                </button>
+                <button class="tool-btn" id="btn-rotate" title="Rotate (R)" data-tool="rotate">
+                    <span class="material-icons-round">rotate_right</span>
+                </button>
+                <button class="tool-btn" id="btn-scale" title="Scale (S)" data-tool="scale">
+                    <span class="material-icons-round">aspect_ratio</span>
+                </button>
+            </div>
+            <div class="toolbar-divider"></div>
+            <div class="toolbar-group">
+                <button class="tool-btn" id="btn-snap" title="Toggle Snap">
+                    <span class="material-icons-round">grid_on</span>
+                </button>
+                <select id="snap-size" title="Snap Size">
+                    <option value="0.25">0.25</option>
+                    <option value="0.5" selected>0.5</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                </select>
+            </div>
+        </div>
+        <div class="toolbar-center">
+            <button class="play-btn" id="btn-play" title="Play (F5)">
+                <span class="material-icons-round">play_arrow</span>
+                <span>Play</span>
+            </button>
+            <button class="play-btn stop hidden" id="btn-stop" title="Stop (F5)">
+                <span class="material-icons-round">stop</span>
+                <span>Stop</span>
+            </button>
+        </div>
+        <div class="toolbar-right">
+            <button class="tool-btn" id="btn-save" title="Save Project">
+                <span class="material-icons-round">save</span>
+            </button>
+            <button class="tool-btn" id="btn-load" title="Load Project">
+                <span class="material-icons-round">folder_open</span>
+            </button>
+            <button class="tool-btn" id="btn-export" title="Export Game">
+                <span class="material-icons-round">publish</span>
+            </button>
+            <div class="toolbar-divider"></div>
+            <button class="tool-btn" id="btn-undo" title="Undo (Ctrl+Z)">
+                <span class="material-icons-round">undo</span>
+            </button>
+            <button class="tool-btn" id="btn-redo" title="Redo (Ctrl+Y)">
+                <span class="material-icons-round">redo</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div id="main-content">
+        <!-- Left Panel - Explorer & Object Library -->
+        <div id="left-panel" class="panel">
+            <div class="panel-tabs">
+                <button class="panel-tab active" data-tab="explorer">Explorer</button>
+                <button class="panel-tab" data-tab="library">Toolbox</button>
+                <button class="panel-tab" data-tab="terrain">Terrain</button>
+            </div>
+
+            <!-- Explorer Tab -->
+            <div class="tab-content active" id="tab-explorer">
+                <div class="panel-section">
+                    <div class="section-header">
+                        <span>World Objects</span>
+                        <button class="small-btn" id="btn-add-folder" title="New Folder">
+                            <span class="material-icons-round">create_new_folder</span>
+                        </button>
+                    </div>
+                    <div id="object-tree" class="tree-view">
+                        <div class="tree-item root">
+                            <span class="material-icons-round tree-icon">public</span>
+                            <span>Workspace</span>
+                        </div>
+                        <div id="tree-children" class="tree-children">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toolbox Tab -->
+            <div class="tab-content" id="tab-library">
+                <div class="panel-section">
+                    <div class="section-header"><span>Primitives</span></div>
+                    <div class="object-grid">
+                        <button class="object-btn" data-shape="box" title="Box">
+                            <div class="shape-preview box-preview"></div>
+                            <span>Box</span>
+                        </button>
+                        <button class="object-btn" data-shape="sphere" title="Sphere">
+                            <div class="shape-preview sphere-preview"></div>
+                            <span>Sphere</span>
+                        </button>
+                        <button class="object-btn" data-shape="cylinder" title="Cylinder">
+                            <div class="shape-preview cylinder-preview"></div>
+                            <span>Cylinder</span>
+                        </button>
+                        <button class="object-btn" data-shape="cone" title="Cone">
+                            <div class="shape-preview cone-preview"></div>
+                            <span>Cone</span>
+                        </button>
+                        <button class="object-btn" data-shape="plane" title="Plane">
+                            <div class="shape-preview plane-preview"></div>
+                            <span>Plane</span>
+                        </button>
+                        <button class="object-btn" data-shape="torus" title="Torus">
+                            <div class="shape-preview torus-preview"></div>
+                            <span>Torus</span>
+                        </button>
+                        <button class="object-btn" data-shape="wedge" title="Wedge/Ramp">
+                            <div class="shape-preview wedge-preview"></div>
+                            <span>Wedge</span>
+                        </button>
+                        <button class="object-btn" data-shape="stairs" title="Stairs">
+                            <div class="shape-preview stairs-preview"></div>
+                            <span>Stairs</span>
+                        </button>
+                        <button class="object-btn" data-shape="pyramid" title="Pyramid">
+                            <div class="shape-preview pyramid-preview"></div>
+                            <span>Pyramid</span>
+                        </button>
+                        <button class="object-btn" data-shape="dome" title="Dome">
+                            <div class="shape-preview dome-preview"></div>
+                            <span>Dome</span>
+                        </button>
+                        <button class="object-btn" data-shape="arch" title="Arch">
+                            <div class="shape-preview arch-preview"></div>
+                            <span>Arch</span>
+                        </button>
+                        <button class="object-btn" data-shape="tube" title="Tube/Pipe">
+                            <div class="shape-preview tube-preview"></div>
+                            <span>Tube</span>
+                        </button>
+                        <button class="object-btn" data-shape="wall" title="Wall">
+                            <div class="shape-preview wall-preview"></div>
+                            <span>Wall</span>
+                        </button>
+                        <button class="object-btn" data-shape="corner" title="Corner Wall">
+                            <div class="shape-preview corner-preview"></div>
+                            <span>Corner</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-section">
+                    <div class="section-header"><span>Prefabs</span></div>
+                    <div class="object-grid">
+                        <button class="object-btn" data-prefab="spawn" title="Spawn Point">
+                            <div class="shape-preview spawn-preview"></div>
+                            <span>Spawn</span>
+                        </button>
+                        <button class="object-btn" data-prefab="light-point" title="Point Light">
+                            <div class="shape-preview light-preview"></div>
+                            <span>Light</span>
+                        </button>
+                        <button class="object-btn" data-prefab="coin" title="Collectible Coin">
+                            <div class="shape-preview coin-preview"></div>
+                            <span>Coin</span>
+                        </button>
+                        <button class="object-btn" data-prefab="npc" title="NPC Character">
+                            <div class="shape-preview npc-preview"></div>
+                            <span>NPC</span>
+                        </button>
+                        <button class="object-btn" data-prefab="tree" title="Simple Tree">
+                            <div class="shape-preview tree-preview"></div>
+                            <span>Tree</span>
+                        </button>
+                        <button class="object-btn" data-prefab="house" title="Simple House">
+                            <div class="shape-preview house-preview"></div>
+                            <span>House</span>
+                        </button>
+                        <button class="object-btn" data-prefab="platform" title="Floating Platform">
+                            <div class="shape-preview platform-preview"></div>
+                            <span>Platform</span>
+                        </button>
+                        <button class="object-btn" data-prefab="bridge" title="Bridge">
+                            <div class="shape-preview bridge-preview"></div>
+                            <span>Bridge</span>
+                        </button>
+                        <button class="object-btn" data-prefab="crate" title="Crate">
+                            <div class="shape-preview crate-preview"></div>
+                            <span>Crate</span>
+                        </button>
+                        <button class="object-btn" data-prefab="gem" title="Gem Pickup">
+                            <div class="shape-preview gem-preview"></div>
+                            <span>Gem</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Terrain Tab -->
+            <div class="tab-content" id="tab-terrain">
+                <div class="panel-section">
+                    <div class="section-header"><span>Terrain Tools</span></div>
+                    <div class="terrain-tools">
+                        <button class="object-btn" data-terrain="flat" title="Flat Ground">
+                            <span class="material-icons-round">square</span>
+                            <span>Flat</span>
+                        </button>
+                        <button class="object-btn" data-terrain="raise" title="Raise Terrain">
+                            <span class="material-icons-round">landscape</span>
+                            <span>Raise</span>
+                        </button>
+                        <button class="object-btn" data-terrain="water" title="Add Water">
+                            <span class="material-icons-round">water</span>
+                            <span>Water</span>
+                        </button>
+                        <button class="object-btn" data-terrain="paint" title="Paint Terrain">
+                            <span class="material-icons-round">brush</span>
+                            <span>Paint</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-section">
+                    <div class="section-header"><span>Terrain Materials</span></div>
+                    <div class="material-swatches">
+                        <button class="swatch" data-material="grass" style="background:#4a7c3f" title="Grass"></button>
+                        <button class="swatch" data-material="dirt" style="background:#8B7355" title="Dirt"></button>
+                        <button class="swatch" data-material="sand" style="background:#C2B280" title="Sand"></button>
+                        <button class="swatch" data-material="stone" style="background:#808080" title="Stone"></button>
+                        <button class="swatch" data-material="snow" style="background:#FFFAFA" title="Snow"></button>
+                        <button class="swatch" data-material="lava" style="background:#CF1020" title="Lava"></button>
+                    </div>
+                </div>
+                <div class="panel-section">
+                    <div class="section-header"><span>Environment</span></div>
+                    <div class="env-controls">
+                        <label>Sky Color
+                            <input type="color" id="sky-color" value="#87CEEB">
+                        </label>
+                        <label>Ambient Light
+                            <input type="range" id="ambient-light" min="0" max="100" value="60">
+                        </label>
+                        <label>Fog Density
+                            <input type="range" id="fog-density" min="0" max="100" value="0">
+                        </label>
+                        <label>
+                            <input type="checkbox" id="shadows-enabled" checked> Shadows
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3D Viewport -->
+        <div id="viewport-container">
+            <canvas id="viewport"></canvas>
+            <div id="viewport-overlay">
+                <div class="viewport-info" id="viewport-info">
+                    <span id="info-fps">60 FPS</span>
+                    <span id="info-objects">0 objects</span>
+                </div>
+                <div class="viewport-gizmo" id="viewport-gizmo">
+                    <!-- Camera orientation gizmo -->
+                </div>
+            </div>
+            <!-- Play mode overlay -->
+            <div id="play-overlay" class="hidden">
+                <div class="play-hud">
+                    <div class="crosshair">+</div>
+                    <div class="play-info">
+                        <span>WASD to move | Space to jump | Mouse to look | ESC to stop</span>
+                    </div>
+                    <div class="game-hud" id="game-hud">
+                        <!-- Dynamic HUD elements -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel - Properties -->
+        <div id="right-panel" class="panel">
+            <div class="panel-tabs">
+                <button class="panel-tab active" data-tab="properties">Properties</button>
+                <button class="panel-tab" data-tab="materials">Material</button>
+            </div>
+
+            <!-- Properties Tab -->
+            <div class="tab-content active" id="tab-properties">
+                <div id="no-selection" class="empty-state">
+                    <span class="material-icons-round">touch_app</span>
+                    <p>Select an object to edit its properties</p>
+                </div>
+                <div id="properties-content" class="hidden">
+                    <div class="panel-section">
+                        <div class="section-header"><span>Identity</span></div>
+                        <div class="prop-row">
+                            <label>Name</label>
+                            <input type="text" id="prop-name" class="prop-input">
+                        </div>
+                        <div class="prop-row">
+                            <label>Visible</label>
+                            <input type="checkbox" id="prop-visible" checked>
+                        </div>
+                        <div class="prop-row">
+                            <label>Locked</label>
+                            <input type="checkbox" id="prop-locked">
+                        </div>
+                    </div>
+                    <div class="panel-section">
+                        <div class="section-header"><span>Transform</span></div>
+                        <div class="prop-row triple">
+                            <label>Position</label>
+                            <div class="xyz-inputs">
+                                <div class="xyz-field x">
+                                    <span>X</span>
+                                    <input type="number" id="prop-pos-x" step="0.1" class="prop-input">
+                                </div>
+                                <div class="xyz-field y">
+                                    <span>Y</span>
+                                    <input type="number" id="prop-pos-y" step="0.1" class="prop-input">
+                                </div>
+                                <div class="xyz-field z">
+                                    <span>Z</span>
+                                    <input type="number" id="prop-pos-z" step="0.1" class="prop-input">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="prop-row triple">
+                            <label>Rotation</label>
+                            <div class="xyz-inputs">
+                                <div class="xyz-field x">
+                                    <span>X</span>
+                                    <input type="number" id="prop-rot-x" step="1" class="prop-input">
+                                </div>
+                                <div class="xyz-field y">
+                                    <span>Y</span>
+                                    <input type="number" id="prop-rot-y" step="1" class="prop-input">
+                                </div>
+                                <div class="xyz-field z">
+                                    <span>Z</span>
+                                    <input type="number" id="prop-rot-z" step="1" class="prop-input">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="prop-row triple">
+                            <label>Scale</label>
+                            <div class="xyz-inputs">
+                                <div class="xyz-field x">
+                                    <span>X</span>
+                                    <input type="number" id="prop-scale-x" step="0.1" class="prop-input">
+                                </div>
+                                <div class="xyz-field y">
+                                    <span>Y</span>
+                                    <input type="number" id="prop-scale-y" step="0.1" class="prop-input">
+                                </div>
+                                <div class="xyz-field z">
+                                    <span>Z</span>
+                                    <input type="number" id="prop-scale-z" step="0.1" class="prop-input">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="panel-section">
+                        <div class="section-header"><span>Physics</span></div>
+                        <div class="prop-row">
+                            <label>Anchored</label>
+                            <input type="checkbox" id="prop-anchored" checked>
+                        </div>
+                        <div class="prop-row">
+                            <label>Collidable</label>
+                            <input type="checkbox" id="prop-collidable" checked>
+                        </div>
+                        <div class="prop-row">
+                            <label>Mass</label>
+                            <input type="number" id="prop-mass" step="0.1" value="1" class="prop-input">
+                        </div>
+                    </div>
+                    <div class="panel-section">
+                        <div class="section-header"><span>Actions</span></div>
+                        <div class="action-buttons">
+                            <button class="action-btn" id="btn-duplicate">
+                                <span class="material-icons-round">content_copy</span> Duplicate
+                            </button>
+                            <button class="action-btn danger" id="btn-delete">
+                                <span class="material-icons-round">delete</span> Delete
+                            </button>
+                            <button class="action-btn primary" id="btn-edit-script">
+                                <span class="material-icons-round">code</span> Edit Script
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Material Tab -->
+            <div class="tab-content" id="tab-materials">
+                <div id="material-no-selection" class="empty-state">
+                    <span class="material-icons-round">palette</span>
+                    <p>Select an object to edit its material</p>
+                </div>
+                <div id="material-content" class="hidden">
+                    <div class="panel-section">
+                        <div class="section-header"><span>Color</span></div>
+                        <div class="prop-row">
+                            <label>Color</label>
+                            <input type="color" id="prop-color" value="#4a90d9" class="color-picker">
+                        </div>
+                        <div class="color-presets">
+                            <button class="swatch" style="background:#e74c3c" data-color="#e74c3c"></button>
+                            <button class="swatch" style="background:#e67e22" data-color="#e67e22"></button>
+                            <button class="swatch" style="background:#f1c40f" data-color="#f1c40f"></button>
+                            <button class="swatch" style="background:#2ecc71" data-color="#2ecc71"></button>
+                            <button class="swatch" style="background:#3498db" data-color="#3498db"></button>
+                            <button class="swatch" style="background:#9b59b6" data-color="#9b59b6"></button>
+                            <button class="swatch" style="background:#1abc9c" data-color="#1abc9c"></button>
+                            <button class="swatch" style="background:#ecf0f1" data-color="#ecf0f1"></button>
+                            <button class="swatch" style="background:#95a5a6" data-color="#95a5a6"></button>
+                            <button class="swatch" style="background:#34495e" data-color="#34495e"></button>
+                            <button class="swatch" style="background:#2c3e50" data-color="#2c3e50"></button>
+                            <button class="swatch" style="background:#ffffff" data-color="#ffffff"></button>
+                        </div>
+                    </div>
+                    <div class="panel-section">
+                        <div class="section-header"><span>Surface</span></div>
+                        <div class="prop-row">
+                            <label>Material</label>
+                            <select id="prop-material-type" class="prop-input">
+                                <option value="standard">Standard</option>
+                                <option value="metallic">Metallic</option>
+                                <option value="glass">Glass</option>
+                                <option value="emissive">Glowing</option>
+                                <option value="flat">Flat/Unlit</option>
+                            </select>
+                        </div>
+                        <div class="prop-row">
+                            <label>Roughness</label>
+                            <input type="range" id="prop-roughness" min="0" max="100" value="50">
+                        </div>
+                        <div class="prop-row">
+                            <label>Metalness</label>
+                            <input type="range" id="prop-metalness" min="0" max="100" value="0">
+                        </div>
+                        <div class="prop-row">
+                            <label>Opacity</label>
+                            <input type="range" id="prop-opacity" min="0" max="100" value="100">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Block Code Editor Panel (Bottom) -->
+    <div id="block-editor" class="expanded">
+        <div id="block-editor-header">
+            <div class="block-editor-title">
+                <span class="material-icons-round">code</span>
+                <span>Block Code Editor</span>
+                <span class="script-target" id="script-target-name">No object selected</span>
+            </div>
+            <div class="block-editor-controls">
+                <button class="tool-btn" id="btn-clear-script" title="Clear Script">
+                    <span class="material-icons-round">delete_sweep</span>
+                </button>
+                <button class="tool-btn" id="btn-toggle-editor" title="Toggle Editor">
+                    <span class="material-icons-round">expand_more</span>
+                </button>
+            </div>
+        </div>
+        <div id="block-editor-body">
+            <!-- Block Palette -->
+            <div id="block-palette">
+                <div class="palette-category active" data-category="events">
+                    <span class="cat-color" style="background:#FFD500"></span>
+                    Events
+                </div>
+                <div class="palette-category" data-category="motion">
+                    <span class="cat-color" style="background:#4C97FF"></span>
+                    Motion
+                </div>
+                <div class="palette-category" data-category="control">
+                    <span class="cat-color" style="background:#FFAB19"></span>
+                    Control
+                </div>
+                <div class="palette-category" data-category="looks">
+                    <span class="cat-color" style="background:#9966FF"></span>
+                    Looks
+                </div>
+                <div class="palette-category" data-category="physics">
+                    <span class="cat-color" style="background:#59C059"></span>
+                    Physics
+                </div>
+                <div class="palette-category" data-category="sensing">
+                    <span class="cat-color" style="background:#5CB1D6"></span>
+                    Sensing
+                </div>
+                <div class="palette-category" data-category="sound">
+                    <span class="cat-color" style="background:#CF63CF"></span>
+                    Sound
+                </div>
+                <div class="palette-category" data-category="variables">
+                    <span class="cat-color" style="background:#FF8C1A"></span>
+                    Variables
+                </div>
+            </div>
+
+            <!-- Block Drawer (blocks for selected category) -->
+            <div id="block-drawer">
+                <!-- Populated dynamically -->
+            </div>
+
+            <!-- Script Workspace -->
+            <div id="script-workspace">
+                <div id="workspace-canvas">
+                    <!-- Block scripts rendered here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="status-bar">
+        <span id="status-text">Ready</span>
+        <span id="status-pos">X: 0 Y: 0 Z: 0</span>
+        <span id="status-mode">Edit Mode</span>
+    </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu" class="hidden">
+        <div class="context-item" data-action="duplicate">
+            <span class="material-icons-round">content_copy</span> Duplicate
+        </div>
+        <div class="context-item" data-action="delete">
+            <span class="material-icons-round">delete</span> Delete
+        </div>
+        <div class="context-divider"></div>
+        <div class="context-item" data-action="group">
+            <span class="material-icons-round">folder</span> Group
+        </div>
+        <div class="context-item" data-action="ungroup">
+            <span class="material-icons-round">folder_open</span> Ungroup
+        </div>
+        <div class="context-divider"></div>
+        <div class="context-item" data-action="edit-script">
+            <span class="material-icons-round">code</span> Edit Script
+        </div>
+        <div class="context-item" data-action="properties">
+            <span class="material-icons-round">tune</span> Properties
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/three.min.js"></script>
+    <script src="js/OrbitControls.js"></script>
+    <script src="js/TransformControls.js"></script>
+    <script src="js/scene3d.js"></script>
+    <script src="js/blockcode.js"></script>
+    <script src="js/runtime.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
