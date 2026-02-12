@@ -1,6 +1,6 @@
 /**
  * BlockCode - Scratch-like visual block coding system
- * Handles block definitions, drag-and-drop, and script compilation
+ * Drag blocks from drawer to workspace. Drag back to drawer to delete.
  */
 class BlockCode {
     constructor() {
@@ -8,12 +8,19 @@ class BlockCode {
         this.blocks = this.defineBlocks();
         this.activeCategory = 'events';
         this.targetObject = null;
-        this.workspaceScripts = []; // Array of script stacks for current object
+        this.workspaceScripts = [];
         this.nextBlockId = 1;
 
         this.drawer = document.getElementById('block-drawer');
         this.workspace = document.getElementById('workspace-canvas');
         this.palette = document.getElementById('block-palette');
+        this.editorBody = document.getElementById('block-editor-body');
+
+        // Drag state
+        this._ghost = null;
+        this._dragSource = null; // 'drawer' or {stackIdx, blockIdx} or {stackIdx, blockIdx, childIdx}
+        this._dragBlockId = null;
+        this._dragBlockDef = null;
 
         this.initPalette();
         this.renderDrawer();
@@ -34,312 +41,64 @@ class BlockCode {
 
     defineBlocks() {
         return {
-            // === EVENTS ===
-            'event_start': {
-                category: 'events', type: 'hat',
-                label: 'When game starts', icon: '🏁', code: 'onStart'
-            },
-            'event_click': {
-                category: 'events', type: 'hat',
-                label: 'When this object clicked', icon: '👆', code: 'onClick'
-            },
-            'event_key': {
-                category: 'events', type: 'hat',
-                label: 'When key {key} pressed', icon: '⌨',
-                inputs: { key: { type: 'select', options: ['W','A','S','D','Space','E','Q','1','2','3','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'], default: 'Space' } },
-                code: 'onKey'
-            },
-            'event_collide': {
-                category: 'events', type: 'hat',
-                label: 'When touching {object}', icon: '💥',
-                inputs: { object: { type: 'select', options: ['any','player','coin','npc'], default: 'player' } },
-                code: 'onCollide'
-            },
-            'event_timer': {
-                category: 'events', type: 'hat',
-                label: 'Every {seconds} seconds', icon: '⏱',
-                inputs: { seconds: { type: 'number', default: 1 } },
-                code: 'onTimer'
-            },
-            // === MOTION ===
-            'motion_move': {
-                category: 'motion', type: 'command',
-                label: 'Move {direction} by {amount}',
-                inputs: {
-                    direction: { type: 'select', options: ['forward','backward','left','right','up','down'], default: 'forward' },
-                    amount: { type: 'number', default: 1 }
-                },
-                code: 'move'
-            },
-            'motion_moveto': {
-                category: 'motion', type: 'command',
-                label: 'Move to X:{x} Y:{y} Z:{z}',
-                inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 0 }, z: { type: 'number', default: 0 } },
-                code: 'moveTo'
-            },
-            'motion_rotate': {
-                category: 'motion', type: 'command',
-                label: 'Rotate {axis} by {degrees}°',
-                inputs: { axis: { type: 'select', options: ['X','Y','Z'], default: 'Y' }, degrees: { type: 'number', default: 15 } },
-                code: 'rotate'
-            },
-            'motion_spin': {
-                category: 'motion', type: 'command',
-                label: 'Spin {axis} forever speed {speed}',
-                inputs: { axis: { type: 'select', options: ['X','Y','Z'], default: 'Y' }, speed: { type: 'number', default: 1 } },
-                code: 'spin'
-            },
-            'motion_glide': {
-                category: 'motion', type: 'command',
-                label: 'Glide to X:{x} Y:{y} Z:{z} in {time}s',
-                inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 5 }, z: { type: 'number', default: 0 }, time: { type: 'number', default: 1 } },
-                code: 'glide'
-            },
-            'motion_bounce': {
-                category: 'motion', type: 'command',
-                label: 'Bounce height {height} speed {speed}',
-                inputs: { height: { type: 'number', default: 2 }, speed: { type: 'number', default: 2 } },
-                code: 'bounce'
-            },
-            'motion_follow_player': {
-                category: 'motion', type: 'command',
-                label: 'Follow player speed {speed}',
-                inputs: { speed: { type: 'number', default: 2 } },
-                code: 'followPlayer'
-            },
-            'motion_patrol': {
-                category: 'motion', type: 'command',
-                label: 'Patrol distance {dist} speed {speed}',
-                inputs: { dist: { type: 'number', default: 5 }, speed: { type: 'number', default: 2 } },
-                code: 'patrol'
-            },
-            'motion_orbit': {
-                category: 'motion', type: 'command',
-                label: 'Orbit radius {r} speed {s}',
-                inputs: { r: { type: 'number', default: 3 }, s: { type: 'number', default: 1 } },
-                code: 'orbit'
-            },
-            'motion_look_at_player': {
-                category: 'motion', type: 'command',
-                label: 'Look at player', code: 'lookAtPlayer'
-            },
-            'motion_random_pos': {
-                category: 'motion', type: 'command',
-                label: 'Move to random spot range {range}',
-                inputs: { range: { type: 'number', default: 10 } },
-                code: 'randomPos'
-            },
-            'motion_push_from_player': {
-                category: 'motion', type: 'command',
-                label: 'Push away from player force {f}',
-                inputs: { f: { type: 'number', default: 3 } },
-                code: 'pushFromPlayer'
-            },
-            // === CONTROL ===
-            'control_wait': {
-                category: 'control', type: 'command',
-                label: 'Wait {seconds} seconds',
-                inputs: { seconds: { type: 'number', default: 1 } },
-                code: 'wait'
-            },
-            'control_repeat': {
-                category: 'control', type: 'c-block',
-                label: 'Repeat {times} times',
-                inputs: { times: { type: 'number', default: 10 } },
-                code: 'repeat'
-            },
-            'control_forever': {
-                category: 'control', type: 'c-block',
-                label: 'Forever', code: 'forever'
-            },
-            'control_if': {
-                category: 'control', type: 'c-block',
-                label: 'If {condition} then',
-                inputs: { condition: { type: 'select', options: ['touching player','key pressed','variable > 0','random chance'], default: 'touching player' } },
-                code: 'if'
-            },
-            'control_if_else': {
-                category: 'control', type: 'c-block',
-                label: 'If {condition} then',
-                inputs: { condition: { type: 'select', options: ['touching player','key pressed','variable > 0','health < 50','random chance','distance < 3'], default: 'touching player' } },
-                code: 'ifElse'
-            },
-            'control_wait_until': {
-                category: 'control', type: 'command',
-                label: 'Wait until {condition}',
-                inputs: { condition: { type: 'select', options: ['touching player','key pressed','timer > 5'], default: 'touching player' } },
-                code: 'waitUntil'
-            },
-            'control_stop': {
-                category: 'control', type: 'command',
-                label: 'Stop {what}',
-                inputs: { what: { type: 'select', options: ['this script','all scripts','other scripts'], default: 'this script' } },
-                code: 'stop'
-            },
-            // === LOOKS ===
-            'looks_color': {
-                category: 'looks', type: 'command',
-                label: 'Set color to {color}',
-                inputs: { color: { type: 'color', default: '#ff0000' } },
-                code: 'setColor'
-            },
-            'looks_size': {
-                category: 'looks', type: 'command',
-                label: 'Set size to {percent}%',
-                inputs: { percent: { type: 'number', default: 100 } },
-                code: 'setSize'
-            },
+            'event_start': { category: 'events', type: 'hat', label: 'When game starts', icon: '🏁', code: 'onStart' },
+            'event_click': { category: 'events', type: 'hat', label: 'When this object clicked', icon: '👆', code: 'onClick' },
+            'event_key': { category: 'events', type: 'hat', label: 'When key {key} pressed', icon: '⌨', inputs: { key: { type: 'select', options: ['W','A','S','D','Space','E','Q','1','2','3','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'], default: 'Space' } }, code: 'onKey' },
+            'event_collide': { category: 'events', type: 'hat', label: 'When touching {object}', icon: '💥', inputs: { object: { type: 'select', options: ['any','player','coin','npc'], default: 'player' } }, code: 'onCollide' },
+            'event_timer': { category: 'events', type: 'hat', label: 'Every {seconds} seconds', icon: '⏱', inputs: { seconds: { type: 'number', default: 1 } }, code: 'onTimer' },
+            'motion_move': { category: 'motion', type: 'command', label: 'Move {direction} by {amount}', inputs: { direction: { type: 'select', options: ['forward','backward','left','right','up','down'], default: 'forward' }, amount: { type: 'number', default: 1 } }, code: 'move' },
+            'motion_moveto': { category: 'motion', type: 'command', label: 'Move to X:{x} Y:{y} Z:{z}', inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 0 }, z: { type: 'number', default: 0 } }, code: 'moveTo' },
+            'motion_rotate': { category: 'motion', type: 'command', label: 'Rotate {axis} by {degrees}°', inputs: { axis: { type: 'select', options: ['X','Y','Z'], default: 'Y' }, degrees: { type: 'number', default: 15 } }, code: 'rotate' },
+            'motion_spin': { category: 'motion', type: 'command', label: 'Spin {axis} forever speed {speed}', inputs: { axis: { type: 'select', options: ['X','Y','Z'], default: 'Y' }, speed: { type: 'number', default: 1 } }, code: 'spin' },
+            'motion_glide': { category: 'motion', type: 'command', label: 'Glide to X:{x} Y:{y} Z:{z} in {time}s', inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 5 }, z: { type: 'number', default: 0 }, time: { type: 'number', default: 1 } }, code: 'glide' },
+            'motion_bounce': { category: 'motion', type: 'command', label: 'Bounce height {height} speed {speed}', inputs: { height: { type: 'number', default: 2 }, speed: { type: 'number', default: 2 } }, code: 'bounce' },
+            'motion_follow_player': { category: 'motion', type: 'command', label: 'Follow player speed {speed}', inputs: { speed: { type: 'number', default: 2 } }, code: 'followPlayer' },
+            'motion_patrol': { category: 'motion', type: 'command', label: 'Patrol distance {dist} speed {speed}', inputs: { dist: { type: 'number', default: 5 }, speed: { type: 'number', default: 2 } }, code: 'patrol' },
+            'motion_orbit': { category: 'motion', type: 'command', label: 'Orbit radius {r} speed {s}', inputs: { r: { type: 'number', default: 3 }, s: { type: 'number', default: 1 } }, code: 'orbit' },
+            'motion_look_at_player': { category: 'motion', type: 'command', label: 'Look at player', code: 'lookAtPlayer' },
+            'motion_random_pos': { category: 'motion', type: 'command', label: 'Move to random spot range {range}', inputs: { range: { type: 'number', default: 10 } }, code: 'randomPos' },
+            'motion_push_from_player': { category: 'motion', type: 'command', label: 'Push away from player force {f}', inputs: { f: { type: 'number', default: 3 } }, code: 'pushFromPlayer' },
+            'control_wait': { category: 'control', type: 'command', label: 'Wait {seconds} seconds', inputs: { seconds: { type: 'number', default: 1 } }, code: 'wait' },
+            'control_repeat': { category: 'control', type: 'c-block', label: 'Repeat {times} times', inputs: { times: { type: 'number', default: 10 } }, code: 'repeat' },
+            'control_forever': { category: 'control', type: 'c-block', label: 'Forever', code: 'forever' },
+            'control_if': { category: 'control', type: 'c-block', label: 'If {condition} then', inputs: { condition: { type: 'select', options: ['touching player','key pressed','variable > 0','random chance'], default: 'touching player' } }, code: 'if' },
+            'control_if_else': { category: 'control', type: 'c-block', label: 'If {condition} then', inputs: { condition: { type: 'select', options: ['touching player','key pressed','variable > 0','health < 50','random chance','distance < 3'], default: 'touching player' } }, code: 'ifElse' },
+            'control_wait_until': { category: 'control', type: 'command', label: 'Wait until {condition}', inputs: { condition: { type: 'select', options: ['touching player','key pressed','timer > 5'], default: 'touching player' } }, code: 'waitUntil' },
+            'control_stop': { category: 'control', type: 'command', label: 'Stop {what}', inputs: { what: { type: 'select', options: ['this script','all scripts','other scripts'], default: 'this script' } }, code: 'stop' },
+            'looks_color': { category: 'looks', type: 'command', label: 'Set color to {color}', inputs: { color: { type: 'color', default: '#ff0000' } }, code: 'setColor' },
+            'looks_size': { category: 'looks', type: 'command', label: 'Set size to {percent}%', inputs: { percent: { type: 'number', default: 100 } }, code: 'setSize' },
             'looks_show': { category: 'looks', type: 'command', label: 'Show', code: 'show' },
             'looks_hide': { category: 'looks', type: 'command', label: 'Hide', code: 'hide' },
-            'looks_glow': {
-                category: 'looks', type: 'command',
-                label: 'Glow {color} intensity {val}',
-                inputs: { color: { type: 'color', default: '#ffffff' }, val: { type: 'number', default: 0.5 } },
-                code: 'glow'
-            },
-            'looks_opacity': {
-                category: 'looks', type: 'command',
-                label: 'Set opacity to {percent}%',
-                inputs: { percent: { type: 'number', default: 50 } },
-                code: 'setOpacity'
-            },
-            'looks_say': {
-                category: 'looks', type: 'command',
-                label: 'Show text {text} for {time}s',
-                inputs: { text: { type: 'text', default: 'Hello!' }, time: { type: 'number', default: 2 } },
-                code: 'say'
-            },
-            'looks_effect': {
-                category: 'looks', type: 'command',
-                label: 'Color shift speed {speed}',
-                inputs: { speed: { type: 'number', default: 1 } },
-                code: 'colorShift'
-            },
-            'looks_scale_pulse': {
-                category: 'looks', type: 'command',
-                label: 'Pulse size min {min}% max {max}% speed {spd}',
-                inputs: { min: { type: 'number', default: 80 }, max: { type: 'number', default: 120 }, spd: { type: 'number', default: 2 } },
-                code: 'scalePulse'
-            },
-            'looks_trail': {
-                category: 'looks', type: 'command',
-                label: 'Enable particle trail color {color}',
-                inputs: { color: { type: 'color', default: '#ffff00' } },
-                code: 'trail'
-            },
-            // === PHYSICS ===
+            'looks_glow': { category: 'looks', type: 'command', label: 'Glow {color} intensity {val}', inputs: { color: { type: 'color', default: '#ffffff' }, val: { type: 'number', default: 0.5 } }, code: 'glow' },
+            'looks_opacity': { category: 'looks', type: 'command', label: 'Set opacity to {percent}%', inputs: { percent: { type: 'number', default: 50 } }, code: 'setOpacity' },
+            'looks_say': { category: 'looks', type: 'command', label: 'Show text {text} for {time}s', inputs: { text: { type: 'text', default: 'Hello!' }, time: { type: 'number', default: 2 } }, code: 'say' },
+            'looks_effect': { category: 'looks', type: 'command', label: 'Color shift speed {speed}', inputs: { speed: { type: 'number', default: 1 } }, code: 'colorShift' },
+            'looks_scale_pulse': { category: 'looks', type: 'command', label: 'Pulse size min {min}% max {max}% speed {spd}', inputs: { min: { type: 'number', default: 80 }, max: { type: 'number', default: 120 }, spd: { type: 'number', default: 2 } }, code: 'scalePulse' },
+            'looks_trail': { category: 'looks', type: 'command', label: 'Enable particle trail color {color}', inputs: { color: { type: 'color', default: '#ffff00' } }, code: 'trail' },
             'physics_gravity': { category: 'physics', type: 'command', label: 'Enable gravity', code: 'enableGravity' },
             'physics_nogravity': { category: 'physics', type: 'command', label: 'Disable gravity', code: 'disableGravity' },
-            'physics_velocity': {
-                category: 'physics', type: 'command',
-                label: 'Set velocity X:{x} Y:{y} Z:{z}',
-                inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 5 }, z: { type: 'number', default: 0 } },
-                code: 'setVelocity'
-            },
-            'physics_impulse': {
-                category: 'physics', type: 'command',
-                label: 'Apply impulse {direction} force {force}',
-                inputs: { direction: { type: 'select', options: ['up','forward','backward','left','right'], default: 'up' }, force: { type: 'number', default: 5 } },
-                code: 'impulse'
-            },
-            'physics_anchor': {
-                category: 'physics', type: 'command',
-                label: 'Set anchored {state}',
-                inputs: { state: { type: 'select', options: ['true','false'], default: 'true' } },
-                code: 'setAnchored'
-            },
+            'physics_velocity': { category: 'physics', type: 'command', label: 'Set velocity X:{x} Y:{y} Z:{z}', inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 5 }, z: { type: 'number', default: 0 } }, code: 'setVelocity' },
+            'physics_impulse': { category: 'physics', type: 'command', label: 'Apply impulse {direction} force {force}', inputs: { direction: { type: 'select', options: ['up','forward','backward','left','right'], default: 'up' }, force: { type: 'number', default: 5 } }, code: 'impulse' },
+            'physics_anchor': { category: 'physics', type: 'command', label: 'Set anchored {state}', inputs: { state: { type: 'select', options: ['true','false'], default: 'true' } }, code: 'setAnchored' },
             'physics_destroy': { category: 'physics', type: 'command', label: 'Destroy this object', code: 'destroy' },
             'physics_clone': { category: 'physics', type: 'command', label: 'Clone this object', code: 'clone' },
-            'physics_teleport_player': {
-                category: 'physics', type: 'command',
-                label: 'Teleport player to X:{x} Y:{y} Z:{z}',
-                inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 5 }, z: { type: 'number', default: 0 } },
-                code: 'teleportPlayer'
-            },
-            'physics_explode': {
-                category: 'physics', type: 'command',
-                label: 'Explode force {force} radius {radius}',
-                inputs: { force: { type: 'number', default: 10 }, radius: { type: 'number', default: 5 } },
-                code: 'explode'
-            },
-            'physics_launch_player': {
-                category: 'physics', type: 'command',
-                label: 'Launch player up force {force}',
-                inputs: { force: { type: 'number', default: 15 } },
-                code: 'launchPlayer'
-            },
-            'physics_set_player_speed': {
-                category: 'physics', type: 'command',
-                label: 'Set player speed to {speed}',
-                inputs: { speed: { type: 'number', default: 8 } },
-                code: 'setPlayerSpeed'
-            },
-            // === SENSING ===
+            'physics_teleport_player': { category: 'physics', type: 'command', label: 'Teleport player to X:{x} Y:{y} Z:{z}', inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 5 }, z: { type: 'number', default: 0 } }, code: 'teleportPlayer' },
+            'physics_explode': { category: 'physics', type: 'command', label: 'Explode force {force} radius {radius}', inputs: { force: { type: 'number', default: 10 }, radius: { type: 'number', default: 5 } }, code: 'explode' },
+            'physics_launch_player': { category: 'physics', type: 'command', label: 'Launch player up force {force}', inputs: { force: { type: 'number', default: 15 } }, code: 'launchPlayer' },
+            'physics_set_player_speed': { category: 'physics', type: 'command', label: 'Set player speed to {speed}', inputs: { speed: { type: 'number', default: 8 } }, code: 'setPlayerSpeed' },
             'sensing_distance': { category: 'sensing', type: 'reporter', label: 'Distance to player', code: 'distanceToPlayer' },
-            'sensing_touching': {
-                category: 'sensing', type: 'reporter',
-                label: 'Touching {object}?',
-                inputs: { object: { type: 'select', options: ['player','any','ground'], default: 'player' } },
-                code: 'isTouching'
-            },
-            'sensing_key_held': {
-                category: 'sensing', type: 'reporter',
-                label: 'Key {key} held?',
-                inputs: { key: { type: 'select', options: ['W','A','S','D','Space','Shift'], default: 'Space' } },
-                code: 'isKeyHeld'
-            },
+            'sensing_touching': { category: 'sensing', type: 'reporter', label: 'Touching {object}?', inputs: { object: { type: 'select', options: ['player','any','ground'], default: 'player' } }, code: 'isTouching' },
+            'sensing_key_held': { category: 'sensing', type: 'reporter', label: 'Key {key} held?', inputs: { key: { type: 'select', options: ['W','A','S','D','Space','Shift'], default: 'Space' } }, code: 'isKeyHeld' },
             'sensing_timer': { category: 'sensing', type: 'reporter', label: 'Game timer', code: 'getTimer' },
             'sensing_player_grounded': { category: 'sensing', type: 'reporter', label: 'Player on ground?', code: 'playerGrounded' },
-            'sensing_random': {
-                category: 'sensing', type: 'reporter',
-                label: 'Random {min} to {max}',
-                inputs: { min: { type: 'number', default: 1 }, max: { type: 'number', default: 10 } },
-                code: 'random'
-            },
-            // === SOUND ===
-            'sound_play': {
-                category: 'sound', type: 'command',
-                label: 'Play sound {sound}',
-                inputs: { sound: { type: 'select', options: ['pop','ding','whoosh','boom','jump','coin','hurt','powerup'], default: 'pop' } },
-                code: 'playSound'
-            },
-            'sound_volume': {
-                category: 'sound', type: 'command',
-                label: 'Set volume to {percent}%',
-                inputs: { percent: { type: 'number', default: 100 } },
-                code: 'setVolume'
-            },
-            'sound_pitch': {
-                category: 'sound', type: 'command',
-                label: 'Play tone freq {freq} for {dur}s',
-                inputs: { freq: { type: 'number', default: 440 }, dur: { type: 'number', default: 0.3 } },
-                code: 'playTone'
-            },
-            // === VARIABLES ===
-            'var_set': {
-                category: 'variables', type: 'command',
-                label: 'Set {var} to {value}',
-                inputs: { var: { type: 'select', options: ['score','health','coins','speed','level','custom'], default: 'score' }, value: { type: 'number', default: 0 } },
-                code: 'setVar'
-            },
-            'var_change': {
-                category: 'variables', type: 'command',
-                label: 'Change {var} by {amount}',
-                inputs: { var: { type: 'select', options: ['score','health','coins','speed','level','custom'], default: 'score' }, amount: { type: 'number', default: 1 } },
-                code: 'changeVar'
-            },
-            'var_show': {
-                category: 'variables', type: 'command',
-                label: 'Show {var} on screen',
-                inputs: { var: { type: 'select', options: ['score','health','coins','speed','level','timer'], default: 'score' } },
-                code: 'showVar'
-            },
-            'var_if_check': {
-                category: 'variables', type: 'c-block',
-                label: 'If {var} {op} {value}',
-                inputs: { var: { type: 'select', options: ['score','health','coins','speed','level'], default: 'score' }, op: { type: 'select', options: ['>','<','=','>=','<='], default: '>' }, value: { type: 'number', default: 10 } },
-                code: 'ifVar'
-            },
+            'sensing_random': { category: 'sensing', type: 'reporter', label: 'Random {min} to {max}', inputs: { min: { type: 'number', default: 1 }, max: { type: 'number', default: 10 } }, code: 'random' },
+            'sound_play': { category: 'sound', type: 'command', label: 'Play sound {sound}', inputs: { sound: { type: 'select', options: ['pop','ding','whoosh','boom','jump','coin','hurt','powerup'], default: 'pop' } }, code: 'playSound' },
+            'sound_volume': { category: 'sound', type: 'command', label: 'Set volume to {percent}%', inputs: { percent: { type: 'number', default: 100 } }, code: 'setVolume' },
+            'sound_pitch': { category: 'sound', type: 'command', label: 'Play tone freq {freq} for {dur}s', inputs: { freq: { type: 'number', default: 440 }, dur: { type: 'number', default: 0.3 } }, code: 'playTone' },
+            'var_set': { category: 'variables', type: 'command', label: 'Set {var} to {value}', inputs: { var: { type: 'select', options: ['score','health','coins','speed','level','custom'], default: 'score' }, value: { type: 'number', default: 0 } }, code: 'setVar' },
+            'var_change': { category: 'variables', type: 'command', label: 'Change {var} by {amount}', inputs: { var: { type: 'select', options: ['score','health','coins','speed','level','custom'], default: 'score' }, amount: { type: 'number', default: 1 } }, code: 'changeVar' },
+            'var_show': { category: 'variables', type: 'command', label: 'Show {var} on screen', inputs: { var: { type: 'select', options: ['score','health','coins','speed','level','timer'], default: 'score' } }, code: 'showVar' },
+            'var_if_check': { category: 'variables', type: 'c-block', label: 'If {var} {op} {value}', inputs: { var: { type: 'select', options: ['score','health','coins','speed','level'], default: 'score' }, op: { type: 'select', options: ['>','<','=','>=','<='], default: '>' }, value: { type: 'number', default: 10 } }, code: 'ifVar' },
             'var_reset_all': { category: 'variables', type: 'command', label: 'Reset all variables', code: 'resetVars' }
         };
     }
@@ -357,106 +116,53 @@ class BlockCode {
         });
     }
 
-    // ===== Drawer =====
+    // ===== Drawer (block source) =====
 
     renderDrawer() {
         this.drawer.innerHTML = '';
         Object.entries(this.blocks).forEach(([blockId, blockDef]) => {
             if (blockDef.category !== this.activeCategory) return;
-            const blockEl = this._createDrawerBlock(blockId, blockDef);
-            this.drawer.appendChild(blockEl);
+            const el = this._createBlockEl(blockDef, null);
+            el.dataset.blockId = blockId;
+            // Start drag from drawer
+            el.addEventListener('pointerdown', (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+                e.preventDefault();
+                this._startDrag(e, blockId, blockDef, 'drawer', el);
+            });
+            this.drawer.appendChild(el);
         });
     }
 
-    _createDrawerBlock(blockId, blockDef) {
+    // ===== Create a block DOM element =====
+
+    _createBlockEl(blockDef, blockData) {
         const el = document.createElement('div');
         el.className = `block block-${blockDef.category}`;
         if (blockDef.type === 'hat') el.classList.add('hat');
         if (blockDef.type === 'reporter') el.classList.add('reporter');
+
         if (blockDef.type === 'c-block') {
             el.classList.add('c-block-container');
             const topDiv = document.createElement('div');
             topDiv.className = 'c-block-top';
-            topDiv.innerHTML = this._buildLabel(blockDef, null);
+            topDiv.innerHTML = this._buildLabel(blockDef, blockData);
             el.appendChild(topDiv);
             const bodyDiv = document.createElement('div');
             bodyDiv.className = 'c-block-body';
             el.appendChild(bodyDiv);
+            const bottomDiv = document.createElement('div');
+            bottomDiv.className = 'c-block-bottom';
+            el.appendChild(bottomDiv);
         } else {
-            el.innerHTML = this._buildLabel(blockDef, null);
+            el.innerHTML = this._buildLabel(blockDef, blockData);
         }
-
-        // Click to add to workspace
-        el.addEventListener('click', (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-            this._addFromDrawer(blockId, blockDef);
-        });
-
         return el;
-    }
-
-    _addFromDrawer(blockId, blockDef) {
-        if (!this.targetObject) return;
-
-        const instanceId = this.nextBlockId++;
-        const blockData = {
-            instanceId,
-            blockId,
-            values: this._getDefaults(blockDef),
-            children: []
-        };
-
-        // If a c-block body was clicked, add inside it (non-hat only)
-        if (this._pendingCBlockTarget && blockDef.type !== 'hat') {
-            const { stackIdx, blockIdx } = this._pendingCBlockTarget;
-            const stack = this.workspaceScripts[stackIdx];
-            if (stack) {
-                const parentBlock = stack.blocks[blockIdx];
-                if (parentBlock) {
-                    if (!parentBlock.children) parentBlock.children = [];
-                    parentBlock.children.push(blockData);
-                    this._pendingCBlockTarget = null;
-                    this.renderWorkspace();
-                    this.saveScriptsToObject();
-                    return;
-                }
-            }
-            this._pendingCBlockTarget = null;
-        }
-
-        if (blockDef.type === 'hat') {
-            // Hat blocks always start a new stack
-            const stack = {
-                id: this.nextBlockId++,
-                x: 30 + this.workspaceScripts.length * 20,
-                y: 30 + this.workspaceScripts.length * 20,
-                blocks: [blockData]
-            };
-            this.workspaceScripts.push(stack);
-        } else {
-            // Non-hat: append to last stack, or create new if none
-            if (this.workspaceScripts.length > 0) {
-                const lastStack = this.workspaceScripts[this.workspaceScripts.length - 1];
-                lastStack.blocks.push(blockData);
-            } else {
-                const stack = {
-                    id: this.nextBlockId++,
-                    x: 30,
-                    y: 30,
-                    blocks: [blockData]
-                };
-                this.workspaceScripts.push(stack);
-            }
-        }
-
-        this.renderWorkspace();
-        this.saveScriptsToObject();
     }
 
     _buildLabel(blockDef, instanceData) {
         let label = blockDef.label;
         const icon = blockDef.icon ? `<span style="margin-right:4px">${blockDef.icon}</span>` : '';
-
         if (blockDef.inputs) {
             Object.entries(blockDef.inputs).forEach(([key, input]) => {
                 const currentValue = instanceData?.values?.[key] ?? input.default;
@@ -476,7 +182,6 @@ class BlockCode {
                 if (replacement) label = label.replace(`{${key}}`, replacement);
             });
         }
-
         return icon + label;
     }
 
@@ -488,6 +193,198 @@ class BlockCode {
             });
         }
         return values;
+    }
+
+    // ===== Drag & Drop System =====
+
+    _startDrag(e, blockId, blockDef, source, sourceEl) {
+        // Create ghost element
+        const ghost = sourceEl.cloneNode(true);
+        ghost.className = sourceEl.className + ' block-ghost';
+        ghost.style.width = sourceEl.offsetWidth + 'px';
+        document.body.appendChild(ghost);
+
+        this._ghost = ghost;
+        this._dragBlockId = blockId;
+        this._dragBlockDef = blockDef;
+        this._dragSource = source;
+        this._ghostOffsetX = e.clientX - sourceEl.getBoundingClientRect().left;
+        this._ghostOffsetY = e.clientY - sourceEl.getBoundingClientRect().top;
+
+        this._moveGhost(e);
+
+        // If dragging from workspace, dim the source
+        if (source !== 'drawer' && sourceEl) {
+            sourceEl.style.opacity = '0.3';
+            this._dragSourceEl = sourceEl;
+        }
+
+        const onMove = (ev) => this._moveGhost(ev);
+        const onUp = (ev) => {
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            this._endDrag(ev);
+        };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+    }
+
+    _moveGhost(e) {
+        if (!this._ghost) return;
+        this._ghost.style.left = (e.clientX - this._ghostOffsetX) + 'px';
+        this._ghost.style.top = (e.clientY - this._ghostOffsetY) + 'px';
+
+        // Highlight delete zone (drawer/palette area)
+        const overDeleteZone = this._isOverDeleteZone(e);
+        this._ghost.classList.toggle('ghost-deleting', overDeleteZone);
+    }
+
+    _isOverDeleteZone(e) {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        if (!el) return false;
+        return this.drawer.contains(el) || this.palette.contains(el);
+    }
+
+    _isOverWorkspace(e) {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        if (!el) return false;
+        const ws = document.getElementById('script-workspace');
+        return el === ws || ws.contains(el);
+    }
+
+    _endDrag(e) {
+        if (!this._ghost) return;
+        this._ghost.remove();
+        this._ghost = null;
+
+        // Restore dimmed source
+        if (this._dragSourceEl) {
+            this._dragSourceEl.style.opacity = '';
+            this._dragSourceEl = null;
+        }
+
+        const overDelete = this._isOverDeleteZone(e);
+        const overWorkspace = this._isOverWorkspace(e);
+
+        if (!this.targetObject) return;
+
+        if (this._dragSource === 'drawer') {
+            // Dragging from drawer -> drop on workspace to add
+            if (overWorkspace) {
+                this._dropNewBlock(e);
+            }
+        } else {
+            // Dragging from workspace
+            if (overDelete) {
+                // Drop on drawer/palette = delete
+                this._deleteFromSource();
+            }
+            // Otherwise: block stays where it was (snap back)
+        }
+
+        this._dragSource = null;
+        this._dragBlockId = null;
+        this._dragBlockDef = null;
+    }
+
+    _dropNewBlock(e) {
+        const blockId = this._dragBlockId;
+        const blockDef = this._dragBlockDef;
+        const instanceId = this.nextBlockId++;
+        const blockData = {
+            instanceId, blockId,
+            values: this._getDefaults(blockDef),
+            children: []
+        };
+
+        // Calculate position relative to workspace canvas
+        const wsRect = this.workspace.getBoundingClientRect();
+        const dropX = e.clientX - wsRect.left;
+        const dropY = e.clientY - wsRect.top;
+
+        // Check if dropping into a c-block body
+        const cBlockTarget = this._findCBlockBodyAt(e);
+        if (cBlockTarget && blockDef.type !== 'hat') {
+            const parent = this.workspaceScripts[cBlockTarget.stackIdx]?.blocks[cBlockTarget.blockIdx];
+            if (parent) {
+                if (!parent.children) parent.children = [];
+                parent.children.push(blockData);
+                this.renderWorkspace();
+                this.saveScriptsToObject();
+                return;
+            }
+        }
+
+        // Check if dropping onto an existing stack (append at end)
+        const stackTarget = this._findStackAt(e);
+        if (stackTarget !== null && blockDef.type !== 'hat') {
+            this.workspaceScripts[stackTarget].blocks.push(blockData);
+            this.renderWorkspace();
+            this.saveScriptsToObject();
+            return;
+        }
+
+        // Create new stack at drop position
+        const stack = {
+            id: this.nextBlockId++,
+            x: Math.max(10, dropX - 20),
+            y: Math.max(10, dropY - 10),
+            blocks: [blockData]
+        };
+        this.workspaceScripts.push(stack);
+        this.renderWorkspace();
+        this.saveScriptsToObject();
+    }
+
+    _findStackAt(e) {
+        const stacks = this.workspace.querySelectorAll('.script-stack');
+        for (const stackEl of stacks) {
+            const rect = stackEl.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top - 10 && e.clientY <= rect.bottom + 20) {
+                return parseInt(stackEl.dataset.stackIdx);
+            }
+        }
+        return null;
+    }
+
+    _findCBlockBodyAt(e) {
+        const bodies = this.workspace.querySelectorAll('.c-block-body');
+        for (const body of bodies) {
+            const rect = body.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                const stackIdx = parseInt(body.dataset.stackIdx);
+                const blockIdx = parseInt(body.dataset.blockIdx);
+                if (!isNaN(stackIdx) && !isNaN(blockIdx)) {
+                    return { stackIdx, blockIdx };
+                }
+            }
+        }
+        return null;
+    }
+
+    _deleteFromSource() {
+        const src = this._dragSource;
+        if (!src || src === 'drawer') return;
+
+        if (src.childIdx !== undefined) {
+            const stack = this.workspaceScripts[src.stackIdx];
+            if (!stack) return;
+            const parent = stack.blocks[src.blockIdx];
+            if (parent && parent.children) {
+                parent.children.splice(src.childIdx, 1);
+            }
+        } else {
+            const stack = this.workspaceScripts[src.stackIdx];
+            if (!stack) return;
+            stack.blocks.splice(src.blockIdx, 1);
+            if (stack.blocks.length === 0) {
+                this.workspaceScripts.splice(src.stackIdx, 1);
+            }
+        }
+        this.renderWorkspace();
+        this.saveScriptsToObject();
     }
 
     // ===== Workspace Rendering =====
@@ -506,29 +403,11 @@ class BlockCode {
                 const blockDef = this.blocks[blockData.blockId];
                 if (!blockDef) return;
 
-                const wrapper = document.createElement('div');
-                wrapper.className = 'workspace-block-wrapper';
-                wrapper.dataset.stackIdx = stackIdx;
-                wrapper.dataset.blockIdx = blockIdx;
-
                 const blockEl = this._createWorkspaceBlock(blockData, blockDef, stackIdx, blockIdx);
-                wrapper.appendChild(blockEl);
-
-                // Delete button
-                const delBtn = document.createElement('button');
-                delBtn.className = 'block-delete-btn';
-                delBtn.innerHTML = '&times;';
-                delBtn.title = 'Delete block';
-                delBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this._deleteBlock(stackIdx, blockIdx);
-                });
-                wrapper.appendChild(delBtn);
-
-                stackEl.appendChild(wrapper);
+                stackEl.appendChild(blockEl);
             });
 
-            // Make stack draggable
+            // Make entire stack draggable by dragging its first block
             this._makeStackDraggable(stackEl, stack);
 
             this.workspace.appendChild(stackEl);
@@ -548,8 +427,9 @@ class BlockCode {
         el.className = `block block-${blockDef.category}`;
         if (blockDef.type === 'hat') el.classList.add('hat');
         if (blockDef.type === 'reporter') el.classList.add('reporter');
-
         el.dataset.instanceId = blockData.instanceId;
+        el.dataset.stackIdx = stackIdx;
+        el.dataset.blockIdx = blockIdx;
 
         if (blockDef.type === 'c-block') {
             el.classList.add('c-block-container');
@@ -560,45 +440,30 @@ class BlockCode {
 
             const bodyDiv = document.createElement('div');
             bodyDiv.className = 'c-block-body';
+            bodyDiv.dataset.stackIdx = stackIdx;
+            bodyDiv.dataset.blockIdx = blockIdx;
 
             if (blockData.children && blockData.children.length > 0) {
                 blockData.children.forEach((childData, childIdx) => {
                     const childDef = this.blocks[childData.blockId];
                     if (!childDef) return;
-
-                    const childWrapper = document.createElement('div');
-                    childWrapper.className = 'workspace-block-wrapper';
-
                     const childEl = this._createWorkspaceBlock(childData, childDef, stackIdx, blockIdx);
-                    childWrapper.appendChild(childEl);
+                    childEl.dataset.childIdx = childIdx;
 
-                    const childDel = document.createElement('button');
-                    childDel.className = 'block-delete-btn';
-                    childDel.innerHTML = '&times;';
-                    childDel.title = 'Delete block';
-                    childDel.addEventListener('click', (e) => {
+                    // Individual block drag from workspace (for deletion or rearranging)
+                    childEl.addEventListener('pointerdown', (e) => {
+                        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+                        e.preventDefault();
                         e.stopPropagation();
-                        this._deleteChildBlock(stackIdx, blockIdx, childIdx);
+                        this._startDrag(e, childData.blockId, childDef,
+                            { stackIdx, blockIdx, childIdx }, childEl);
                     });
-                    childWrapper.appendChild(childDel);
 
-                    bodyDiv.appendChild(childWrapper);
+                    bodyDiv.appendChild(childEl);
                 });
             }
 
-            // Drop zone for adding blocks into c-block
-            bodyDiv.addEventListener('click', (e) => {
-                if (e.target === bodyDiv) {
-                    // Mark this c-block as the drop target for next drawer click
-                    this._pendingCBlockTarget = { stackIdx, blockIdx };
-                    document.querySelectorAll('.c-block-body').forEach(b => b.classList.remove('c-block-active'));
-                    bodyDiv.classList.add('c-block-active');
-                    e.stopPropagation();
-                }
-            });
-
             el.appendChild(bodyDiv);
-
             const bottomDiv = document.createElement('div');
             bottomDiv.className = 'c-block-bottom';
             el.appendChild(bottomDiv);
@@ -609,25 +474,53 @@ class BlockCode {
         return el;
     }
 
-    _deleteBlock(stackIdx, blockIdx) {
-        const stack = this.workspaceScripts[stackIdx];
-        if (!stack) return;
-        stack.blocks.splice(blockIdx, 1);
-        if (stack.blocks.length === 0) {
-            this.workspaceScripts.splice(stackIdx, 1);
-        }
-        this.renderWorkspace();
-        this.saveScriptsToObject();
-    }
+    _makeStackDraggable(stackEl, stackData) {
+        let isDragging = false;
+        let startX, startY, origX, origY;
 
-    _deleteChildBlock(stackIdx, blockIdx, childIdx) {
-        const stack = this.workspaceScripts[stackIdx];
-        if (!stack) return;
-        const parentBlock = stack.blocks[blockIdx];
-        if (!parentBlock || !parentBlock.children) return;
-        parentBlock.children.splice(childIdx, 1);
-        this.renderWorkspace();
-        this.saveScriptsToObject();
+        stackEl.addEventListener('pointerdown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            origX = stackData.x;
+            origY = stackData.y;
+            stackEl.style.zIndex = '100';
+            e.preventDefault();
+
+            const onMove = (ev) => {
+                if (!isDragging) return;
+                stackData.x = origX + (ev.clientX - startX);
+                stackData.y = origY + (ev.clientY - startY);
+                stackEl.style.left = stackData.x + 'px';
+                stackEl.style.top = stackData.y + 'px';
+
+                // Visual feedback when over delete zone
+                stackEl.style.opacity = this._isOverDeleteZone(ev) ? '0.4' : '';
+            };
+
+            const onUp = (ev) => {
+                isDragging = false;
+                stackEl.style.zIndex = '';
+                stackEl.style.opacity = '';
+                document.removeEventListener('pointermove', onMove);
+                document.removeEventListener('pointerup', onUp);
+
+                // If dropped on palette/drawer, delete the stack
+                if (this._isOverDeleteZone(ev)) {
+                    const idx = this.workspaceScripts.indexOf(stackData);
+                    if (idx !== -1) {
+                        this.workspaceScripts.splice(idx, 1);
+                        this.renderWorkspace();
+                        this.saveScriptsToObject();
+                    }
+                }
+            };
+
+            document.addEventListener('pointermove', onMove);
+            document.addEventListener('pointerup', onUp);
+        });
     }
 
     _onInputChange(inputEl) {
@@ -659,48 +552,10 @@ class BlockCode {
         return null;
     }
 
-    _makeStackDraggable(stackEl, stackData) {
-        let isDragging = false;
-        let startX, startY, origX, origY;
-
-        stackEl.addEventListener('pointerdown', (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-            if (e.target.closest('.block-delete-btn')) return;
-
-            isDragging = true;
-            startX = e.clientX;
-            startY = e.clientY;
-            origX = stackData.x;
-            origY = stackData.y;
-            stackEl.style.zIndex = '100';
-            e.preventDefault();
-
-            const onMove = (ev) => {
-                if (!isDragging) return;
-                stackData.x = origX + (ev.clientX - startX);
-                stackData.y = origY + (ev.clientY - startY);
-                stackEl.style.left = stackData.x + 'px';
-                stackEl.style.top = stackData.y + 'px';
-            };
-
-            const onUp = () => {
-                isDragging = false;
-                stackEl.style.zIndex = '';
-                document.removeEventListener('pointermove', onMove);
-                document.removeEventListener('pointerup', onUp);
-            };
-
-            document.addEventListener('pointermove', onMove);
-            document.addEventListener('pointerup', onUp);
-        });
-    }
-
     // ===== Target Object =====
 
     setTarget(obj) {
         this.saveScriptsToObject();
-        this._pendingCBlockTarget = null;
-
         this.targetObject = obj;
         if (obj) {
             this.workspaceScripts = obj.userData.scripts || [];
@@ -713,8 +568,6 @@ class BlockCode {
             this.workspaceScripts = [];
             document.getElementById('script-target-name').textContent = 'No object selected';
         }
-
-        // Ensure nextBlockId is higher than any existing
         this._syncNextId();
         this.renderWorkspace();
     }
@@ -755,43 +608,35 @@ class BlockCode {
     compileScripts(obj) {
         const scripts = obj.userData.scripts || [];
         const compiled = [];
-
         scripts.forEach(stack => {
             if (!stack.blocks || stack.blocks.length === 0) return;
             const firstBlock = stack.blocks[0];
             const firstDef = this.blocks[firstBlock.blockId];
             if (!firstDef || firstDef.type !== 'hat') return;
-
             const compiledStack = {
                 trigger: firstDef.code,
                 triggerValues: firstBlock.values || {},
                 commands: []
             };
-
             for (let i = 1; i < stack.blocks.length; i++) {
                 compiledStack.commands.push(this._compileBlock(stack.blocks[i]));
             }
-
             compiled.push(compiledStack);
         });
-
         return compiled;
     }
 
     _compileBlock(blockData) {
         const blockDef = this.blocks[blockData.blockId];
         if (!blockDef) return null;
-
         const compiled = {
             code: blockDef.code,
             values: blockData.values || {},
             type: blockDef.type
         };
-
         if (blockData.children && blockData.children.length > 0) {
             compiled.children = blockData.children.map(child => this._compileBlock(child));
         }
-
         return compiled;
     }
 }

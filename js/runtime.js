@@ -41,7 +41,7 @@ class Runtime {
         this.controlScheme = settings.controlScheme || 'first-person';
         this.playerSpeed = settings.speed || 6;
         this.playerJumpForce = settings.jumpForce || 8;
-        this.lookSpeed = (settings.sensitivity || 5) * 0.04;
+        this.lookSpeed = (settings.sensitivity || 5) * 0.5;
         this._moveTarget = null; // for point-click
 
         // Key bindings (customizable)

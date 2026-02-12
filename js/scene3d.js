@@ -20,6 +20,7 @@ class Scene3D {
         this.initGrid();
         this.initControls();
         this.initRaycaster();
+        this.initViewCube();
         this.initDefaultScene();
 
         this.onObjectSelected = null;
@@ -148,6 +149,7 @@ class Scene3D {
         this.orbitControls.enableDamping = true;
         this.orbitControls.dampingFactor = 0.08;
         this.orbitControls.target.set(0, 0, 0);
+        this.orbitControls.enableRotate = false;
 
         this.transformControls = new THREE.TransformControls(this.camera, this.canvas);
         this.scene.add(this.transformControls);
@@ -195,6 +197,127 @@ class Scene3D {
             name: 'SpawnPoint',
             position: { x: 0, y: 0.5, z: 0 }
         });
+    }
+
+    // ===== ViewCube =====
+
+    initViewCube() {
+        const container = this.canvas.parentElement;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'viewcube-wrapper';
+
+        const cube = document.createElement('div');
+        cube.className = 'viewcube';
+        this._viewCube = cube;
+
+        const faces = [
+            { name: 'FRONT', transform: 'translateZ(30px)' },
+            { name: 'BACK', transform: 'rotateY(180deg) translateZ(30px)' },
+            { name: 'RIGHT', transform: 'rotateY(90deg) translateZ(30px)' },
+            { name: 'LEFT', transform: 'rotateY(-90deg) translateZ(30px)' },
+            { name: 'TOP', transform: 'rotateX(90deg) translateZ(30px)' },
+            { name: 'BOTTOM', transform: 'rotateX(-90deg) translateZ(30px)' }
+        ];
+
+        faces.forEach(face => {
+            const el = document.createElement('div');
+            el.className = 'viewcube-face';
+            el.textContent = face.name;
+            el.style.transform = face.transform;
+            cube.appendChild(el);
+        });
+
+        wrapper.appendChild(cube);
+        container.appendChild(wrapper);
+
+        this._setupViewCubeDrag(wrapper);
+    }
+
+    _setupViewCubeDrag(wrapper) {
+        let startX, startY, dragging;
+
+        wrapper.addEventListener('pointerdown', (e) => {
+            startX = e.clientX;
+            startY = e.clientY;
+            dragging = false;
+            this._lastCubeX = e.clientX;
+            this._lastCubeY = e.clientY;
+            e.preventDefault();
+
+            const onMove = (ev) => {
+                if (!dragging && (Math.abs(ev.clientX - startX) > 3 || Math.abs(ev.clientY - startY) > 3)) {
+                    dragging = true;
+                }
+                if (dragging) {
+                    const dx = ev.clientX - this._lastCubeX;
+                    const dy = ev.clientY - this._lastCubeY;
+                    this._orbitByDelta(-dx * 0.01, dy * 0.01);
+                }
+                this._lastCubeX = ev.clientX;
+                this._lastCubeY = ev.clientY;
+            };
+
+            const onUp = (ev) => {
+                document.removeEventListener('pointermove', onMove);
+                document.removeEventListener('pointerup', onUp);
+                if (!dragging) {
+                    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+                    if (el && el.classList.contains('viewcube-face')) {
+                        this._snapToView(el.textContent.trim());
+                    }
+                }
+            };
+
+            document.addEventListener('pointermove', onMove);
+            document.addEventListener('pointerup', onUp);
+        });
+    }
+
+    _orbitByDelta(dTheta, dPhi) {
+        const offset = new THREE.Vector3().subVectors(this.camera.position, this.orbitControls.target);
+        const sph = new THREE.Spherical().setFromVector3(offset);
+        sph.theta += dTheta;
+        sph.phi += dPhi;
+        sph.phi = THREE.MathUtils.clamp(sph.phi, 0.05, Math.PI - 0.05);
+        offset.setFromSpherical(sph);
+        this.camera.position.copy(this.orbitControls.target).add(offset);
+        this.camera.lookAt(this.orbitControls.target);
+    }
+
+    _snapToView(viewName) {
+        const dist = this.camera.position.distanceTo(this.orbitControls.target);
+        const t = this.orbitControls.target;
+        switch (viewName) {
+            case 'FRONT':
+                this.camera.position.set(t.x, t.y, t.z + dist);
+                break;
+            case 'BACK':
+                this.camera.position.set(t.x, t.y, t.z - dist);
+                break;
+            case 'RIGHT':
+                this.camera.position.set(t.x + dist, t.y, t.z);
+                break;
+            case 'LEFT':
+                this.camera.position.set(t.x - dist, t.y, t.z);
+                break;
+            case 'TOP':
+                this.camera.position.set(t.x, t.y + dist, t.z + 0.001);
+                break;
+            case 'BOTTOM':
+                this.camera.position.set(t.x, t.y - dist, t.z + 0.001);
+                break;
+        }
+        this.camera.lookAt(t);
+    }
+
+    _updateViewCube() {
+        if (!this._viewCube) return;
+        const offset = new THREE.Vector3().subVectors(this.camera.position, this.orbitControls.target);
+        const sph = new THREE.Spherical().setFromVector3(offset);
+        const rotX = -(sph.phi - Math.PI / 2);
+        const rotY = -sph.theta;
+        this._viewCube.style.transform = `rotateX(${rotX}rad) rotateY(${rotY}rad)`;
     }
 
     // ===== Object Management =====
@@ -826,7 +949,8 @@ class Scene3D {
                 this.transformControls.setMode('scale');
                 break;
             default:
-                // Select mode - keep current gizmo mode
+                // Select mode defaults to translate
+                this.transformControls.setMode('translate');
                 break;
         }
     }
@@ -887,6 +1011,7 @@ class Scene3D {
 
         if (!this.isPlaying) {
             this.orbitControls.update();
+            this._updateViewCube();
         }
 
         this.renderer.render(this.scene, this.camera);

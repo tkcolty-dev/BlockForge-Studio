@@ -375,6 +375,9 @@ class App {
 
         this.updateProperties(obj);
         this.refreshExplorer();
+
+        // Auto-set block code target so drag-and-drop works immediately
+        this.blockCode.setTarget(obj);
     }
 
     onObjectDeselected() {
@@ -532,6 +535,12 @@ class App {
                 this.blockCode.clearScripts();
             }
         });
+
+        // Fullscreen toggle
+        document.getElementById('btn-fullscreen-editor').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleFullscreenEditor();
+        });
     }
 
     toggleBlockEditor() {
@@ -551,6 +560,32 @@ class App {
         }
 
         // Trigger resize for viewport
+        setTimeout(() => this.scene3d.onResize(), 310);
+    }
+
+    toggleFullscreenEditor() {
+        const editor = document.getElementById('block-editor');
+        const icon = document.querySelector('#btn-fullscreen-editor .material-icons-round');
+
+        if (editor.classList.contains('fullscreen')) {
+            editor.classList.remove('fullscreen');
+            icon.textContent = 'fullscreen';
+            // Restore expanded state
+            if (!editor.classList.contains('expanded')) {
+                editor.classList.add('expanded');
+                document.body.classList.add('editor-expanded');
+            }
+        } else {
+            // Ensure editor is expanded first
+            if (!editor.classList.contains('expanded')) {
+                editor.classList.remove('collapsed');
+                editor.classList.add('expanded');
+                document.body.classList.add('editor-expanded');
+            }
+            editor.classList.add('fullscreen');
+            icon.textContent = 'fullscreen_exit';
+        }
+
         setTimeout(() => this.scene3d.onResize(), 310);
     }
 
@@ -695,6 +730,8 @@ class App {
                 case 'Escape':
                     if (this.runtime.isRunning) {
                         this.stopPlay();
+                    } else if (document.getElementById('block-editor').classList.contains('fullscreen')) {
+                        this.toggleFullscreenEditor();
                     } else {
                         this.scene3d.deselect();
                     }
@@ -786,6 +823,7 @@ class App {
             speed: 6,
             jumpForce: 8,
             sensitivity: 5,
+            mouseOrbit: false,
             keyBindings: { ...defaultBindings }
         };
 
@@ -840,6 +878,14 @@ class App {
         sensSlider.addEventListener('input', (e) => {
             this.gameSettings.sensitivity = parseInt(e.target.value);
             document.getElementById('setting-sensitivity-val').textContent = e.target.value;
+        });
+
+        // Mouse orbit toggle
+        const mouseOrbitCheckbox = document.getElementById('setting-mouse-orbit');
+        mouseOrbitCheckbox.checked = this.gameSettings.mouseOrbit;
+        mouseOrbitCheckbox.addEventListener('change', (e) => {
+            this.gameSettings.mouseOrbit = e.target.checked;
+            this.scene3d.orbitControls.enableRotate = e.target.checked;
         });
     }
 
