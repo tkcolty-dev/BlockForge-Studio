@@ -30,6 +30,15 @@
                 <button class="tool-btn" id="btn-scale" title="Scale (S)" data-tool="scale">
                     <span class="material-icons-round">aspect_ratio</span>
                 </button>
+                <div class="rotate-angle-group" id="rotate-angle-group">
+                    <select id="rotate-axis" title="Rotation Axis">
+                        <option value="y" selected>Y</option>
+                        <option value="x">X</option>
+                        <option value="z">Z</option>
+                    </select>
+                    <input type="number" id="rotate-angle" placeholder="45" step="1" title="Rotation Angle">
+                    <span class="angle-unit">°</span>
+                </div>
             </div>
             <div class="toolbar-divider"></div>
             <div class="toolbar-group">

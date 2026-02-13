@@ -64,6 +64,27 @@ class App {
         // Default to select
         document.getElementById('btn-select').classList.add('active');
 
+        // Rotate angle input
+        const rotateAngleInput = document.getElementById('rotate-angle');
+        const rotateAxisSelect = document.getElementById('rotate-axis');
+        const applyRotation = () => {
+            const obj = this.scene3d.selectedObject;
+            if (!obj) return;
+            const deg = parseFloat(rotateAngleInput.value);
+            if (isNaN(deg)) return;
+            const axis = rotateAxisSelect.value;
+            obj.rotation[axis] = THREE.MathUtils.degToRad(deg);
+            this.updateProperties(obj);
+        };
+        rotateAngleInput.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') {
+                applyRotation();
+                rotateAngleInput.blur();
+            }
+        });
+        rotateAngleInput.addEventListener('change', applyRotation);
+
         // Snap
         const snapBtn = document.getElementById('btn-snap');
         snapBtn.classList.add('active');

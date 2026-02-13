@@ -139,6 +139,45 @@ body {
     cursor: pointer;
 }
 
+.rotate-angle-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: 4px;
+}
+
+.rotate-angle-group select {
+    background: var(--bg-medium);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px 0 0 4px;
+    padding: 3px 4px;
+    font-size: 12px;
+    cursor: pointer;
+    width: 36px;
+}
+
+.rotate-angle-group input {
+    background: var(--bg-medium);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-left: none;
+    padding: 3px 4px;
+    font-size: 12px;
+    width: 48px;
+    outline: none;
+}
+
+.rotate-angle-group input:focus {
+    border-color: var(--accent);
+}
+
+.rotate-angle-group .angle-unit {
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-left: 1px;
+}
+
 .play-btn {
     background: linear-gradient(135deg, #2ecc71, #27ae60);
     border: none;
