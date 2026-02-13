@@ -12,6 +12,7 @@ class BlockCode {
         this.nextBlockId = 1;
         this.customBlocks = {}; // user-created blocks
         this.customVariables = []; // user-created variable names
+        this.customMessages = []; // user-created message names
 
         this.drawer = document.getElementById('block-drawer');
         this.workspace = document.getElementById('workspace-canvas');
@@ -47,7 +48,9 @@ class BlockCode {
             shooting: { name: 'Shooting', color: '#E03030', darkColor: '#B01818' },
             enemies: { name: 'Enemies', color: '#CC3333', darkColor: '#991919' },
             items: { name: 'Items', color: '#44BB44', darkColor: '#2D882D' },
-            effects: { name: 'Effects', color: '#E67E22', darkColor: '#BA6418' }
+            effects: { name: 'Effects', color: '#E67E22', darkColor: '#BA6418' },
+            camera: { name: 'Camera', color: '#8E44AD', darkColor: '#6C3483' },
+            ui: { name: 'UI', color: '#E91E63', darkColor: '#C2185B' }
         };
     }
 
@@ -136,6 +139,16 @@ class BlockCode {
             'looks_billboard_text': { category: 'looks', type: 'command', label: 'Show label {text}', inputs: { text: { type: 'text', default: 'Label' } }, code: 'billboardText' },
             'looks_player_color': { category: 'looks', type: 'command', label: 'Set player {part} color {color}', inputs: { part: { type: 'select', options: ['body','head','detail'], default: 'body' }, color: { type: 'color', default: '#4c97ff' } }, code: 'setPlayerColor' },
             'looks_npc_color': { category: 'looks', type: 'command', label: 'Set NPC {part} color {color}', inputs: { part: { type: 'select', options: ['body','head','legs'], default: 'body' }, color: { type: 'color', default: '#3498db' } }, code: 'setNpcColor' },
+
+            // === Camera ===
+            'camera_switch': { category: 'camera', type: 'command', label: 'Use this camera', code: 'cameraSwitch' },
+            'camera_switch_back': { category: 'camera', type: 'command', label: 'Use player camera', code: 'cameraSwitchBack' },
+            'camera_look_at': { category: 'camera', type: 'command', label: 'Look at {target}', inputs: { target: { type: 'select', options: ['player','this object','origin'], default: 'player' } }, code: 'cameraLookAt' },
+            'camera_move_to': { category: 'camera', type: 'command', label: 'Set pos {x} {y} {z}', inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 5 }, z: { type: 'number', default: 10 } }, code: 'cameraMoveTo' },
+            'camera_glide_to': { category: 'camera', type: 'command', label: 'Glide to {x} {y} {z} in {time}s', inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 5 }, z: { type: 'number', default: 10 }, time: { type: 'number', default: 1 } }, code: 'cameraGlideTo' },
+            'camera_follow': { category: 'camera', type: 'command', label: 'Follow {target} dist {dist}', inputs: { target: { type: 'select', options: ['player','this object'], default: 'player' }, dist: { type: 'number', default: 8 } }, code: 'cameraFollow' },
+            'camera_shake': { category: 'camera', type: 'command', label: 'Shake {intensity} for {time}s', inputs: { intensity: { type: 'number', default: 0.3 }, time: { type: 'number', default: 0.5 } }, code: 'cameraShake' },
+            'camera_fov': { category: 'camera', type: 'command', label: 'Set FOV {fov}', inputs: { fov: { type: 'number', default: 75 } }, code: 'cameraFov' },
 
             // === New Physics ===
             'physics_freeze': { category: 'physics', type: 'command', label: 'Freeze in place', code: 'freeze' },
@@ -236,7 +249,19 @@ class BlockCode {
             'fx_slow_motion': { category: 'effects', type: 'command', label: 'Slow motion {speed}x for {seconds}s', inputs: { speed: { type: 'number', default: 0.3 }, seconds: { type: 'number', default: 3 } }, code: 'slowMotion' },
             'fx_camera_zoom': { category: 'effects', type: 'command', label: 'Camera zoom {factor}x in {time}s', inputs: { factor: { type: 'number', default: 1.5 }, time: { type: 'number', default: 0.5 } }, code: 'cameraZoom' },
             'fx_camera_reset': { category: 'effects', type: 'command', label: 'Reset camera zoom', code: 'cameraReset' },
-            'fx_screen_tint': { category: 'effects', type: 'command', label: 'Tint screen {color} {opacity}%', inputs: { color: { type: 'color', default: '#ff0000' }, opacity: { type: 'number', default: 30 } }, code: 'screenTint' }
+            'fx_screen_tint': { category: 'effects', type: 'command', label: 'Tint screen {color} {opacity}%', inputs: { color: { type: 'color', default: '#ff0000' }, opacity: { type: 'number', default: 30 } }, code: 'screenTint' },
+
+            // ===== UI Screens =====
+            'ui_show_screen': { category: 'ui', type: 'command', label: 'Show screen {screen}', inputs: { screen: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'showScreen' },
+            'ui_hide_screen': { category: 'ui', type: 'command', label: 'Hide screen {screen}', inputs: { screen: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'hideScreen' },
+            'ui_hide_all': { category: 'ui', type: 'command', label: 'Hide all screens', code: 'hideAllScreens' },
+            'ui_set_text': { category: 'ui', type: 'command', label: 'Set {old} to {new} on {screen}', inputs: { old: { type: 'text', default: 'Label' }, new: { type: 'text', default: 'New' }, screen: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'uiSetText' },
+            'ui_set_element_color': { category: 'ui', type: 'command', label: 'Recolor {element} {color} on {screen}', inputs: { element: { type: 'text', default: 'Button' }, color: { type: 'color', default: '#4C97FF' }, screen: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'uiSetColor' },
+            'ui_set_element_visible': { category: 'ui', type: 'command', label: '{action} {element} on {screen}', inputs: { action: { type: 'select', options: ['show','hide'], default: 'hide' }, element: { type: 'text', default: 'Button' }, screen: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'uiSetVisible' },
+            'ui_add_text': { category: 'ui', type: 'command', label: 'Add label {text} at {x} {y}', inputs: { text: { type: 'text', default: 'Hello' }, x: { type: 'number', default: 50 }, y: { type: 'number', default: 50 } }, code: 'uiAddText' },
+            'ui_add_button': { category: 'ui', type: 'command', label: 'Add btn {text} msg {msg}', inputs: { text: { type: 'text', default: 'Click' }, msg: { type: 'text', default: 'clicked' } }, code: 'uiAddButton' },
+            'ui_clear_screen': { category: 'ui', type: 'command', label: 'Clear {screen}', inputs: { screen: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'uiClearScreen' },
+            'ui_show_text_overlay': { category: 'ui', type: 'command', label: 'Flash text {text} for {time}s', inputs: { text: { type: 'text', default: 'Level 1' }, time: { type: 'number', default: 2 } }, code: 'uiTextOverlay' }
         };
     }
 
@@ -257,6 +282,24 @@ class BlockCode {
 
     renderDrawer() {
         this.drawer.innerHTML = '';
+
+        // Show "New Message" button for Events category
+        if (this.activeCategory === 'events') {
+            const makeMsgBtn = document.createElement('button');
+            makeMsgBtn.className = 'make-block-btn';
+            makeMsgBtn.innerHTML = '<span class="material-icons-round">add_circle</span> New Message';
+            makeMsgBtn.addEventListener('click', () => this._showMakeMessageDialog());
+            this.drawer.appendChild(makeMsgBtn);
+        }
+
+        // Show "New Message" button for Control category (for Broadcast block)
+        if (this.activeCategory === 'control') {
+            const makeMsgBtn2 = document.createElement('button');
+            makeMsgBtn2.className = 'make-block-btn';
+            makeMsgBtn2.innerHTML = '<span class="material-icons-round">add_circle</span> New Message';
+            makeMsgBtn2.addEventListener('click', () => this._showMakeMessageDialog());
+            this.drawer.appendChild(makeMsgBtn2);
+        }
 
         // Show "Make a Variable" button for Variables category
         if (this.activeCategory === 'variables') {
@@ -373,6 +416,53 @@ class BlockCode {
                 block.inputs.var.options = [...allVars];
             }
         });
+    }
+
+    _showMakeMessageDialog() {
+        const name = prompt('Message name:', 'myMessage');
+        if (!name || !name.trim()) return;
+        const safeName = name.trim().replace(/\s+/g, '_');
+        const allMsgs = this._getAllMessageNames();
+        if (allMsgs.includes(safeName)) {
+            alert('A message with that name already exists.');
+            return;
+        }
+        this.customMessages.push(safeName);
+        this._updateMessageDropdowns();
+        this.renderDrawer();
+    }
+
+    _getAllMessageNames() {
+        const builtIn = ['message1', 'message2', 'message3', 'go', 'stop', 'reset'];
+        return [...builtIn, ...this.customMessages];
+    }
+
+    _updateMessageDropdowns() {
+        const allMsgs = this._getAllMessageNames();
+        const msgBlockIds = ['event_message', 'control_broadcast'];
+        msgBlockIds.forEach(id => {
+            const block = this.blocks[id];
+            if (block && block.inputs && block.inputs.msg) {
+                block.inputs.msg.options = [...allMsgs];
+            }
+        });
+    }
+
+    _updateScreenDropdowns(uiScreens) {
+        const names = (uiScreens || []).map(s => s.name);
+        if (names.length === 0) names.push('(none)');
+        const screenBlockIds = ['ui_show_screen', 'ui_hide_screen', 'ui_set_text', 'ui_set_element_color', 'ui_set_element_visible', 'ui_clear_screen'];
+        screenBlockIds.forEach(id => {
+            const block = this.blocks[id];
+            if (block && block.inputs && block.inputs.screen) {
+                block.inputs.screen.options = [...names];
+                block.inputs.screen.default = names[0];
+            }
+        });
+        // Re-render drawer if currently showing UI category
+        if (this.activeCategory === 'ui') {
+            this.renderDrawer();
+        }
     }
 
     // ===== Create a block DOM element =====

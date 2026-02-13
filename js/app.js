@@ -28,6 +28,7 @@ class App {
         this.initTemplates();
         this.initSettings();
         this.initCustomObjects();
+        this.initUIScreens();
 
         this.scene3d.onObjectSelected = (obj) => this.onObjectSelected(obj);
         this.scene3d.onObjectDeselected = () => this.onObjectDeselected();
@@ -131,6 +132,7 @@ class App {
 
     startPlay() {
         this.runtime.playerColors = this.gameSettings.playerColors;
+        this.runtime._uiScreens = this.uiScreens;
         this.runtime.start(this.gameSettings);
     }
 
@@ -240,10 +242,13 @@ class App {
             }
             case 'paint': {
                 // Paint the selected object
-                if (this.scene3d.selectedObject && this.scene3d.selectedObject.material) {
+                const obj = this.scene3d.selectedObject;
+                if (obj) {
+                    const mat = obj.material || this._getFirstChildMaterial(obj);
                     const activeSwatch = document.querySelector('.material-swatches .swatch.active');
-                    if (activeSwatch) {
-                        this.scene3d.selectedObject.material.color.set(activeSwatch.style.background);
+                    if (mat && activeSwatch) {
+                        mat.color.set(activeSwatch.style.background);
+                        this.scene3d._needsRender = true;
                     }
                 }
                 return;
@@ -313,6 +318,7 @@ class App {
             'bridge': 'drag_handle',
             'crate': 'inventory_2',
             'gem': 'diamond',
+            'camera': 'videocam',
             'custom': 'widgets'
         };
         return icons[type] || 'category';
@@ -465,11 +471,12 @@ class App {
         document.getElementById('prop-mass').value = obj.userData.mass;
 
         // Update material properties
-        if (obj.material) {
-            document.getElementById('prop-color').value = '#' + obj.material.color.getHexString();
-            document.getElementById('prop-roughness').value = Math.round(obj.material.roughness * 100);
-            document.getElementById('prop-metalness').value = Math.round(obj.material.metalness * 100);
-            document.getElementById('prop-opacity').value = Math.round(obj.material.opacity * 100);
+        const mat = obj.material || this._getFirstChildMaterial(obj);
+        if (mat) {
+            document.getElementById('prop-color').value = '#' + mat.color.getHexString();
+            document.getElementById('prop-roughness').value = Math.round((mat.roughness ?? 0.5) * 100);
+            document.getElementById('prop-metalness').value = Math.round((mat.metalness ?? 0) * 100);
+            document.getElementById('prop-opacity').value = Math.round((mat.opacity ?? 1) * 100);
         }
 
         // Update status bar
@@ -477,13 +484,25 @@ class App {
             `X: ${obj.position.x.toFixed(1)} Y: ${obj.position.y.toFixed(1)} Z: ${obj.position.z.toFixed(1)}`;
     }
 
+    _getFirstChildMaterial(obj) {
+        let mat = null;
+        obj.traverse(child => {
+            if (!mat && child.isMesh && child.material) mat = child.material;
+        });
+        return mat;
+    }
+
     // ===== Materials Panel =====
 
     initMaterials() {
         // Color picker
         document.getElementById('prop-color').addEventListener('input', (e) => {
-            if (this.scene3d.selectedObject && this.scene3d.selectedObject.material) {
-                this.scene3d.selectedObject.material.color.set(e.target.value);
+            const obj = this.scene3d.selectedObject;
+            if (!obj) return;
+            const mat = obj.material || this._getFirstChildMaterial(obj);
+            if (mat) {
+                mat.color.set(e.target.value);
+                this.scene3d._needsRender = true;
             }
         });
 
@@ -491,17 +510,23 @@ class App {
         document.querySelectorAll('.color-presets .swatch').forEach(swatch => {
             swatch.addEventListener('click', () => {
                 const color = swatch.dataset.color;
-                if (this.scene3d.selectedObject && this.scene3d.selectedObject.material) {
-                    this.scene3d.selectedObject.material.color.set(color);
+                const obj = this.scene3d.selectedObject;
+                if (!obj) return;
+                const mat = obj.material || this._getFirstChildMaterial(obj);
+                if (mat) {
+                    mat.color.set(color);
                     document.getElementById('prop-color').value = color;
+                    this.scene3d._needsRender = true;
                 }
             });
         });
 
         // Material type
         document.getElementById('prop-material-type').addEventListener('change', (e) => {
-            if (!this.scene3d.selectedObject || !this.scene3d.selectedObject.material) return;
-            const mat = this.scene3d.selectedObject.material;
+            const obj = this.scene3d.selectedObject;
+            if (!obj) return;
+            const mat = obj.material || this._getFirstChildMaterial(obj);
+            if (!mat) return;
             switch (e.target.value) {
                 case 'standard':
                     mat.roughness = 0.6;
@@ -528,29 +553,35 @@ class App {
                     mat.metalness = 0;
                     break;
             }
+            this.scene3d._needsRender = true;
             this.updateProperties(this.scene3d.selectedObject);
         });
 
         // Roughness
         document.getElementById('prop-roughness').addEventListener('input', (e) => {
-            if (this.scene3d.selectedObject?.material) {
-                this.scene3d.selectedObject.material.roughness = e.target.value / 100;
-            }
+            const obj = this.scene3d.selectedObject;
+            if (!obj) return;
+            const mat = obj.material || this._getFirstChildMaterial(obj);
+            if (mat) mat.roughness = e.target.value / 100;
         });
 
         // Metalness
         document.getElementById('prop-metalness').addEventListener('input', (e) => {
-            if (this.scene3d.selectedObject?.material) {
-                this.scene3d.selectedObject.material.metalness = e.target.value / 100;
-            }
+            const obj = this.scene3d.selectedObject;
+            if (!obj) return;
+            const mat = obj.material || this._getFirstChildMaterial(obj);
+            if (mat) mat.metalness = e.target.value / 100;
         });
 
         // Opacity
         document.getElementById('prop-opacity').addEventListener('input', (e) => {
-            if (this.scene3d.selectedObject?.material) {
+            const obj = this.scene3d.selectedObject;
+            if (!obj) return;
+            const mat = obj.material || this._getFirstChildMaterial(obj);
+            if (mat) {
                 const opacity = e.target.value / 100;
-                this.scene3d.selectedObject.material.opacity = opacity;
-                this.scene3d.selectedObject.material.transparent = opacity < 1;
+                mat.opacity = opacity;
+                mat.transparent = opacity < 1;
             }
         });
 
@@ -986,6 +1017,160 @@ class App {
                     { type: 'box', name: 'Pedestal 3', position: { x: -8, y: 0.25, z: 8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 0.5, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
                     { type: 'box', name: 'Pedestal 4', position: { x: 8, y: 0.25, z: -8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 0.5, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] }
                 ]
+            },
+            'fps-shooter': {
+                name: 'FPS Shooter',
+                desc: 'Corridor arena with cover & enemies',
+                icon: 'gps_fixed',
+                color: '#c0392b',
+                scene: [
+                    { type: 'box', name: 'Floor', position: { x: 0, y: -0.25, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 40, y: 0.5, z: 40 }, color: '#5a5a5a', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 15 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    // Perimeter walls
+                    { type: 'wall', name: 'Wall N', position: { x: 0, y: 1.5, z: -20 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 10, y: 1.5, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Wall S', position: { x: 0, y: 1.5, z: 20 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 10, y: 1.5, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Wall E', position: { x: 20, y: 1.5, z: 0 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 10, y: 1.5, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Wall W', position: { x: -20, y: 1.5, z: 0 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 10, y: 1.5, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // Cover
+                    { type: 'crate', name: 'Cover A', position: { x: -6, y: 0.5, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#6d4c2a', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'crate', name: 'Cover B', position: { x: 6, y: 0.5, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#6d4c2a', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Mid Wall L', position: { x: -4, y: 1, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Mid Wall R', position: { x: 4, y: 1, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'crate', name: 'Cover C', position: { x: 0, y: 0.5, z: -8 }, rotation: { x: 0, y: 45, z: 0 }, scale: { x: 2.5, y: 2.5, z: 2.5 }, color: '#6d4c2a', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Sniper Wall', position: { x: 0, y: 1, z: -14 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 1, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // Enemies
+                    { type: 'npc', name: 'Enemy 1', position: { x: -8, y: 0, z: -10 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#c0392b', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'npc', name: 'Enemy 2', position: { x: 8, y: 0, z: -10 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#c0392b', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'npc', name: 'Enemy 3', position: { x: 0, y: 0, z: -16 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.2, y: 1.2, z: 1.2 }, color: '#922b21', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // Pickups
+                    { type: 'gem', name: 'Health Pack', position: { x: -10, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'gem', name: 'Ammo Pack', position: { x: 10, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#3498db', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    // Lighting
+                    { type: 'light-point', name: 'Light 1', position: { x: -8, y: 4, z: -8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#ff6633', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'light-point', name: 'Light 2', position: { x: 8, y: 4, z: -8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#ff6633', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'light-point', name: 'Light 3', position: { x: 0, y: 4, z: 8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#ffcc00', anchored: true, collidable: false, mass: 1, scripts: [] }
+                ]
+            },
+            'dungeon': {
+                name: 'Dungeon',
+                desc: 'Dark rooms with corridors & traps',
+                icon: 'castle',
+                color: '#6c3483',
+                scene: [
+                    // Main room
+                    { type: 'box', name: 'Room 1 Floor', position: { x: 0, y: -0.25, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 10, y: 0.5, z: 10 }, color: '#3d3d3d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'R1 Wall N', position: { x: 0, y: 1.5, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1.5, z: 1 }, color: '#5d4e37', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'R1 Wall S', position: { x: 0, y: 1.5, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2.5, y: 1.5, z: 1 }, color: '#5d4e37', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'R1 Wall W', position: { x: -5, y: 1.5, z: 0 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 2.5, y: 1.5, z: 1 }, color: '#5d4e37', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // Corridor to room 2
+                    { type: 'box', name: 'Corridor Floor', position: { x: 7, y: -0.25, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 0.5, z: 3 }, color: '#2d2d2d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Corr Wall N', position: { x: 7, y: 1.5, z: -1.5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1.5, z: 1 }, color: '#5d4e37', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Corr Wall S', position: { x: 7, y: 1.5, z: 1.5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1.5, z: 1 }, color: '#5d4e37', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // Room 2
+                    { type: 'box', name: 'Room 2 Floor', position: { x: 14, y: -0.25, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 8, y: 0.5, z: 8 }, color: '#3d3d3d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'R2 Wall N', position: { x: 14, y: 1.5, z: -4 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1.5, z: 1 }, color: '#5d4e37', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'R2 Wall E', position: { x: 18, y: 1.5, z: 0 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 2, y: 1.5, z: 1 }, color: '#5d4e37', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'R2 Wall S', position: { x: 14, y: 1.5, z: 4 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1.5, z: 1 }, color: '#5d4e37', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // Enemies & loot
+                    { type: 'npc', name: 'Skeleton', position: { x: 14, y: 0, z: 0 }, rotation: { x: 0, y: -90, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#bdc3c7', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'gem', name: 'Treasure', position: { x: 16, y: 0.8, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'crate', name: 'Barrel 1', position: { x: -3, y: 0.4, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#7d5a3c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'crate', name: 'Barrel 2', position: { x: -3, y: 0.4, z: 3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#7d5a3c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // Torches
+                    { type: 'light-point', name: 'Torch 1', position: { x: -4, y: 2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#ff6600', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'light-point', name: 'Torch 2', position: { x: 7, y: 2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#ff6600', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'light-point', name: 'Torch 3', position: { x: 14, y: 2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#ff4400', anchored: true, collidable: false, mass: 1, scripts: [] }
+                ],
+                environment: { skybox: 'night' }
+            },
+            'race-track': {
+                name: 'Race Track',
+                desc: 'Oval track with checkpoints',
+                icon: 'directions_car',
+                color: '#2980b9',
+                scene: [
+                    // Track surface (oval made of rectangles)
+                    { type: 'box', name: 'Track Straight N', position: { x: 0, y: -0.1, z: -12 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 20, y: 0.2, z: 4 }, color: '#444444', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Track Straight S', position: { x: 0, y: -0.1, z: 12 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 20, y: 0.2, z: 4 }, color: '#444444', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Track Curve E', position: { x: 12, y: -0.1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 0.2, z: 28 }, color: '#444444', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Track Curve W', position: { x: -12, y: -0.1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 0.2, z: 28 }, color: '#444444', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Infield', position: { x: 0, y: -0.2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 16, y: 0.1, z: 20 }, color: '#4a7c3f', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'spawn', name: 'Start', position: { x: 0, y: 0.5, z: 12 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    // Barriers
+                    { type: 'wall', name: 'Barrier Inner N', position: { x: 0, y: 0.3, z: -10 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 5, y: 0.3, z: 1 }, color: '#e74c3c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Barrier Inner S', position: { x: 0, y: 0.3, z: 10 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 5, y: 0.3, z: 1 }, color: '#e74c3c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Barrier Outer N', position: { x: 0, y: 0.3, z: -14 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 5, y: 0.3, z: 1 }, color: '#ffffff', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Barrier Outer S', position: { x: 0, y: 0.3, z: 14 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 5, y: 0.3, z: 1 }, color: '#ffffff', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // Start/finish line
+                    { type: 'box', name: 'Start Line', position: { x: 0, y: 0.01, z: 12 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 0.02, z: 0.3 }, color: '#ffffff', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    // Checkpoints
+                    { type: 'box', name: 'Checkpoint 1', position: { x: 12, y: 0.01, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.3, y: 0.02, z: 4 }, color: '#f1c40f', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Checkpoint 2', position: { x: 0, y: 0.01, z: -12 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 0.02, z: 0.3 }, color: '#f1c40f', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Checkpoint 3', position: { x: -12, y: 0.01, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.3, y: 0.02, z: 4 }, color: '#f1c40f', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    // Coins on track
+                    { type: 'coin', name: 'Coin 1', position: { x: 6, y: 0.4, z: -12 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 2', position: { x: -6, y: 0.4, z: -12 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 3', position: { x: 12, y: 0.4, z: 6 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 4', position: { x: -12, y: 0.4, z: -6 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] }
+                ]
+            },
+            'tower-defense': {
+                name: 'Tower Defense',
+                desc: 'Winding path with tower spots',
+                icon: 'security',
+                color: '#8e44ad',
+                scene: [
+                    { type: 'box', name: 'Ground', position: { x: 0, y: -0.25, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 30, y: 0.5, z: 30 }, color: '#4a7c3f', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'spawn', name: 'SpawnPoint', position: { x: -12, y: 0.5, z: 12 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    // Path (sand-colored)
+                    { type: 'box', name: 'Path 1', position: { x: -12, y: 0.02, z: 6 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 0.05, z: 14 }, color: '#C2B280', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Path 2', position: { x: -6, y: 0.02, z: -1 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 14, y: 0.05, z: 2 }, color: '#C2B280', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Path 3', position: { x: 0, y: 0.02, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 0.05, z: 14 }, color: '#C2B280', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Path 4', position: { x: 6, y: 0.02, z: 12 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 14, y: 0.05, z: 2 }, color: '#C2B280', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Path 5', position: { x: 12, y: 0.02, z: 3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 0.05, z: 20 }, color: '#C2B280', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // Tower pedestals
+                    { type: 'cylinder', name: 'Tower Spot 1', position: { x: -6, y: 0.3, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 0.6, z: 2 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'cylinder', name: 'Tower Spot 2', position: { x: -6, y: 0.3, z: -7 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 0.6, z: 2 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'cylinder', name: 'Tower Spot 3', position: { x: 6, y: 0.3, z: 6 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 0.6, z: 2 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'cylinder', name: 'Tower Spot 4', position: { x: 6, y: 0.3, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 0.6, z: 2 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // End point
+                    { type: 'gem', name: 'Base', position: { x: 12, y: 0.8, z: -7 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#e74c3c', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    // Enemies on path
+                    { type: 'npc', name: 'Creep 1', position: { x: -12, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.8, y: 0.8, z: 0.8 }, color: '#e74c3c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'npc', name: 'Creep 2', position: { x: 0, y: 0, z: -1 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 0.8, y: 0.8, z: 0.8 }, color: '#e74c3c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'npc', name: 'Creep 3', position: { x: 0, y: 0, z: 10 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.8, y: 0.8, z: 0.8 }, color: '#e74c3c', anchored: true, collidable: true, mass: 1, scripts: [] }
+                ]
+            },
+            'island': {
+                name: 'Island',
+                desc: 'Tropical island with water',
+                icon: 'sailing',
+                color: '#16a085',
+                scene: [
+                    // Water
+                    { type: 'box', name: 'Water', position: { x: 0, y: -0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 50, y: 0.1, z: 50 }, color: '#2980b9', anchored: true, collidable: false, mass: 1, material: { roughness: 0.1, metalness: 0.3, opacity: 0.7 }, scripts: [] },
+                    // Island
+                    { type: 'cylinder', name: 'Island Base', position: { x: 0, y: -0.3, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 16, y: 0.6, z: 16 }, color: '#c2b280', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Beach', position: { x: 0, y: 0.01, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 14, y: 0.02, z: 14 }, color: '#f0d9a0', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Grass', position: { x: 0, y: 0.03, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 10, y: 0.02, z: 10 }, color: '#4a7c3f', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    // Trees
+                    { type: 'tree', name: 'Palm 1', position: { x: -3, y: 0, z: -2 }, rotation: { x: 0, y: 30, z: 0 }, scale: { x: 1.2, y: 1.5, z: 1.2 }, color: '#27ae60', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'tree', name: 'Palm 2', position: { x: 3, y: 0, z: -3 }, rotation: { x: 0, y: 120, z: 0 }, scale: { x: 1, y: 1.3, z: 1 }, color: '#27ae60', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'tree', name: 'Palm 3', position: { x: -2, y: 0, z: 3 }, rotation: { x: 0, y: 200, z: 0 }, scale: { x: 0.8, y: 1.1, z: 0.8 }, color: '#2ecc71', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    // Hut
+                    { type: 'house', name: 'Beach Hut', position: { x: 3, y: 0, z: 2 }, rotation: { x: 0, y: -45, z: 0 }, scale: { x: 0.8, y: 0.8, z: 0.8 }, color: '#c2b280', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    // Treasure
+                    { type: 'crate', name: 'Chest', position: { x: -4, y: 0.3, z: 0 }, rotation: { x: 0, y: 15, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#8B6914', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'gem', name: 'Treasure', position: { x: -4, y: 1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    // Coins scattered
+                    { type: 'coin', name: 'Coin 1', position: { x: 1, y: 0.4, z: -4 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 2', position: { x: -3, y: 0.4, z: 4 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 3', position: { x: 5, y: 0.4, z: 0 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    // NPC
+                    { type: 'npc', name: 'Castaway', position: { x: 2, y: 0, z: 1 }, rotation: { x: 0, y: -90, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#e67e22', anchored: true, collidable: true, mass: 1, scripts: [] }
+                ]
             }
         };
 
@@ -1112,6 +1297,7 @@ class App {
         };
 
         this.customObjects = [];
+        this.uiScreens = [];
 
         // Populate key binding selects
         document.querySelectorAll('.key-bind-select').forEach(select => {
@@ -1189,7 +1375,9 @@ class App {
             name: 'My Game',
             scene: this.scene3d.serialize(),
             customVariables: this.blockCode.customVariables,
+            customMessages: this.blockCode.customMessages,
             customObjects: this.customObjects,
+            uiScreens: this.uiScreens,
             environment: {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
@@ -1221,10 +1409,20 @@ class App {
                 this.blockCode.customVariables = data.customVariables;
                 this.blockCode._updateVariableDropdowns();
             }
+            if (data.customMessages) {
+                this.blockCode.customMessages = data.customMessages;
+                this.blockCode._updateMessageDropdowns();
+            }
 
             if (data.customObjects) {
                 this.customObjects = data.customObjects;
                 this.renderCustomObjectButtons();
+            }
+
+            if (data.uiScreens) {
+                this.uiScreens = data.uiScreens;
+                this.renderScreenButtons();
+                this.blockCode._updateScreenDropdowns(this.uiScreens);
             }
 
             if (data.environment) {
@@ -1273,7 +1471,9 @@ class App {
             name: 'My Game',
             scene: this.scene3d.serialize(),
             customVariables: this.blockCode.customVariables,
+            customMessages: this.blockCode.customMessages,
             customObjects: this.customObjects,
+            uiScreens: this.uiScreens,
             environment: {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
@@ -1373,7 +1573,9 @@ class App {
             name: 'My Game',
             scene: this.scene3d.serialize(),
             customVariables: this.blockCode.customVariables,
+            customMessages: this.blockCode.customMessages,
             customObjects: this.customObjects,
+            uiScreens: this.uiScreens,
             environment: {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
@@ -1419,10 +1621,20 @@ class App {
                 this.blockCode.customVariables = data.customVariables;
                 this.blockCode._updateVariableDropdowns();
             }
+            if (data.customMessages) {
+                this.blockCode.customMessages = data.customMessages;
+                this.blockCode._updateMessageDropdowns();
+            }
 
             if (data.customObjects) {
                 this.customObjects = data.customObjects;
                 this.renderCustomObjectButtons();
+            }
+
+            if (data.uiScreens) {
+                this.uiScreens = data.uiScreens;
+                this.renderScreenButtons();
+                this.blockCode._updateScreenDropdowns(this.uiScreens);
             }
 
             if (data.environment) {
@@ -1838,11 +2050,12 @@ class App {
         });
     }
 
-    _renderCustomObjectThumbnail(parts, size) {
-        size = size || 64;
-        // Lazy-init offscreen renderer
-        if (!this._thumbRenderer) {
-            this._thumbRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    _renderCustomObjectThumbnail(parts, res) {
+        res = res || 64;
+        const renderer = this.scene3d.renderer;
+
+        // Lazy-init thumbnail scene/camera (reuses existing WebGL context)
+        if (!this._thumbScene) {
             this._thumbScene = new THREE.Scene();
             this._thumbCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
             this._thumbScene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -1850,10 +2063,12 @@ class App {
             dir.position.set(2, 3, 4);
             this._thumbScene.add(dir);
         }
-        this._thumbRenderer.setSize(size, size);
+        if (!this._thumbTarget || this._thumbTarget.width !== res) {
+            if (this._thumbTarget) this._thumbTarget.dispose();
+            this._thumbTarget = new THREE.WebGLRenderTarget(res, res);
+        }
         const scene = this._thumbScene;
         const camera = this._thumbCamera;
-        const renderer = this._thumbRenderer;
 
         // Clear previous objects (keep lights)
         for (let i = scene.children.length - 1; i >= 0; i--) {
@@ -1890,13 +2105,37 @@ class App {
         // Fit camera to bounding box
         const box = new THREE.Box3().setFromObject(group);
         const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const bsize = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(bsize.x, bsize.y, bsize.z) || 1;
         camera.position.set(center.x + maxDim * 1.2, center.y + maxDim * 0.8, center.z + maxDim * 1.5);
         camera.lookAt(center);
 
+        // Render to offscreen target using existing renderer
+        renderer.setRenderTarget(this._thumbTarget);
         renderer.render(scene, camera);
-        return renderer.domElement.toDataURL();
+        renderer.setRenderTarget(null);
+
+        // Read pixels and draw to a 2D canvas
+        const pixels = new Uint8Array(res * res * 4);
+        renderer.readRenderTargetPixels(this._thumbTarget, 0, 0, res, res, pixels);
+        const canvas = document.createElement('canvas');
+        canvas.width = res;
+        canvas.height = res;
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(res, res);
+        // Flip Y since WebGL reads bottom-up
+        for (let y = 0; y < res; y++) {
+            for (let x = 0; x < res; x++) {
+                const srcIdx = ((res - 1 - y) * res + x) * 4;
+                const dstIdx = (y * res + x) * 4;
+                imageData.data[dstIdx] = pixels[srcIdx];
+                imageData.data[dstIdx + 1] = pixels[srcIdx + 1];
+                imageData.data[dstIdx + 2] = pixels[srcIdx + 2];
+                imageData.data[dstIdx + 3] = 255;
+            }
+        }
+        ctx.putImageData(imageData, 0, 0);
+        return canvas.toDataURL();
     }
 
     renderCustomObjectButtons() {
@@ -1929,6 +2168,345 @@ class App {
                 this.customObjects.splice(idx, 1);
                 this.renderCustomObjectButtons();
             });
+            grid.appendChild(btn);
+        });
+    }
+
+    // ===== UI Screens =====
+
+    initUIScreens() {
+        const modal = document.getElementById('screen-editor-modal');
+        const closeBtn = document.getElementById('screen-editor-close');
+        const cancelBtn = document.getElementById('screen-editor-cancel');
+        const saveBtn = document.getElementById('screen-editor-save');
+        const deleteBtn = document.getElementById('screen-editor-delete');
+        const createBtn = document.getElementById('btn-create-screen');
+
+        this._editingScreenIdx = -1;
+        this._editingElements = [];
+        this._selectedElementIdx = -1;
+
+        createBtn.addEventListener('click', () => this._openScreenEditor());
+
+        document.getElementById('screen-add-text').addEventListener('click', () => this._addScreenElement('text'));
+        document.getElementById('screen-add-button').addEventListener('click', () => this._addScreenElement('button'));
+        document.getElementById('screen-add-panel').addEventListener('click', () => this._addScreenElement('panel'));
+
+        const closeModal = () => modal.classList.add('hidden');
+        closeBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+        // Live preview updates
+        document.getElementById('screen-editor-bg').addEventListener('input', () => this._updateScreenPreview());
+        document.getElementById('screen-editor-bg-opacity').addEventListener('input', () => this._updateScreenPreview());
+        document.getElementById('screen-editor-no-bg').addEventListener('change', () => {
+            const noBg = document.getElementById('screen-editor-no-bg').checked;
+            document.getElementById('screen-editor-bg').disabled = noBg;
+            document.getElementById('screen-editor-bg-opacity').disabled = noBg;
+            this._updateScreenPreview();
+        });
+
+        saveBtn.addEventListener('click', () => this._saveScreen());
+        deleteBtn.addEventListener('click', () => this._deleteScreen());
+    }
+
+    _openScreenEditor(idx) {
+        const modal = document.getElementById('screen-editor-modal');
+        this._selectedElementIdx = -1;
+
+        if (idx !== undefined && idx >= 0 && idx < this.uiScreens.length) {
+            // Edit existing
+            this._editingScreenIdx = idx;
+            const screen = this.uiScreens[idx];
+            document.getElementById('screen-editor-name').value = screen.name;
+            // Parse bgColor rgba
+            const noBg = screen.bgColor === 'transparent' || screen.noBg;
+            document.getElementById('screen-editor-no-bg').checked = noBg;
+            document.getElementById('screen-editor-bg').disabled = noBg;
+            document.getElementById('screen-editor-bg-opacity').disabled = noBg;
+            if (!noBg) {
+                const rgba = screen.bgColor.match(/[\d.]+/g);
+                if (rgba && rgba.length >= 4) {
+                    const r = parseInt(rgba[0]), g = parseInt(rgba[1]), b = parseInt(rgba[2]);
+                    const a = parseFloat(rgba[3]);
+                    document.getElementById('screen-editor-bg').value = '#' + [r,g,b].map(c => c.toString(16).padStart(2,'0')).join('');
+                    document.getElementById('screen-editor-bg-opacity').value = Math.round(a * 100);
+                } else {
+                    document.getElementById('screen-editor-bg').value = '#000000';
+                    document.getElementById('screen-editor-bg-opacity').value = 80;
+                }
+            } else {
+                document.getElementById('screen-editor-bg').value = '#000000';
+                document.getElementById('screen-editor-bg-opacity').value = 0;
+            }
+            this._editingElements = JSON.parse(JSON.stringify(screen.elements));
+            document.getElementById('screen-editor-delete').style.display = '';
+        } else {
+            // New screen
+            this._editingScreenIdx = -1;
+            document.getElementById('screen-editor-name').value = 'My Screen';
+            document.getElementById('screen-editor-bg').value = '#000000';
+            document.getElementById('screen-editor-bg-opacity').value = 80;
+            document.getElementById('screen-editor-no-bg').checked = false;
+            document.getElementById('screen-editor-bg').disabled = false;
+            document.getElementById('screen-editor-bg-opacity').disabled = false;
+            this._editingElements = [];
+            document.getElementById('screen-editor-delete').style.display = 'none';
+        }
+
+        this._renderScreenElementsList();
+        this._updateScreenPreview();
+        modal.classList.remove('hidden');
+    }
+
+    _addScreenElement(type) {
+        const msgs = this.blockCode._getAllMessageNames();
+        const btnCount = this._editingElements.filter(e => e.type === 'button').length;
+        const defaultMsg = msgs[Math.min(btnCount, msgs.length - 1)] || 'message1';
+        const yOffset = btnCount * 10;
+        const defaults = {
+            text: { type: 'text', text: 'Text Label', x: 50, y: 30, width: 60, height: 10, fontSize: 32, color: '#ffffff', bgColor: 'transparent', align: 'center' },
+            button: { type: 'button', text: 'Button', x: 50, y: 60 + yOffset, width: 30, height: 8, fontSize: 20, color: '#ffffff', bgColor: '#4C97FF', align: 'center', action: defaultMsg },
+            panel: { type: 'panel', text: '', x: 50, y: 50, width: 80, height: 70, fontSize: 16, color: '#ffffff', bgColor: 'rgba(0,0,0,0.5)', align: 'center' }
+        };
+        this._editingElements.push({ ...defaults[type] });
+        this._selectedElementIdx = this._editingElements.length - 1;
+        this._renderScreenElementsList();
+        this._updateScreenPreview();
+    }
+
+    _renderScreenElementsList() {
+        const list = document.getElementById('screen-elements-list');
+        list.innerHTML = '';
+
+        this._editingElements.forEach((el, idx) => {
+            const row = document.createElement('div');
+            row.className = 'screen-element-row' + (idx === this._selectedElementIdx ? ' expanded' : '');
+
+            const icons = { text: 'title', button: 'smart_button', panel: 'rectangle' };
+
+            row.innerHTML = `
+                <div class="screen-element-header">
+                    <span class="material-icons-round">${icons[el.type] || 'layers'}</span>
+                    <span style="flex:1;font-weight:500">${el.type.charAt(0).toUpperCase() + el.type.slice(1)}: ${el.text || '(panel)'}</span>
+                    <span class="material-icons-round" style="font-size:14px">${row.classList.contains('expanded') ? 'expand_less' : 'expand_more'}</span>
+                </div>
+                <div class="screen-element-props">
+                    <div class="screen-element-prop-row">
+                        <label>Text</label>
+                        <input type="text" data-field="text" value="${(el.text || '').replace(/"/g, '&quot;')}" style="flex:1">
+                    </div>
+                    <div class="screen-element-prop-row">
+                        <label>X %</label>
+                        <input type="number" data-field="x" value="${el.x}" min="0" max="100" step="1">
+                        <label>Y %</label>
+                        <input type="number" data-field="y" value="${el.y}" min="0" max="100" step="1">
+                    </div>
+                    <div class="screen-element-prop-row">
+                        <label>W %</label>
+                        <input type="number" data-field="width" value="${el.width}" min="1" max="100" step="1">
+                        <label>H %</label>
+                        <input type="number" data-field="height" value="${el.height}" min="1" max="100" step="1">
+                    </div>
+                    <div class="screen-element-prop-row">
+                        <label>Size</label>
+                        <input type="number" data-field="fontSize" value="${el.fontSize}" min="8" max="120" step="1" style="width:50px">
+                        <label>Color</label>
+                        <input type="color" data-field="color" value="${el.color}">
+                        <label>BG</label>
+                        <input type="color" data-field="bgColor" value="${el.bgColor === 'transparent' || el.bgColor.startsWith('rgba') ? '#000000' : el.bgColor}">
+                    </div>
+                    <div class="screen-element-prop-row">
+                        <label>Align</label>
+                        <select data-field="align">
+                            <option value="left" ${el.align === 'left' ? 'selected' : ''}>Left</option>
+                            <option value="center" ${el.align === 'center' ? 'selected' : ''}>Center</option>
+                            <option value="right" ${el.align === 'right' ? 'selected' : ''}>Right</option>
+                        </select>
+                    </div>
+                    ${el.type === 'button' ? `
+                    <div class="screen-element-prop-row">
+                        <label>On Click</label>
+                        <select data-field="action" style="flex:1">
+                            ${this.blockCode._getAllMessageNames().map(m =>
+                                `<option value="${m}" ${el.action === m ? 'selected' : ''}>${m}</option>`
+                            ).join('')}
+                        </select>
+                    </div>` : ''}
+                    <div class="screen-element-actions">
+                        ${idx > 0 ? '<button data-move="up"><span class="material-icons-round" style="font-size:14px">arrow_upward</span></button>' : ''}
+                        ${idx < this._editingElements.length - 1 ? '<button data-move="down"><span class="material-icons-round" style="font-size:14px">arrow_downward</span></button>' : ''}
+                        <button class="danger" data-action="delete"><span class="material-icons-round" style="font-size:14px">delete</span> Remove</button>
+                    </div>
+                </div>
+            `;
+
+            // Toggle expand
+            row.querySelector('.screen-element-header').addEventListener('click', () => {
+                this._selectedElementIdx = this._selectedElementIdx === idx ? -1 : idx;
+                this._renderScreenElementsList();
+                this._updateScreenPreview();
+            });
+
+            // Property change handlers
+            row.querySelectorAll('[data-field]').forEach(input => {
+                const handler = () => {
+                    const field = input.dataset.field;
+                    let val = input.value;
+                    if (['x','y','width','height','fontSize'].includes(field)) val = parseFloat(val) || 0;
+                    if (field === 'bgColor' && el.type === 'panel') {
+                        val = val; // use hex directly for panels
+                    }
+                    this._editingElements[idx][field] = val;
+                    this._updateScreenPreview();
+                };
+                input.addEventListener('input', handler);
+                input.addEventListener('change', handler);
+            });
+
+            // Move/delete
+            row.querySelectorAll('[data-move]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const dir = btn.dataset.move;
+                    const newIdx = dir === 'up' ? idx - 1 : idx + 1;
+                    [this._editingElements[idx], this._editingElements[newIdx]] = [this._editingElements[newIdx], this._editingElements[idx]];
+                    if (this._selectedElementIdx === idx) this._selectedElementIdx = newIdx;
+                    this._renderScreenElementsList();
+                    this._updateScreenPreview();
+                });
+            });
+
+            const delBtn = row.querySelector('[data-action="delete"]');
+            if (delBtn) {
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this._editingElements.splice(idx, 1);
+                    this._selectedElementIdx = -1;
+                    this._renderScreenElementsList();
+                    this._updateScreenPreview();
+                });
+            }
+
+            list.appendChild(row);
+        });
+    }
+
+    _updateScreenPreview() {
+        const preview = document.getElementById('screen-editor-preview');
+        const noBg = document.getElementById('screen-editor-no-bg').checked;
+
+        if (noBg) {
+            // Checkerboard pattern to indicate transparency
+            preview.style.background = 'repeating-conic-gradient(#808080 0% 25%, #a0a0a0 0% 50%) 50% / 20px 20px';
+        } else {
+            const bgColor = document.getElementById('screen-editor-bg').value;
+            const opacity = parseInt(document.getElementById('screen-editor-bg-opacity').value) / 100;
+            const r = parseInt(bgColor.slice(1,3), 16);
+            const g = parseInt(bgColor.slice(3,5), 16);
+            const b = parseInt(bgColor.slice(5,7), 16);
+            preview.style.background = `rgba(${r},${g},${b},${opacity})`;
+        }
+
+        // Clear and re-render elements
+        preview.innerHTML = '';
+
+        this._editingElements.forEach((el, idx) => {
+            const div = document.createElement('div');
+            div.className = 'screen-preview-element' + (idx === this._selectedElementIdx ? ' selected' : '');
+            div.style.left = el.x + '%';
+            div.style.top = el.y + '%';
+            div.style.width = el.width + '%';
+            div.style.height = el.height + '%';
+            div.style.fontSize = Math.max(8, el.fontSize * 0.35) + 'px';
+            div.style.color = el.color;
+            div.style.textAlign = el.align;
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.justifyContent = el.align === 'center' ? 'center' : el.align === 'right' ? 'flex-end' : 'flex-start';
+            div.style.overflow = 'hidden';
+            div.style.padding = '2px 4px';
+
+            if (el.type === 'button') {
+                div.style.background = el.bgColor;
+                div.style.borderRadius = '4px';
+                div.style.fontWeight = '600';
+            } else if (el.type === 'panel') {
+                div.style.background = el.bgColor;
+                div.style.borderRadius = '4px';
+            } else {
+                div.style.background = el.bgColor === 'transparent' ? 'transparent' : el.bgColor;
+            }
+
+            div.textContent = el.text || '';
+
+            div.addEventListener('click', () => {
+                this._selectedElementIdx = idx;
+                this._renderScreenElementsList();
+                this._updateScreenPreview();
+            });
+
+            preview.appendChild(div);
+        });
+    }
+
+    _saveScreen() {
+        const name = document.getElementById('screen-editor-name').value.trim();
+        if (!name) { this.toast('Please enter a screen name', 'error'); return; }
+
+        const noBg = document.getElementById('screen-editor-no-bg').checked;
+        let bgColorValue;
+        if (noBg) {
+            bgColorValue = 'transparent';
+        } else {
+            const bgColor = document.getElementById('screen-editor-bg').value;
+            const opacity = parseInt(document.getElementById('screen-editor-bg-opacity').value) / 100;
+            const r = parseInt(bgColor.slice(1,3), 16);
+            const g = parseInt(bgColor.slice(3,5), 16);
+            const b = parseInt(bgColor.slice(5,7), 16);
+            bgColorValue = `rgba(${r},${g},${b},${opacity})`;
+        }
+
+        const screenData = {
+            id: this._editingScreenIdx >= 0 ? this.uiScreens[this._editingScreenIdx].id : 'screen_' + Date.now(),
+            name: name,
+            bgColor: bgColorValue,
+            noBg: noBg,
+            elements: JSON.parse(JSON.stringify(this._editingElements))
+        };
+
+        if (this._editingScreenIdx >= 0) {
+            this.uiScreens[this._editingScreenIdx] = screenData;
+        } else {
+            this.uiScreens.push(screenData);
+        }
+
+        this.renderScreenButtons();
+        this.blockCode._updateScreenDropdowns(this.uiScreens);
+        document.getElementById('screen-editor-modal').classList.add('hidden');
+        this.toast(`Screen "${name}" saved!`, 'success');
+    }
+
+    _deleteScreen() {
+        if (this._editingScreenIdx < 0) return;
+        const name = this.uiScreens[this._editingScreenIdx].name;
+        this.uiScreens.splice(this._editingScreenIdx, 1);
+        this.renderScreenButtons();
+        this.blockCode._updateScreenDropdowns(this.uiScreens);
+        document.getElementById('screen-editor-modal').classList.add('hidden');
+        this.toast(`Screen "${name}" deleted`);
+    }
+
+    renderScreenButtons() {
+        const grid = document.getElementById('ui-screens-grid');
+        grid.innerHTML = '';
+        this.uiScreens.forEach((screen, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'screen-btn';
+            btn.title = screen.name;
+            btn.innerHTML = `<span class="material-icons-round">web</span><span>${screen.name}</span>`;
+            btn.addEventListener('click', () => this._openScreenEditor(idx));
             grid.appendChild(btn);
         });
     }

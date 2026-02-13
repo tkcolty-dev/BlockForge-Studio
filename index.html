@@ -232,6 +232,10 @@
                             <div class="shape-preview gem-preview"></div>
                             <span>Gem</span>
                         </button>
+                        <button class="object-btn" data-prefab="camera" title="Camera View">
+                            <div class="shape-preview camera-preview"></div>
+                            <span>Camera</span>
+                        </button>
                     </div>
                 </div>
                 <div class="panel-section" id="custom-objects-section">
@@ -242,6 +246,17 @@
                         </button>
                     </div>
                     <div class="object-grid" id="custom-objects-grid">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+                <div class="panel-section" id="ui-screens-section">
+                    <div class="section-header">
+                        <span>UI Screens</span>
+                        <button class="small-btn" id="btn-create-screen" title="Create UI Screen">
+                            <span class="material-icons-round">add_circle</span>
+                        </button>
+                    </div>
+                    <div class="object-grid" id="ui-screens-grid">
                         <!-- Populated dynamically -->
                     </div>
                 </div>
@@ -628,6 +643,14 @@
                     <span class="cat-color" style="background:#E67E22"></span>
                     Effects
                 </div>
+                <div class="palette-category" data-category="camera">
+                    <span class="cat-color" style="background:#8E44AD"></span>
+                    Camera
+                </div>
+                <div class="palette-category" data-category="ui">
+                    <span class="cat-color" style="background:#E91E63"></span>
+                    UI
+                </div>
             </div>
 
             <!-- Block Drawer (blocks for selected category) -->
@@ -894,6 +917,53 @@
             <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border)">
                 <button class="action-btn" id="obj-builder-cancel">Cancel</button>
                 <button class="action-btn primary" id="obj-builder-save">Save Object</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Screen Editor Modal -->
+    <div id="screen-editor-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:700px">
+            <div class="modal-header">
+                <span class="material-icons-round">web</span>
+                <span>UI Screen Editor</span>
+                <button class="modal-close" id="screen-editor-close"><span class="material-icons-round">close</span></button>
+            </div>
+            <div class="modal-body" style="padding:0">
+                <div style="padding:12px 24px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+                    <label style="font-size:13px;font-weight:600">Name</label>
+                    <input type="text" id="screen-editor-name" class="prop-input" style="flex:1;min-width:120px" value="My Screen">
+                    <label style="font-size:13px;font-weight:600">BG</label>
+                    <input type="color" id="screen-editor-bg" value="#000000" style="width:36px;height:24px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:none;padding:1px">
+                    <label style="font-size:13px;font-weight:600">Opacity</label>
+                    <input type="range" id="screen-editor-bg-opacity" min="0" max="100" value="80" style="width:60px;accent-color:var(--accent)">
+                    <label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none">
+                        <input type="checkbox" id="screen-editor-no-bg" style="accent-color:var(--accent)"> No BG
+                    </label>
+                </div>
+                <div id="screen-editor-preview" style="position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-bottom:1px solid var(--border)">
+                </div>
+                <div style="padding:12px 24px;max-height:250px;overflow-y:auto">
+                    <div style="display:flex;gap:8px;margin-bottom:12px">
+                        <button class="action-btn" id="screen-add-text">
+                            <span class="material-icons-round">title</span> Text
+                        </button>
+                        <button class="action-btn" id="screen-add-button">
+                            <span class="material-icons-round">smart_button</span> Button
+                        </button>
+                        <button class="action-btn" id="screen-add-panel">
+                            <span class="material-icons-round">rectangle</span> Panel
+                        </button>
+                    </div>
+                    <div id="screen-elements-list"></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border)">
+                <button class="action-btn" id="screen-editor-delete" style="margin-right:auto;color:#e74c3c">
+                    <span class="material-icons-round">delete</span> Delete Screen
+                </button>
+                <button class="action-btn" id="screen-editor-cancel">Cancel</button>
+                <button class="action-btn primary" id="screen-editor-save">Save Screen</button>
             </div>
         </div>
     </div>

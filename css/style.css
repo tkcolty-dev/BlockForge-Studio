@@ -535,6 +535,31 @@ body.editor-expanded #main-content {
     clip-path: polygon(50% 0%, 100% 35%, 80% 100%, 20% 100%, 0% 35%);
 }
 
+.camera-preview {
+    width: 24px; height: 18px; margin: 8px auto 4px;
+    background: #8e44ad;
+    border-radius: 3px;
+    position: relative;
+    border: 2px solid #9b59b6;
+}
+.camera-preview::before {
+    content: '';
+    position: absolute;
+    right: -8px; top: 3px;
+    width: 0; height: 0;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-left: 8px solid #9b59b6;
+}
+.camera-preview::after {
+    content: '';
+    position: absolute;
+    left: 3px; top: 3px;
+    width: 8px; height: 8px;
+    border: 2px solid rgba(255,255,255,0.5);
+    border-radius: 50%;
+}
+
 /* ===== Material Swatches ===== */
 .material-swatches, .color-presets {
     display: flex;
@@ -1241,6 +1266,7 @@ input[type="checkbox"] {
 .block-enemies { background-color: #CC3333; }
 .block-items { background-color: #44BB44; }
 .block-effects { background-color: #E67E22; }
+.block-camera { background-color: #8E44AD; }
 
 /* C-block parts inherit color */
 .block.c-block-container.block-control .c-block-top,
@@ -2347,3 +2373,67 @@ input[type="checkbox"] {
     background: none;
     padding: 2px;
 }
+
+/* ===== Screen Editor Preview ===== */
+#screen-editor-preview { background: #1a1a2e; cursor: crosshair; }
+.screen-preview-element { position: absolute; transform: translate(-50%, -50%);
+    box-sizing: border-box; cursor: pointer; outline: 2px solid transparent; }
+.screen-preview-element.selected { outline: 2px solid #4C97FF; }
+.screen-preview-element:hover { outline: 2px solid rgba(76,151,255,0.5); }
+
+/* Element list rows */
+.screen-element-row { border: 1px solid var(--border); border-radius: 8px;
+    margin-bottom: 8px; overflow: hidden; }
+.screen-element-header { display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; cursor: pointer; background: var(--bg-medium); font-size: 12px; }
+.screen-element-header .material-icons-round { font-size: 16px; color: var(--text-dim); }
+.screen-element-props { padding: 12px; display: none; border-top: 1px solid var(--border); }
+.screen-element-row.expanded .screen-element-props { display: block; }
+.screen-element-prop-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.screen-element-prop-row label { font-size: 11px; color: var(--text-dim); min-width: 50px; }
+.screen-element-prop-row input, .screen-element-prop-row select {
+    background: var(--bg-medium); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); padding: 3px 6px; font-size: 11px; font-family: inherit; }
+.screen-element-prop-row input[type="color"] {
+    width: 32px; height: 22px; padding: 1px; cursor: pointer; background: none; }
+.screen-element-prop-row input[type="number"] { width: 50px; }
+.screen-element-prop-row input[type="text"] { flex: 1; }
+.screen-element-actions { display: flex; gap: 4px; margin-top: 8px; }
+.screen-element-actions button { background: none; border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text-dim); cursor: pointer; padding: 2px 6px;
+    font-size: 11px; display: flex; align-items: center; gap: 2px; }
+.screen-element-actions button:hover { color: var(--text); border-color: var(--text-dim); }
+.screen-element-actions button.danger:hover { color: var(--danger); border-color: var(--danger); }
+
+/* Runtime screen overlay */
+/* Runtime UI screen overlays — inside #play-overlay, above canvas but inside viewport */
+.game-ui-screen { position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 80; pointer-events: none; overflow: hidden; }
+.game-ui-element { position: absolute; transform: translate(-50%, -50%);
+    box-sizing: border-box; font-family: 'Inter', sans-serif;
+    pointer-events: none; user-select: none; }
+.game-ui-button { pointer-events: auto; cursor: pointer; border: none;
+    font-family: 'Inter', sans-serif; font-weight: 600; user-select: none;
+    transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease; }
+.game-ui-button:hover { filter: brightness(1.2);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+    transform: translate(-50%, -50%) scale(1.05); }
+.game-ui-button:active { filter: brightness(0.8);
+    transform: translate(-50%, -50%) scale(0.93);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    transition: transform 0.04s ease, filter 0.04s ease; }
+
+/* Screen grid buttons in toolbox */
+.screen-btn { display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 8px; background: var(--input-bg, var(--bg-medium)); border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; color: var(--text); font-size: 11px;
+    width: 100%; text-align: center; }
+.screen-btn:hover { border-color: var(--accent); }
+.screen-btn .material-icons-round { font-size: 24px; color: #E91E63; }
+
+/* UI Block color */
+.block-ui { background-color: #E91E63; }
+
+.block.c-block-container.block-ui .c-block-top,
+.block.c-block-container.block-ui .c-block-bottom { background-color: #E91E63; }
+.block.c-block-container.block-ui .c-block-body { background-color: rgba(180,20,70,0.3); border-color: rgba(233,30,99,0.25); }

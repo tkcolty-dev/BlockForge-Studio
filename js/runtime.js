@@ -60,6 +60,10 @@ class Runtime {
         this._timeScale = 1;
         this._originalFov = null;
 
+        // UI Screens
+        this._activeScreens = new Map();
+        this._uiScreens = [];
+
         // Reusable temp objects to reduce allocations in hot loops
         this._tempVec3 = new THREE.Vector3();
         this._tempBox3 = new THREE.Box3();
@@ -133,6 +137,10 @@ class Runtime {
         this._timeScale = 1;
         this._originalFov = null;
 
+        // UI Screens
+        this._activeScreens.forEach(el => el.remove());
+        this._activeScreens.clear();
+
         // Music system
         this._stopMusic();
 
@@ -190,6 +198,14 @@ class Runtime {
 
         // Setup player
         this.initPlayer();
+
+        // Hide camera objects during play
+        this._cameraOverride = false;
+        this._cameraObj = null;
+        this._cameraFollow = null;
+        this.scene3d.objects.forEach(obj => {
+            if (obj.userData.type === 'camera') obj.visible = false;
+        });
 
         // Setup input
         document.addEventListener('keydown', this._boundKeyDown);
@@ -339,6 +355,15 @@ class Runtime {
         // Clean up screen overlay
         if (this._screenOverlay) { this._screenOverlay.remove(); this._screenOverlay = null; }
         this._timeScale = 1;
+
+        // Clean up UI screens
+        this._activeScreens.forEach(el => el.remove());
+        this._activeScreens.clear();
+
+        // Reset camera overrides
+        this._cameraOverride = false;
+        this._cameraObj = null;
+        this._cameraFollow = null;
 
         // Restore camera FOV
         if (this._originalFov !== null) {
@@ -831,9 +856,29 @@ class Runtime {
 
         pc.mesh.position.copy(newPos);
 
-        // Update camera based on scheme
+        // Update camera based on scheme (skip if camera override from code blocks)
         const cam = this.scene3d.camera;
-        if (this.controlScheme === 'first-person') {
+        if (this._cameraOverride) {
+            // Camera follow mode
+            if (this._cameraFollow) {
+                const cf = this._cameraFollow;
+                let targetPos;
+                if (cf.target === 'player' && this.playerController) {
+                    targetPos = this.playerController.mesh.position;
+                } else if (cf.target === 'this object' && cf.object) {
+                    targetPos = cf.object.position;
+                }
+                if (targetPos) {
+                    const desired = new THREE.Vector3(
+                        targetPos.x + cf.distance * 0.5,
+                        targetPos.y + cf.distance * 0.4,
+                        targetPos.z + cf.distance * 0.5
+                    );
+                    cam.position.lerp(desired, 0.05);
+                    cam.lookAt(targetPos);
+                }
+            }
+        } else if (this.controlScheme === 'first-person') {
             cam.position.set(newPos.x, newPos.y + 0.3, newPos.z);
             const euler = new THREE.Euler(pc.pitch, pc.yaw, 0, 'YXZ');
             cam.quaternion.setFromEuler(euler);
@@ -1050,6 +1095,29 @@ class Runtime {
                     anim.object.position.y += anim.vy * dt;
                     if (anim.object.position.y <= anim.groundY) {
                         anim.object.position.y = anim.groundY;
+                        anim.done = true;
+                    }
+                    break;
+                }
+
+                case 'cameraGlide': {
+                    const progress = Math.min(anim.elapsed / (anim.duration / 1000), 1);
+                    const eased = progress < 0.5
+                        ? 2 * progress * progress
+                        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+                    this.scene3d.camera.position.lerpVectors(anim.startPos, anim.endPos, eased);
+                    if (progress >= 1) anim.done = true;
+                    break;
+                }
+
+                case 'cameraShake': {
+                    if (anim.elapsed * 1000 < anim.duration) {
+                        const cam = this.scene3d.camera;
+                        cam.position.x = anim.originalPos.x + (Math.random() - 0.5) * anim.intensity * 2;
+                        cam.position.y = anim.originalPos.y + (Math.random() - 0.5) * anim.intensity * 2;
+                        cam.position.z = anim.originalPos.z + (Math.random() - 0.5) * anim.intensity * 2;
+                    } else {
+                        this.scene3d.camera.position.copy(anim.originalPos);
                         anim.done = true;
                     }
                     break;
@@ -1626,6 +1694,93 @@ class Runtime {
                         if (obj.children[3]) obj.children[3].material.color.set(color);
                     }
                 }
+                break;
+            }
+
+            // Camera
+            case 'cameraSwitch': {
+                // Use this camera object's position and rotation as the game camera
+                const cam = this.scene3d.camera;
+                cam.position.copy(obj.position);
+                // Look in the direction the camera object faces (local +Z)
+                const forward = new THREE.Vector3(0, 0, 1);
+                forward.applyQuaternion(obj.quaternion);
+                cam.lookAt(obj.position.clone().add(forward));
+                this._cameraOverride = true;
+                this._cameraObj = obj;
+                break;
+            }
+            case 'cameraSwitchBack': {
+                this._cameraOverride = false;
+                this._cameraObj = null;
+                this._cameraFollow = null;
+                break;
+            }
+            case 'cameraLookAt': {
+                const cam2 = this.scene3d.camera;
+                const target = v.target || 'player';
+                if (target === 'player' && this.playerController) {
+                    cam2.lookAt(this.playerController.mesh.position);
+                } else if (target === 'this object') {
+                    cam2.lookAt(obj.position);
+                } else {
+                    cam2.lookAt(0, 0, 0);
+                }
+                break;
+            }
+            case 'cameraMoveTo': {
+                const cam3 = this.scene3d.camera;
+                cam3.position.set(
+                    parseFloat(v.x) || 0,
+                    parseFloat(v.y) || 5,
+                    parseFloat(v.z) || 10
+                );
+                this._cameraOverride = true;
+                break;
+            }
+            case 'cameraGlideTo': {
+                const cam4 = this.scene3d.camera;
+                const startPos = cam4.position.clone();
+                const endPos = new THREE.Vector3(
+                    parseFloat(v.x) || 0,
+                    parseFloat(v.y) || 5,
+                    parseFloat(v.z) || 10
+                );
+                const duration = (parseFloat(v.time) || 1) * 1000;
+                this._cameraOverride = true;
+                this.activeAnimations.push({
+                    type: 'cameraGlide',
+                    startPos,
+                    endPos,
+                    duration,
+                    elapsed: 0
+                });
+                await this.sleep(duration);
+                break;
+            }
+            case 'cameraFollow': {
+                const followTarget = v.target || 'player';
+                const dist = parseFloat(v.dist) || 8;
+                this._cameraOverride = true;
+                this._cameraFollow = { target: followTarget, distance: dist, object: obj };
+                break;
+            }
+            case 'cameraShake': {
+                const shakeIntensity = parseFloat(v.intensity) || 0.3;
+                const shakeDuration = (parseFloat(v.time) || 0.5) * 1000;
+                this.activeAnimations.push({
+                    type: 'cameraShake',
+                    intensity: shakeIntensity,
+                    duration: shakeDuration,
+                    elapsed: 0,
+                    originalPos: this.scene3d.camera.position.clone()
+                });
+                break;
+            }
+            case 'cameraFov': {
+                const fov = parseFloat(v.fov) || 75;
+                this.scene3d.camera.fov = Math.max(10, Math.min(150, fov));
+                this.scene3d.camera.updateProjectionMatrix();
                 break;
             }
 
@@ -2452,8 +2607,9 @@ class Runtime {
                 const result = v.result || 'win';
                 const overlay = document.createElement('div');
                 overlay.style.cssText = `
-                    position: fixed;
+                    position: absolute;
                     top: 0; left: 0; right: 0; bottom: 0;
+                    z-index: 90;
                     background: ${result === 'win' ? 'rgba(40,120,40,0.85)' : 'rgba(120,30,30,0.85)'};
                     display: flex;
                     flex-direction: column;
@@ -2474,7 +2630,7 @@ class Runtime {
                 overlay.appendChild(title);
                 overlay.appendChild(sub);
                 overlay.appendChild(btn);
-                document.body.appendChild(overlay);
+                (document.getElementById('play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(overlay);
                 btn.addEventListener('click', () => {
                     overlay.remove();
                     this.stop();
@@ -2842,9 +2998,9 @@ class Runtime {
                 const dialogText = v.text || 'Hello!';
                 const overlay = document.createElement('div');
                 overlay.style.cssText = `
-                    position:fixed;top:0;left:0;right:0;bottom:0;
+                    position:absolute;top:0;left:0;right:0;bottom:0;
                     background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;
-                    z-index:10002;backdrop-filter:blur(4px);
+                    z-index:90;backdrop-filter:blur(4px);
                 `;
                 const box = document.createElement('div');
                 box.style.cssText = `
@@ -2862,7 +3018,7 @@ class Runtime {
                 `;
                 box.appendChild(btn);
                 overlay.appendChild(box);
-                document.body.appendChild(overlay);
+                (document.getElementById('play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(overlay);
                 await new Promise(resolve => {
                     btn.addEventListener('click', () => { overlay.remove(); resolve(); });
                 });
@@ -2991,6 +3147,152 @@ class Runtime {
                 }
                 this._screenOverlay.style.background = tintColor;
                 this._screenOverlay.style.opacity = String(tintOpacity);
+                break;
+            }
+
+            case 'showScreen': {
+                const screenName = v.screen;
+                const screenDef = (this._uiScreens || []).find(s => s.name === screenName);
+                if (!screenDef) break;
+                // Remove if already showing
+                if (this._activeScreens.has(screenName)) {
+                    this._activeScreens.get(screenName).remove();
+                }
+                // Create DOM overlay
+                const overlay = document.createElement('div');
+                overlay.className = 'game-ui-screen';
+                overlay.style.background = screenDef.bgColor;
+                overlay.dataset.screenName = screenName;
+                // Render each element (panels first, then text, then buttons for z-order)
+                const sorted = [...screenDef.elements].sort((a, b) => {
+                    const order = { panel: 0, text: 1, button: 2 };
+                    return (order[a.type] || 0) - (order[b.type] || 0);
+                });
+                const runtime = this;
+                sorted.forEach(el => {
+                    const div = document.createElement('div');
+                    div.className = 'game-ui-element';
+                    if (el.type === 'button') {
+                        div.classList.add('game-ui-button');
+                    }
+                    div.style.cssText = `
+                        left:${el.x}%;top:${el.y}%;width:${el.width}%;height:${el.height}%;
+                        font-size:${el.fontSize}px;color:${el.color};
+                        background:${el.bgColor === 'transparent' ? 'transparent' : el.bgColor};
+                        text-align:${el.align};display:flex;align-items:center;padding:0 12px;
+                        justify-content:${el.align === 'center' ? 'center' : el.align === 'right' ? 'flex-end' : 'flex-start'};
+                        border-radius:${el.type === 'button' ? '8px' : el.type === 'panel' ? '6px' : '0'};
+                        ${el.type === 'button' ? 'box-shadow:0 3px 10px rgba(0,0,0,0.3);font-weight:600;cursor:pointer;' : ''}
+                    `;
+                    div.textContent = el.text || '';
+                    if (el.type === 'button') {
+                        div.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            if (el.action && runtime.isRunning) {
+                                runtime.triggerEvent('onMessage', { msg: el.action });
+                            }
+                        });
+                    }
+                    overlay.appendChild(div);
+                });
+                (document.getElementById('play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(overlay);
+                this._activeScreens.set(screenName, overlay);
+                break;
+            }
+            case 'hideScreen': {
+                const hsName = v.screen;
+                if (this._activeScreens.has(hsName)) {
+                    this._activeScreens.get(hsName).remove();
+                    this._activeScreens.delete(hsName);
+                }
+                break;
+            }
+            case 'hideAllScreens': {
+                this._activeScreens.forEach(el => el.remove());
+                this._activeScreens.clear();
+                break;
+            }
+            case 'uiSetText': {
+                const scrOverlay = this._activeScreens.get(v.screen);
+                if (!scrOverlay) break;
+                const oldText = v.old || '';
+                const newText = v.new || '';
+                scrOverlay.querySelectorAll('.game-ui-element').forEach(el => {
+                    if (el.textContent.trim() === oldText.trim()) el.textContent = newText;
+                });
+                break;
+            }
+            case 'uiSetColor': {
+                const scrOverlay2 = this._activeScreens.get(v.screen);
+                if (!scrOverlay2) break;
+                const elName = (v.element || '').trim();
+                scrOverlay2.querySelectorAll('.game-ui-element').forEach(el => {
+                    if (el.textContent.trim() === elName) el.style.background = v.color;
+                });
+                break;
+            }
+            case 'uiSetVisible': {
+                const scrOverlay3 = this._activeScreens.get(v.screen);
+                if (!scrOverlay3) break;
+                const elName2 = (v.element || '').trim();
+                const showIt = v.action === 'show';
+                scrOverlay3.querySelectorAll('.game-ui-element').forEach(el => {
+                    if (el.textContent.trim() === elName2) {
+                        el.style.display = showIt ? 'flex' : 'none';
+                    }
+                });
+                break;
+            }
+            case 'uiAddText': {
+                // Add to the last shown screen
+                let lastScr = null;
+                this._activeScreens.forEach(s => lastScr = s);
+                if (!lastScr) break;
+                const newEl = document.createElement('div');
+                newEl.className = 'game-ui-element';
+                newEl.style.cssText = `left:${v.x||50}%;top:${v.y||50}%;font-size:24px;color:#ffffff;display:flex;align-items:center;justify-content:center;`;
+                newEl.textContent = v.text || 'Hello';
+                lastScr.appendChild(newEl);
+                break;
+            }
+            case 'uiAddButton': {
+                let lastScr2 = null;
+                this._activeScreens.forEach(s => lastScr2 = s);
+                if (!lastScr2) break;
+                const btnEl = document.createElement('div');
+                btnEl.className = 'game-ui-element game-ui-button';
+                btnEl.style.cssText = `left:50%;top:80%;width:25%;height:7%;font-size:18px;color:#fff;background:#4C97FF;display:flex;align-items:center;justify-content:center;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,0.3);font-weight:600;cursor:pointer;padding:0 12px;`;
+                btnEl.textContent = v.text || 'Click';
+                const runtime2 = this;
+                const btnMsg = v.msg || 'clicked';
+                btnEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (runtime2.isRunning) runtime2.triggerEvent('onMessage', { msg: btnMsg });
+                });
+                lastScr2.appendChild(btnEl);
+                break;
+            }
+            case 'uiClearScreen': {
+                const scrOverlay6 = this._activeScreens.get(v.screen);
+                if (!scrOverlay6) break;
+                scrOverlay6.innerHTML = '';
+                break;
+            }
+            case 'uiTextOverlay': {
+                const txtOverlay = document.createElement('div');
+                txtOverlay.className = 'game-ui-screen';
+                txtOverlay.style.cssText = 'display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:85;';
+                const txtEl = document.createElement('div');
+                txtEl.style.cssText = 'font-size:48px;color:#fff;font-weight:700;text-shadow:0 2px 12px rgba(0,0,0,0.6);font-family:Inter,sans-serif;text-align:center;';
+                txtEl.textContent = v.text || 'Text';
+                txtOverlay.appendChild(txtEl);
+                (document.getElementById('play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(txtOverlay);
+                const dur = (parseFloat(v.time) || 2) * 1000;
+                setTimeout(() => {
+                    txtEl.style.opacity = '0';
+                    txtEl.style.transition = 'opacity 0.4s ease';
+                    setTimeout(() => txtOverlay.remove(), 400);
+                }, dur);
                 break;
             }
 

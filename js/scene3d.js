@@ -76,15 +76,17 @@ class Scene3D {
         this.sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
         this.sunLight.position.set(15, 25, 15);
         this.sunLight.castShadow = true;
-        this.sunLight.shadow.mapSize.width = 1024;
-        this.sunLight.shadow.mapSize.height = 1024;
+        this.sunLight.shadow.mapSize.width = 2048;
+        this.sunLight.shadow.mapSize.height = 2048;
         this.sunLight.shadow.camera.near = 0.5;
-        this.sunLight.shadow.camera.far = 100;
-        this.sunLight.shadow.camera.left = -30;
-        this.sunLight.shadow.camera.right = 30;
-        this.sunLight.shadow.camera.top = 30;
-        this.sunLight.shadow.camera.bottom = -30;
-        this.sunLight.shadow.bias = -0.001;
+        this.sunLight.shadow.camera.far = 120;
+        this.sunLight.shadow.camera.left = -35;
+        this.sunLight.shadow.camera.right = 35;
+        this.sunLight.shadow.camera.top = 35;
+        this.sunLight.shadow.camera.bottom = -35;
+        this.sunLight.shadow.bias = -0.003;
+        this.sunLight.shadow.normalBias = 0.02;
+        this.sunLight.shadow.radius = 2;
         this.scene.add(this.sunLight);
     }
 
@@ -591,9 +593,9 @@ class Scene3D {
                     emissiveIntensity: 0.8
                 });
                 mesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 8), lightMat);
-                // Add actual point light
+                // Add actual point light (no shadow to avoid flicker)
                 const pointLight = new THREE.PointLight(0xf1c40f, 1, 15);
-                pointLight.castShadow = true;
+                pointLight.castShadow = false;
                 mesh.add(pointLight);
                 break;
             }
@@ -637,6 +639,42 @@ class Scene3D {
                 legR.castShadow = true;
                 npcGroup.add(legR);
                 mesh = npcGroup;
+                break;
+            }
+            case 'camera': {
+                const camGroup = new THREE.Group();
+                // Camera body
+                const camBody = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.5, 0.35, 0.3),
+                    new THREE.MeshStandardMaterial({ color: 0x8e44ad, roughness: 0.4, metalness: 0.3 })
+                );
+                camBody.castShadow = true;
+                camGroup.add(camBody);
+                // Lens
+                const lens = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.1, 0.12, 0.2, 12),
+                    new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.2, metalness: 0.6 })
+                );
+                lens.rotation.x = Math.PI / 2;
+                lens.position.set(0, 0, 0.22);
+                lens.castShadow = true;
+                camGroup.add(lens);
+                // Lens glass
+                const glass = new THREE.Mesh(
+                    new THREE.CircleGeometry(0.09, 16),
+                    new THREE.MeshStandardMaterial({ color: 0x5dade2, emissive: 0x5dade2, emissiveIntensity: 0.3, roughness: 0.1, metalness: 0.8 })
+                );
+                glass.position.set(0, 0, 0.33);
+                camGroup.add(glass);
+                // View direction indicator (cone pointing forward)
+                const viewCone = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.3, 0.6, 4),
+                    new THREE.MeshStandardMaterial({ color: 0x8e44ad, transparent: true, opacity: 0.2, emissive: 0x8e44ad, emissiveIntensity: 0.3 })
+                );
+                viewCone.rotation.x = -Math.PI / 2;
+                viewCone.position.set(0, 0, 0.65);
+                camGroup.add(viewCone);
+                mesh = camGroup;
                 break;
             }
             case 'custom': {
@@ -728,7 +766,7 @@ class Scene3D {
             locked: false,
             visible: true,
             scripts: [],
-            isPrefab: ['spawn', 'light-point', 'coin', 'npc', 'tree', 'house', 'platform', 'bridge', 'crate', 'gem', 'custom'].includes(type)
+            isPrefab: ['spawn', 'light-point', 'coin', 'npc', 'tree', 'house', 'platform', 'bridge', 'crate', 'gem', 'camera', 'custom'].includes(type)
         };
 
         this.scene.add(mesh);
