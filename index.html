@@ -9,6 +9,79 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 </head>
 <body class="editor-expanded">
+    <!-- Title Screen / Project Browser -->
+    <div id="title-screen" class="hidden">
+        <div class="title-header">
+            <div class="title-brand">
+                <span class="title-logo-icon">&#9670;</span>
+                <span class="title-logo-text">BlockForge Studio</span>
+                <span class="title-tagline">Build 3D games with blocks</span>
+            </div>
+        </div>
+        <div class="title-content">
+            <div class="title-actions">
+                <button class="title-new-btn" id="btn-new-project">
+                    <span class="material-icons-round">add</span>
+                    New Project
+                </button>
+                <button class="title-import-btn" id="btn-import-project">
+                    <span class="material-icons-round">file_upload</span>
+                    Import JSON
+                </button>
+            </div>
+            <div class="title-section-header">
+                <span>My Projects</span>
+                <span class="project-count" id="project-count">0</span>
+            </div>
+            <div class="project-grid" id="project-grid">
+                <!-- Populated dynamically -->
+            </div>
+            <div class="title-empty-state" id="title-empty">
+                <span class="material-icons-round">videogame_asset</span>
+                <p>No projects yet</p>
+                <span class="empty-hint">Click "New Project" to get started</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Project Modal -->
+    <div id="new-project-modal" class="hidden">
+        <div class="new-project-dialog">
+            <div class="new-project-dialog-header">
+                <span class="material-icons-round">rocket_launch</span>
+                <h3>Create New Project</h3>
+            </div>
+            <div class="new-project-dialog-body">
+                <label for="new-project-name">Project Name</label>
+                <input type="text" id="new-project-name" class="project-name-input" placeholder="My Awesome Game" maxlength="60" autocomplete="off" spellcheck="false">
+                <div class="new-project-templates">
+                    <label>Start From</label>
+                    <div class="template-options">
+                        <div class="template-option selected" data-template="empty">
+                            <span class="material-icons-round">check_box_outline_blank</span>
+                            <span>Empty</span>
+                        </div>
+                        <div class="template-option" data-template="flat-arena">
+                            <span class="material-icons-round">sports_mma</span>
+                            <span>Arena</span>
+                        </div>
+                        <div class="template-option" data-template="platformer">
+                            <span class="material-icons-round">layers</span>
+                            <span>Platformer</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="new-project-dialog-footer">
+                <button class="new-project-cancel-btn" id="new-project-cancel">Cancel</button>
+                <button class="new-project-create-btn" id="new-project-create">
+                    <span class="material-icons-round">arrow_forward</span>
+                    Create
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Top Toolbar -->
     <div id="toolbar">
         <div class="toolbar-left">

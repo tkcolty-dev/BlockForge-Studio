@@ -30,6 +30,9 @@ class App {
         this.initCustomObjects();
         this.initUIScreens();
 
+        this.currentProjectId = null;
+        this.projectName = null;
+
         this.scene3d.onObjectSelected = (obj) => this.onObjectSelected(obj);
         this.scene3d.onObjectDeselected = () => this.onObjectDeselected();
         this.scene3d.onObjectChanged = (obj) => this.updateProperties(obj);
@@ -39,7 +42,13 @@ class App {
 
         this.runtime.onStop = () => this.onPlayStop();
 
-        this.loadFromHash();
+        // Migrate old single-project storage to multi-project
+        this.migrateOldProject();
+        this.initTitleScreen();
+
+        // Check for shared project URL
+        const loadedFromHash = this.loadFromHash();
+
         this.refreshExplorer();
         this.updateObjectCount();
 
@@ -49,7 +58,19 @@ class App {
         this.initTutorial();
         this.initTooltips();
 
-        this.toast('BlockForge Studio loaded! Start building your game.');
+        // Show title screen if no project was loaded from hash
+        if (!loadedFromHash) {
+            this.showTitleScreen();
+        } else {
+            this.toast('BlockForge Studio loaded! Start building your game.');
+        }
+
+        // Auto-save every 60 seconds
+        setInterval(() => {
+            if (this.currentProjectId) {
+                this.saveProject(true);
+            }
+        }, 60000);
     }
 
     // ===== Toolbar =====
@@ -752,6 +773,7 @@ class App {
 
     initKeyboard() {
         document.addEventListener('keydown', (e) => {
+            if (!this.currentProjectId) return;
             if (this.runtime.isRunning) return;
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
 
@@ -885,9 +907,527 @@ class App {
 
     initSaveLoad() {
         document.getElementById('btn-save').addEventListener('click', () => this.saveProject());
-        document.getElementById('btn-load').addEventListener('click', () => this.loadProject());
+        document.getElementById('btn-load').addEventListener('click', () => this.showTitleScreen());
         document.getElementById('btn-export').addEventListener('click', () => this.exportGame());
         document.getElementById('btn-share').addEventListener('click', () => this.shareProject());
+
+        // Update tooltip for load button
+        const loadBtn = document.getElementById('btn-load');
+        loadBtn.title = 'My Projects';
+        if (loadBtn.dataset.tooltip !== undefined) loadBtn.dataset.tooltip = 'My Projects';
+    }
+
+    // ===== Multi-Project Storage =====
+
+    generateProjectId() {
+        return 'proj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+    }
+
+    getProjectIndex() {
+        try {
+            return JSON.parse(localStorage.getItem('blockforge_projects') || '{}');
+        } catch (e) {
+            return {};
+        }
+    }
+
+    saveProjectIndex(index) {
+        localStorage.setItem('blockforge_projects', JSON.stringify(index));
+    }
+
+    getProjectData(id) {
+        try {
+            return JSON.parse(localStorage.getItem('blockforge_project_' + id));
+        } catch (e) {
+            return null;
+        }
+    }
+
+    saveProjectData(id, data) {
+        localStorage.setItem('blockforge_project_' + id, JSON.stringify(data));
+    }
+
+    deleteProjectData(id) {
+        localStorage.removeItem('blockforge_project_' + id);
+        const index = this.getProjectIndex();
+        delete index[id];
+        this.saveProjectIndex(index);
+    }
+
+    _gatherProjectData() {
+        return {
+            version: 1,
+            name: this.projectName || 'My Game',
+            scene: this.scene3d.serialize(),
+            customVariables: this.blockCode.customVariables,
+            customMessages: this.blockCode.customMessages,
+            customObjects: this.customObjects,
+            uiScreens: this.uiScreens,
+            environment: {
+                skyColor: document.getElementById('sky-color').value,
+                skybox: document.getElementById('skybox-type').value,
+                ambientLight: document.getElementById('ambient-light').value,
+                fogDensity: document.getElementById('fog-density').value,
+                shadows: document.getElementById('shadows-enabled').checked,
+                weather: document.getElementById('weather-type').value,
+                bgMusic: document.getElementById('bg-music').value,
+                musicVolume: document.getElementById('music-volume').value,
+                playerColors: this.gameSettings.playerColors
+            }
+        };
+    }
+
+    _applyProjectData(data) {
+        this.scene3d.deserialize(data.scene);
+
+        if (data.customVariables) {
+            this.blockCode.customVariables = data.customVariables;
+            this.blockCode._updateVariableDropdowns();
+        }
+        if (data.customMessages) {
+            this.blockCode.customMessages = data.customMessages;
+            this.blockCode._updateMessageDropdowns();
+        }
+
+        if (data.customObjects) {
+            this.customObjects = data.customObjects;
+            this.renderCustomObjectButtons();
+        }
+
+        if (data.uiScreens) {
+            this.uiScreens = data.uiScreens;
+            this.renderScreenButtons();
+            this.blockCode._updateScreenDropdowns(this.uiScreens);
+        }
+
+        if (data.environment) {
+            document.getElementById('sky-color').value = data.environment.skyColor;
+            document.getElementById('ambient-light').value = data.environment.ambientLight;
+            document.getElementById('fog-density').value = data.environment.fogDensity;
+            document.getElementById('shadows-enabled').checked = data.environment.shadows;
+
+            this.scene3d.setSkyColor(data.environment.skyColor);
+            if (data.environment.skybox) {
+                document.getElementById('skybox-type').value = data.environment.skybox;
+                this.scene3d.setSkybox(data.environment.skybox);
+            }
+            this.scene3d.setAmbientIntensity(data.environment.ambientLight / 100);
+            this.scene3d.setFog(parseInt(data.environment.fogDensity));
+            this.scene3d.setShadows(data.environment.shadows);
+
+            if (data.environment.weather) {
+                document.getElementById('weather-type').value = data.environment.weather;
+                this.scene3d.setWeather(data.environment.weather);
+            }
+            if (data.environment.bgMusic) {
+                document.getElementById('bg-music').value = data.environment.bgMusic;
+                this.gameSettings.bgMusic = data.environment.bgMusic;
+            }
+            if (data.environment.musicVolume) {
+                document.getElementById('music-volume').value = data.environment.musicVolume;
+                this.gameSettings.musicVolume = parseInt(data.environment.musicVolume);
+            }
+            if (data.environment.playerColors) {
+                this.gameSettings.playerColors = data.environment.playerColors;
+                document.getElementById('setting-player-body').value = data.environment.playerColors.body;
+                document.getElementById('setting-player-head').value = data.environment.playerColors.head;
+                document.getElementById('setting-player-detail').value = data.environment.playerColors.detail;
+            }
+        }
+
+        this.refreshExplorer();
+        this.updateObjectCount();
+    }
+
+    captureThumbnail() {
+        try {
+            this.scene3d.renderer.render(this.scene3d.scene, this.scene3d.camera);
+            const src = this.scene3d.renderer.domElement;
+            const c = document.createElement('canvas');
+            c.width = 320; c.height = 180;
+            c.getContext('2d').drawImage(src, 0, 0, 320, 180);
+            return c.toDataURL('image/jpeg', 0.6);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    migrateOldProject() {
+        const old = localStorage.getItem('blockforge_project');
+        if (!old) return;
+        try {
+            const data = JSON.parse(old);
+            const id = this.generateProjectId();
+            const now = Date.now();
+            this.saveProjectData(id, data);
+            const index = this.getProjectIndex();
+            index[id] = {
+                name: data.name || 'My Game',
+                createdAt: now,
+                modifiedAt: now,
+                thumbnail: null
+            };
+            this.saveProjectIndex(index);
+            localStorage.removeItem('blockforge_project');
+        } catch (e) {
+            console.error('Migration failed:', e);
+        }
+    }
+
+    // ===== Title Screen =====
+
+    initTitleScreen() {
+        document.getElementById('btn-new-project').addEventListener('click', () => this.showNewProjectModal());
+        document.getElementById('btn-import-project').addEventListener('click', () => this.importProjectFromFile());
+
+        // New project modal
+        const modal = document.getElementById('new-project-modal');
+        const nameInput = document.getElementById('new-project-name');
+
+        document.getElementById('new-project-cancel').addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+
+        document.getElementById('new-project-create').addEventListener('click', () => {
+            this._confirmNewProject();
+        });
+
+        nameInput.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') this._confirmNewProject();
+            if (e.key === 'Escape') modal.classList.add('hidden');
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.add('hidden');
+        });
+
+        // Template option selection
+        document.querySelectorAll('#new-project-modal .template-option').forEach(opt => {
+            opt.addEventListener('click', () => {
+                document.querySelectorAll('#new-project-modal .template-option').forEach(o => o.classList.remove('selected'));
+                opt.classList.add('selected');
+            });
+        });
+
+        // Logo click returns to title screen
+        const logo = document.querySelector('#toolbar .logo');
+        if (logo) {
+            logo.style.cursor = 'pointer';
+            logo.addEventListener('click', () => this.showTitleScreen());
+        }
+    }
+
+    showNewProjectModal() {
+        const modal = document.getElementById('new-project-modal');
+        const nameInput = document.getElementById('new-project-name');
+        nameInput.value = '';
+        // Reset template to empty
+        document.querySelectorAll('#new-project-modal .template-option').forEach(o => o.classList.remove('selected'));
+        document.querySelector('#new-project-modal .template-option[data-template="empty"]').classList.add('selected');
+        modal.classList.remove('hidden');
+        setTimeout(() => nameInput.focus(), 50);
+    }
+
+    _confirmNewProject() {
+        const modal = document.getElementById('new-project-modal');
+        const nameInput = document.getElementById('new-project-name');
+        const name = nameInput.value.trim() || 'My Game';
+        const selectedTemplate = document.querySelector('#new-project-modal .template-option.selected');
+        const templateKey = selectedTemplate ? selectedTemplate.dataset.template : 'empty';
+
+        modal.classList.add('hidden');
+        this.createNewProject(name, templateKey);
+    }
+
+    showTitleScreen() {
+        // Auto-save current project before showing title screen
+        if (this.currentProjectId) {
+            this.saveProject(true);
+        }
+        this.currentProjectId = null;
+        this.projectName = null;
+
+        document.getElementById('title-screen').classList.remove('hidden');
+        this.renderProjectGrid();
+    }
+
+    hideTitleScreen() {
+        document.getElementById('title-screen').classList.add('hidden');
+        setTimeout(() => this.scene3d.onResize(), 50);
+    }
+
+    createNewProject(name, templateKey) {
+        const id = this.generateProjectId();
+        this.currentProjectId = id;
+        this.projectName = name;
+
+        // Reset editor state
+        this.scene3d.deserialize([]);
+        this.blockCode.customVariables = [];
+        this.blockCode.customMessages = [];
+        this.blockCode._updateVariableDropdowns();
+        this.blockCode._updateMessageDropdowns();
+        this.customObjects = [];
+        this.renderCustomObjectButtons();
+        this.uiScreens = [];
+        this.renderScreenButtons();
+        this.blockCode._updateScreenDropdowns(this.uiScreens);
+        this.undoStack = [];
+        this.redoStack = [];
+
+        // Reset environment to defaults
+        document.getElementById('sky-color').value = '#87CEEB';
+        document.getElementById('skybox-type').value = 'default';
+        document.getElementById('ambient-light').value = '60';
+        document.getElementById('fog-density').value = '0';
+        document.getElementById('shadows-enabled').checked = true;
+        document.getElementById('weather-type').value = 'none';
+        document.getElementById('bg-music').value = 'none';
+        document.getElementById('music-volume').value = '30';
+        this.scene3d.setSkyColor('#87CEEB');
+        this.scene3d.setSkybox('default');
+        this.scene3d.setAmbientIntensity(0.6);
+        this.scene3d.setFog(0);
+        this.scene3d.setShadows(true);
+        this.scene3d.setWeather('none');
+        this.gameSettings.bgMusic = 'none';
+        this.gameSettings.musicVolume = 30;
+
+        // Apply template if selected
+        if (templateKey && templateKey !== 'empty' && this.templates && this.templates[templateKey]) {
+            const tmpl = this.templates[templateKey];
+            tmpl.scene.forEach(objData => {
+                const obj = this.scene3d.addObject(objData.type, {
+                    position: objData.position,
+                    color: objData.color
+                });
+                if (obj) {
+                    obj.userData.name = objData.name;
+                    if (objData.rotation) obj.rotation.set(
+                        THREE.MathUtils.degToRad(objData.rotation.x),
+                        THREE.MathUtils.degToRad(objData.rotation.y),
+                        THREE.MathUtils.degToRad(objData.rotation.z)
+                    );
+                    if (objData.scale) obj.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                    if (objData.anchored !== undefined) obj.userData.anchored = objData.anchored;
+                    if (objData.collidable !== undefined) obj.userData.collidable = objData.collidable;
+                    if (objData.scripts) obj.userData.scripts = objData.scripts;
+                }
+            });
+            if (tmpl.environment) {
+                if (tmpl.environment.skybox) {
+                    this.scene3d.setSkybox(tmpl.environment.skybox);
+                    document.getElementById('skybox-type').value = tmpl.environment.skybox;
+                }
+            }
+        }
+
+        this.refreshExplorer();
+        this.updateObjectCount();
+
+        // Save project
+        this.saveProject(true);
+        this.hideTitleScreen();
+        this.toast('New project created: ' + name);
+    }
+
+    loadProjectById(id) {
+        const data = this.getProjectData(id);
+        if (!data) {
+            this.toast('Failed to load project', 'error');
+            return;
+        }
+
+        const index = this.getProjectIndex();
+        this.currentProjectId = id;
+        this.projectName = (index[id] && index[id].name) || data.name || 'My Game';
+
+        this.undoStack = [];
+        this.redoStack = [];
+
+        this._applyProjectData(data);
+        this.hideTitleScreen();
+        this.toast('Opened: ' + this.projectName);
+    }
+
+    duplicateProject(id) {
+        const data = this.getProjectData(id);
+        if (!data) return;
+        const index = this.getProjectIndex();
+        const origMeta = index[id] || {};
+        const newId = this.generateProjectId();
+        const now = Date.now();
+        const newName = (origMeta.name || 'Untitled') + ' (Copy)';
+        data.name = newName;
+        this.saveProjectData(newId, data);
+        index[newId] = {
+            name: newName,
+            createdAt: now,
+            modifiedAt: now,
+            thumbnail: origMeta.thumbnail || null
+        };
+        this.saveProjectIndex(index);
+        this.renderProjectGrid();
+        this.toast('Duplicated: ' + newName, 'success');
+    }
+
+    renameProject(id) {
+        const index = this.getProjectIndex();
+        const meta = index[id];
+        if (!meta) return;
+        const newName = prompt('Rename project:', meta.name || 'Untitled');
+        if (!newName || newName === meta.name) return;
+        meta.name = newName;
+        this.saveProjectIndex(index);
+        // Also update project data name
+        const data = this.getProjectData(id);
+        if (data) {
+            data.name = newName;
+            this.saveProjectData(id, data);
+        }
+        this.renderProjectGrid();
+    }
+
+    renderProjectGrid() {
+        const grid = document.getElementById('project-grid');
+        const empty = document.getElementById('title-empty');
+        const countEl = document.getElementById('project-count');
+        const index = this.getProjectIndex();
+
+        // Sort by modifiedAt descending
+        const entries = Object.entries(index).sort((a, b) => (b[1].modifiedAt || 0) - (a[1].modifiedAt || 0));
+
+        countEl.textContent = entries.length;
+        grid.innerHTML = '';
+
+        if (entries.length === 0) {
+            empty.style.display = '';
+            return;
+        }
+        empty.style.display = 'none';
+
+        entries.forEach(([id, meta]) => {
+            const card = document.createElement('div');
+            card.className = 'project-card';
+
+            const thumb = document.createElement('div');
+            thumb.className = 'project-card-thumb';
+            if (meta.thumbnail) {
+                const img = document.createElement('img');
+                img.src = meta.thumbnail;
+                img.alt = meta.name;
+                thumb.appendChild(img);
+            } else {
+                const icon = document.createElement('span');
+                icon.className = 'material-icons-round thumb-placeholder';
+                icon.textContent = 'view_in_ar';
+                thumb.appendChild(icon);
+            }
+
+            const info = document.createElement('div');
+            info.className = 'project-card-info';
+            const nameEl = document.createElement('div');
+            nameEl.className = 'project-name';
+            nameEl.textContent = meta.name || 'Untitled';
+            const dateEl = document.createElement('div');
+            dateEl.className = 'project-date';
+            dateEl.textContent = this._formatRelativeTime(meta.modifiedAt);
+            info.appendChild(nameEl);
+            info.appendChild(dateEl);
+
+            // Card action buttons (top-right, shown on hover)
+            const actions = document.createElement('div');
+            actions.className = 'project-card-actions';
+
+            const dupBtn = document.createElement('button');
+            dupBtn.className = 'project-card-action-btn';
+            dupBtn.innerHTML = '<span class="material-icons-round">content_copy</span>';
+            dupBtn.title = 'Duplicate';
+            dupBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.duplicateProject(id);
+            });
+
+            const renameBtn = document.createElement('button');
+            renameBtn.className = 'project-card-action-btn';
+            renameBtn.innerHTML = '<span class="material-icons-round">edit</span>';
+            renameBtn.title = 'Rename';
+            renameBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.renameProject(id);
+            });
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'project-card-action-btn project-card-action-delete';
+            delBtn.innerHTML = '<span class="material-icons-round">delete_outline</span>';
+            delBtn.title = 'Delete';
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (confirm('Delete "' + (meta.name || 'Untitled') + '"? This cannot be undone.')) {
+                    this.deleteProjectData(id);
+                    this.renderProjectGrid();
+                }
+            });
+
+            actions.appendChild(dupBtn);
+            actions.appendChild(renameBtn);
+            actions.appendChild(delBtn);
+
+            card.appendChild(thumb);
+            card.appendChild(info);
+            card.appendChild(actions);
+            card.addEventListener('click', () => this.loadProjectById(id));
+            grid.appendChild(card);
+        });
+    }
+
+    _formatRelativeTime(timestamp) {
+        if (!timestamp) return '';
+        const diff = Date.now() - timestamp;
+        const seconds = Math.floor(diff / 1000);
+        if (seconds < 60) return 'Just now';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return minutes + ' min ago';
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
+        const days = Math.floor(hours / 24);
+        if (days < 30) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
+        const months = Math.floor(days / 30);
+        return months + ' month' + (months > 1 ? 's' : '') + ' ago';
+    }
+
+    importProjectFromFile() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    const id = this.generateProjectId();
+                    const now = Date.now();
+                    this.saveProjectData(id, data);
+                    const index = this.getProjectIndex();
+                    index[id] = {
+                        name: data.name || file.name.replace('.json', ''),
+                        createdAt: now,
+                        modifiedAt: now,
+                        thumbnail: null
+                    };
+                    this.saveProjectIndex(index);
+                    this.renderProjectGrid();
+                    this.toast('Project imported!', 'success');
+                } catch (err) {
+                    this.toast('Failed to import: invalid JSON', 'error');
+                }
+            };
+            reader.readAsText(file);
+        });
+        input.click();
     }
 
     // ===== Templates =====
@@ -1369,128 +1909,43 @@ class App {
         });
     }
 
-    saveProject() {
-        const data = {
-            version: 1,
-            name: 'My Game',
-            scene: this.scene3d.serialize(),
-            customVariables: this.blockCode.customVariables,
-            customMessages: this.blockCode.customMessages,
-            customObjects: this.customObjects,
-            uiScreens: this.uiScreens,
-            environment: {
-                skyColor: document.getElementById('sky-color').value,
-                ambientLight: document.getElementById('ambient-light').value,
-                fogDensity: document.getElementById('fog-density').value,
-                shadows: document.getElementById('shadows-enabled').checked,
-                weather: document.getElementById('weather-type').value,
-                bgMusic: document.getElementById('bg-music').value,
-                musicVolume: document.getElementById('music-volume').value,
-                playerColors: this.gameSettings.playerColors
-            }
-        };
+    saveProject(silent) {
+        if (!this.currentProjectId) return;
 
-        localStorage.setItem('blockforge_project', JSON.stringify(data));
-        this.toast('Project saved!', 'success');
+        const data = this._gatherProjectData();
+        this.saveProjectData(this.currentProjectId, data);
+
+        // Update index metadata + thumbnail
+        const index = this.getProjectIndex();
+        const existing = index[this.currentProjectId] || {};
+        const thumbnail = this.captureThumbnail();
+        index[this.currentProjectId] = {
+            name: this.projectName || data.name || 'My Game',
+            createdAt: existing.createdAt || Date.now(),
+            modifiedAt: Date.now(),
+            thumbnail: thumbnail || existing.thumbnail || null
+        };
+        this.saveProjectIndex(index);
+
+        if (!silent) {
+            this.toast('Project saved!', 'success');
+        }
     }
 
     loadProject() {
-        const raw = localStorage.getItem('blockforge_project');
-        if (!raw) {
-            this.toast('No saved project found', 'error');
-            return;
-        }
-
-        try {
-            const data = JSON.parse(raw);
-            this.scene3d.deserialize(data.scene);
-
-            if (data.customVariables) {
-                this.blockCode.customVariables = data.customVariables;
-                this.blockCode._updateVariableDropdowns();
-            }
-            if (data.customMessages) {
-                this.blockCode.customMessages = data.customMessages;
-                this.blockCode._updateMessageDropdowns();
-            }
-
-            if (data.customObjects) {
-                this.customObjects = data.customObjects;
-                this.renderCustomObjectButtons();
-            }
-
-            if (data.uiScreens) {
-                this.uiScreens = data.uiScreens;
-                this.renderScreenButtons();
-                this.blockCode._updateScreenDropdowns(this.uiScreens);
-            }
-
-            if (data.environment) {
-                document.getElementById('sky-color').value = data.environment.skyColor;
-                document.getElementById('ambient-light').value = data.environment.ambientLight;
-                document.getElementById('fog-density').value = data.environment.fogDensity;
-                document.getElementById('shadows-enabled').checked = data.environment.shadows;
-
-                this.scene3d.setSkyColor(data.environment.skyColor);
-                this.scene3d.setAmbientIntensity(data.environment.ambientLight / 100);
-                this.scene3d.setFog(parseInt(data.environment.fogDensity));
-                this.scene3d.setShadows(data.environment.shadows);
-
-                if (data.environment.weather) {
-                    document.getElementById('weather-type').value = data.environment.weather;
-                    this.scene3d.setWeather(data.environment.weather);
-                }
-                if (data.environment.bgMusic) {
-                    document.getElementById('bg-music').value = data.environment.bgMusic;
-                    this.gameSettings.bgMusic = data.environment.bgMusic;
-                }
-                if (data.environment.musicVolume) {
-                    document.getElementById('music-volume').value = data.environment.musicVolume;
-                    this.gameSettings.musicVolume = parseInt(data.environment.musicVolume);
-                }
-                if (data.environment.playerColors) {
-                    this.gameSettings.playerColors = data.environment.playerColors;
-                    document.getElementById('setting-player-body').value = data.environment.playerColors.body;
-                    document.getElementById('setting-player-head').value = data.environment.playerColors.head;
-                    document.getElementById('setting-player-detail').value = data.environment.playerColors.detail;
-                }
-            }
-
-            this.refreshExplorer();
-            this.updateObjectCount();
-            this.toast('Project loaded!', 'success');
-        } catch (e) {
-            this.toast('Failed to load project', 'error');
-            console.error(e);
-        }
+        // Legacy method — now just opens the title screen
+        this.showTitleScreen();
     }
 
     exportGame() {
-        const data = {
-            version: 1,
-            name: 'My Game',
-            scene: this.scene3d.serialize(),
-            customVariables: this.blockCode.customVariables,
-            customMessages: this.blockCode.customMessages,
-            customObjects: this.customObjects,
-            uiScreens: this.uiScreens,
-            environment: {
-                skyColor: document.getElementById('sky-color').value,
-                ambientLight: document.getElementById('ambient-light').value,
-                fogDensity: document.getElementById('fog-density').value,
-                shadows: document.getElementById('shadows-enabled').checked,
-                weather: document.getElementById('weather-type').value,
-                bgMusic: document.getElementById('bg-music').value,
-                musicVolume: document.getElementById('music-volume').value,
-                playerColors: this.gameSettings.playerColors
-            }
-        };
+        const data = this._gatherProjectData();
+        const filename = (this.projectName || 'blockforge-game').replace(/[^a-z0-9_-]/gi, '_') + '.json';
 
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'blockforge-game.json';
+        a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
 
@@ -1568,25 +2023,7 @@ class App {
     // ===== Share Link =====
 
     shareProject() {
-        const data = {
-            version: 1,
-            name: 'My Game',
-            scene: this.scene3d.serialize(),
-            customVariables: this.blockCode.customVariables,
-            customMessages: this.blockCode.customMessages,
-            customObjects: this.customObjects,
-            uiScreens: this.uiScreens,
-            environment: {
-                skyColor: document.getElementById('sky-color').value,
-                ambientLight: document.getElementById('ambient-light').value,
-                fogDensity: document.getElementById('fog-density').value,
-                shadows: document.getElementById('shadows-enabled').checked,
-                weather: document.getElementById('weather-type').value,
-                bgMusic: document.getElementById('bg-music').value,
-                musicVolume: document.getElementById('music-volume').value,
-                playerColors: this.gameSettings.playerColors
-            }
-        };
+        const data = this._gatherProjectData();
         try {
             const json = JSON.stringify(data);
             const encoded = btoa(unescape(encodeURIComponent(json)));
@@ -1610,69 +2047,28 @@ class App {
 
     loadFromHash() {
         const hash = window.location.hash;
-        if (!hash || !hash.startsWith('#project=')) return;
+        if (!hash || !hash.startsWith('#project=')) return false;
         try {
             const encoded = hash.substring('#project='.length);
             const json = decodeURIComponent(escape(atob(encoded)));
             const data = JSON.parse(json);
-            this.scene3d.deserialize(data.scene);
 
-            if (data.customVariables) {
-                this.blockCode.customVariables = data.customVariables;
-                this.blockCode._updateVariableDropdowns();
-            }
-            if (data.customMessages) {
-                this.blockCode.customMessages = data.customMessages;
-                this.blockCode._updateMessageDropdowns();
-            }
+            // Assign a new project ID so it can be saved
+            this.currentProjectId = this.generateProjectId();
+            this.projectName = data.name || 'Shared Project';
 
-            if (data.customObjects) {
-                this.customObjects = data.customObjects;
-                this.renderCustomObjectButtons();
-            }
+            this._applyProjectData(data);
 
-            if (data.uiScreens) {
-                this.uiScreens = data.uiScreens;
-                this.renderScreenButtons();
-                this.blockCode._updateScreenDropdowns(this.uiScreens);
-            }
+            // Save to multi-project storage
+            this.saveProject(true);
 
-            if (data.environment) {
-                document.getElementById('sky-color').value = data.environment.skyColor;
-                document.getElementById('ambient-light').value = data.environment.ambientLight;
-                document.getElementById('fog-density').value = data.environment.fogDensity;
-                document.getElementById('shadows-enabled').checked = data.environment.shadows;
-                this.scene3d.setSkyColor(data.environment.skyColor);
-                this.scene3d.setAmbientIntensity(data.environment.ambientLight / 100);
-                this.scene3d.setFog(parseInt(data.environment.fogDensity));
-                this.scene3d.setShadows(data.environment.shadows);
-
-                if (data.environment.weather) {
-                    document.getElementById('weather-type').value = data.environment.weather;
-                    this.scene3d.setWeather(data.environment.weather);
-                }
-                if (data.environment.bgMusic) {
-                    document.getElementById('bg-music').value = data.environment.bgMusic;
-                    this.gameSettings.bgMusic = data.environment.bgMusic;
-                }
-                if (data.environment.musicVolume) {
-                    document.getElementById('music-volume').value = data.environment.musicVolume;
-                    this.gameSettings.musicVolume = parseInt(data.environment.musicVolume);
-                }
-                if (data.environment.playerColors) {
-                    this.gameSettings.playerColors = data.environment.playerColors;
-                    document.getElementById('setting-player-body').value = data.environment.playerColors.body;
-                    document.getElementById('setting-player-head').value = data.environment.playerColors.head;
-                    document.getElementById('setting-player-detail').value = data.environment.playerColors.detail;
-                }
-            }
-            this.refreshExplorer();
-            this.updateObjectCount();
             // Clear hash so it doesn't reload on refresh
             history.replaceState(null, '', window.location.pathname);
             this.toast('Shared project loaded!', 'success');
+            return true;
         } catch (e) {
             console.error('Failed to load shared project:', e);
+            return false;
         }
     }
 
