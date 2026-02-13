@@ -853,7 +853,8 @@ class BlockCode {
                 this._dragStackData = null;
                 document.removeEventListener('pointermove', onMove);
                 document.removeEventListener('pointerup', onUp);
-                this._hideSnapIndicator();
+                // Hide indicator but preserve snap target for drop logic
+                if (this._snapIndicator) this._snapIndicator.style.display = 'none';
 
                 // Delete stack
                 if (this._isOverDeleteZone(ev)) {
