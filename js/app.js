@@ -1172,18 +1172,145 @@ class App {
     }
 
     initTutorial() {
-        const steps = [
-            { icon: 'view_in_ar', title: 'Welcome to BlockForge Studio!', text: 'Build 3D games with blocks - no coding required! This quick tour will show you the basics.' },
-            { icon: 'add_box', title: 'Add Objects', text: 'Use the Object Library panel on the left to add 3D shapes, characters, and items to your scene. Click any object to add it.' },
-            { icon: 'open_with', title: 'Transform Objects', text: 'Select objects and use the toolbar to Move (G), Rotate (R), or Scale (S) them. Hold Shift+click to select multiple objects.' },
-            { icon: 'extension', title: 'Block Coding', text: 'Select an object, then open the Block Editor at the bottom. Drag blocks from the drawer to create scripts - they snap together like puzzle pieces!' },
-            { icon: 'play_arrow', title: 'Test Your Game', text: 'Press the Play button or F5 to test your game. Use WASD to move and Space to jump. Press ESC to stop.' },
-            { icon: 'palette', title: 'Customize', text: 'Use the Environment panel to change sky color, skybox, lighting, and fog. Open Settings to configure game controls and physics.' },
-            { icon: 'share', title: 'Save & Share', text: 'Save your project with Ctrl+S, export it as a file, or click the Share button to get a link you can send to friends!' }
-        ];
+        this.tutorials = {
+            'getting-started': {
+                title: 'Getting Started',
+                icon: 'view_in_ar',
+                desc: 'Learn the basics — hands on!',
+                steps: [
+                    { icon: 'view_in_ar', title: 'Welcome to BlockForge Studio!', text: 'Build 3D games with blocks — no coding required! Let\'s walk through the basics together.' },
+                    {
+                        icon: 'add_box', title: 'Open the Toolbox',
+                        text: 'Click the Toolbox tab on the left panel to see available objects.',
+                        target: '.panel-tab[data-tab="library"]',
+                        action: { type: 'click', selector: '.panel-tab[data-tab="library"]' }
+                    },
+                    {
+                        icon: 'add_box', title: 'Add a Box',
+                        text: 'Click the Box button to add a cube to your scene.',
+                        target: '.object-btn[data-shape="box"]',
+                        action: { type: 'click', selector: '.object-btn[data-shape="box"]' },
+                        prepare: { tab: 'library' }
+                    },
+                    {
+                        icon: 'open_with', title: 'Switch to the Move Tool',
+                        text: 'Click the Move tool (or press G) to reposition objects.',
+                        target: '#btn-move',
+                        action: { type: 'click', selector: '#btn-move' }
+                    },
+                    {
+                        icon: 'near_me', title: 'Select Your Object',
+                        text: 'Click on the box you just created in the 3D viewport to select it.',
+                        target: '#viewport-container',
+                        action: { type: 'select-object' },
+                        popover: { position: 'left' }
+                    },
+                    {
+                        icon: 'play_arrow', title: 'Test Your Game',
+                        text: 'Click Play to test your game! Press ESC or click Stop to return to editing.',
+                        target: '#btn-play',
+                        action: { type: 'click', selector: '#btn-play' }
+                    },
+                    { icon: 'celebration', title: 'You\'re Ready!', text: 'Great job! You know the basics. Try the Block Coding tutorial next to add behaviors to your objects.' }
+                ]
+            },
+            'block-coding': {
+                title: 'Block Coding',
+                icon: 'extension',
+                desc: 'Script objects with blocks — hands on!',
+                steps: [
+                    { icon: 'extension', title: 'Block Coding', text: 'Let\'s learn how to add behaviors to objects using visual block code!' },
+                    {
+                        icon: 'near_me', title: 'Select an Object',
+                        text: 'Click on any object in the viewport to select it for scripting. If there are none, add one from the Toolbox first.',
+                        target: '#viewport-container',
+                        action: { type: 'select-object' },
+                        popover: { position: 'left' }
+                    },
+                    {
+                        icon: 'category', title: 'Pick a Category',
+                        text: 'Click the "Events" category in the block palette to see event blocks.',
+                        target: '.palette-category[data-category="events"]',
+                        action: { type: 'click', selector: '.palette-category[data-category="events"]' },
+                        prepare: { expandEditor: true }
+                    },
+                    {
+                        icon: 'drag_indicator', title: 'Drag a Block',
+                        text: 'Drag the "When game starts" block from the drawer into the workspace area on the right.',
+                        target: '#block-drawer',
+                        action: { type: 'drop-block' },
+                        prepare: { expandEditor: true, category: 'events' },
+                        popover: { position: 'top' }
+                    },
+                    {
+                        icon: 'layers', title: 'Add a Motion Block',
+                        text: 'Now click "Motion" in the palette, then drag a motion block below your event block.',
+                        target: '.palette-category[data-category="motion"]',
+                        action: { type: 'click', selector: '.palette-category[data-category="motion"]' },
+                        prepare: { expandEditor: true }
+                    },
+                    {
+                        icon: 'drag_indicator', title: 'Drag a Motion Block',
+                        text: 'Drag any motion block (like "Move forward") from the drawer and snap it below your event block.',
+                        target: '#block-drawer',
+                        action: { type: 'drop-block' },
+                        prepare: { expandEditor: true, category: 'motion' },
+                        popover: { position: 'top' }
+                    },
+                    { icon: 'check_circle', title: 'Well Done!', text: 'You created your first script! Press Play to see it in action. Explore other categories to discover more blocks.' }
+                ]
+            },
+            'building-worlds': {
+                title: 'Building Worlds',
+                icon: 'terrain',
+                desc: 'Design levels with terrain and objects',
+                steps: [
+                    { icon: 'grid_on', title: 'Use the Grid', text: 'Enable Snap in the toolbar to align objects to a grid. Choose grid sizes from 0.25 to 2 units for precise placement.' },
+                    { icon: 'terrain', title: 'Add Terrain', text: 'Switch to the Terrain tab in the left panel. Add flat ground, raise terrain, or add water to build your world.' },
+                    { icon: 'format_paint', title: 'Paint Surfaces', text: 'Use terrain paint to apply materials like grass, dirt, sand, stone, snow, or lava to your ground.' },
+                    { icon: 'category', title: 'Use Prefabs', text: 'The Prefabs section has ready-made objects: spawn points, lights, coins, NPCs, trees, houses, platforms, and more.' },
+                    { icon: 'content_copy', title: 'Duplicate & Arrange', text: 'Select an object and press Ctrl+D to duplicate it. Use Move (G) to position copies and build larger structures.' }
+                ]
+            },
+            'game-mechanics': {
+                title: 'Game Mechanics',
+                icon: 'sports_esports',
+                desc: 'Add gameplay like scoring and physics',
+                steps: [
+                    { icon: 'speed', title: 'Physics', text: 'Use Physics blocks to add gravity, velocity, and impulse to objects. Make things bounce, fall, and collide!' },
+                    { icon: 'scoreboard', title: 'Scoring System', text: 'Use Variable blocks to create a score. Add "Change score by 1" to a coin\'s "When touching player" event to track points.' },
+                    { icon: 'favorite', title: 'Health System', text: 'Set a health variable, show it on screen with "Show health on screen", and decrease it when the player touches hazards.' },
+                    { icon: 'bolt', title: 'Power-ups', text: 'Make collectible items that boost player speed, launch the player upward, or change game variables when touched.' },
+                    { icon: 'emoji_events', title: 'Win & Lose', text: 'Use "If score > 10" to check win conditions, then trigger "Game Over win" or "Game Over lose" to end the game.' }
+                ]
+            },
+            'looks-effects': {
+                title: 'Looks & Effects',
+                icon: 'palette',
+                desc: 'Add visuals, particles, and style',
+                steps: [
+                    { icon: 'palette', title: 'Colors & Materials', text: 'Select an object and use the Material panel on the right to change color, roughness, metalness, and opacity.' },
+                    { icon: 'auto_awesome', title: 'Glow & Flash', text: 'Use Looks blocks to add glow effects, flash colors, or create pulsing scale animations on objects.' },
+                    { icon: 'local_fire_department', title: 'Particles', text: 'Add particle effects with "Emit particles" blocks. Choose from burst, sparkle, fire, or snow types with custom colors.' },
+                    { icon: 'wb_twilight', title: 'Environment', text: 'Open Settings to change the skybox, sky color, ambient/directional lighting, and fog for atmosphere.' },
+                    { icon: 'chat_bubble', title: 'Text & Labels', text: 'Use "Show text" blocks to display speech bubbles or "Show label" for permanent text above objects.' }
+                ]
+            },
+            'keyboard-shortcuts': {
+                title: 'Keyboard Shortcuts',
+                icon: 'keyboard',
+                desc: 'Speed up your workflow',
+                steps: [
+                    { icon: 'keyboard', title: 'Tool Shortcuts', text: 'V = Select, G = Move, R = Rotate, S = Scale. These shortcuts let you quickly switch between transform tools.' },
+                    { icon: 'content_copy', title: 'Edit Shortcuts', text: 'Ctrl+Z = Undo, Ctrl+Y = Redo, Ctrl+D = Duplicate, Delete/Backspace = Delete selected object.' },
+                    { icon: 'save', title: 'File Shortcuts', text: 'Ctrl+S = Save project. Your project auto-saves to the browser, but use this to save manually anytime.' },
+                    { icon: 'play_arrow', title: 'Play Mode', text: 'F5 = Play/Stop your game. In play mode: WASD to move, Space to jump, Arrow keys to look around, ESC to stop.' },
+                    { icon: 'mouse', title: 'Mouse Controls', text: 'Left click = Select. Shift+click = Multi-select. Right-drag = Orbit camera. Scroll = Zoom. Middle-drag = Pan.' }
+                ]
+            }
+        };
 
-        const seen = localStorage.getItem('blockforge_tutorial_seen');
-        if (seen) return;
+        this.guidedTutorial = null;
 
         const modal = document.getElementById('tutorial-modal');
         const body = document.getElementById('tutorial-body');
@@ -1191,53 +1318,95 @@ class App {
         const nextBtn = document.getElementById('tutorial-next');
         const indicator = document.getElementById('tutorial-step-indicator');
         const closeBtn = document.getElementById('tutorial-close');
+        const headerTitle = document.getElementById('tutorial-header-title');
+        const footer = document.getElementById('tutorial-footer');
         let currentStep = 0;
+        let activeSteps = null;
+
+        const showTopicPicker = () => {
+            headerTitle.textContent = 'Tutorials';
+            footer.style.display = 'none';
+            body.innerHTML = '<div class="tutorial-topics">' +
+                Object.entries(this.tutorials).map(([key, t]) =>
+                    `<div class="tutorial-topic-card" data-tutorial="${key}">
+                        <span class="material-icons-round">${t.icon}</span>
+                        <div class="topic-title">${t.title}</div>
+                        <div class="topic-desc">${t.desc}</div>
+                    </div>`
+                ).join('') + '</div>';
+            body.querySelectorAll('.tutorial-topic-card').forEach(card => {
+                card.addEventListener('click', () => startTutorial(card.dataset.tutorial));
+            });
+        };
+
+        const startTutorial = (key) => {
+            const tutorial = this.tutorials[key];
+            if (!tutorial) return;
+
+            // Check if this tutorial has interactive steps
+            const hasInteractive = tutorial.steps.some(s => s.action || s.target);
+            if (hasInteractive) {
+                modal.classList.add('hidden');
+                if (!this.guidedTutorial) {
+                    this.guidedTutorial = new GuidedTutorial(this);
+                }
+                this.guidedTutorial.start(key, tutorial);
+                return;
+            }
+
+            // Non-interactive: use modal flow
+            activeSteps = tutorial.steps;
+            headerTitle.textContent = tutorial.title;
+            footer.style.display = 'flex';
+            currentStep = 0;
+            renderStep();
+        };
 
         const renderStep = () => {
-            const step = steps[currentStep];
+            if (!activeSteps) return;
+            const step = activeSteps[currentStep];
             body.innerHTML = `
                 <div class="tutorial-step">
                     <div class="step-icon"><span class="material-icons-round" style="font-size:48px">${step.icon}</span></div>
                     <h3>${step.title}</h3>
                     <p>${step.text}</p>
-                    ${currentStep === steps.length - 1 ? `
-                        <div class="tutorial-dont-show">
-                            <input type="checkbox" id="tutorial-dont-show-check" checked>
-                            <label for="tutorial-dont-show-check">Don't show again</label>
-                        </div>
-                    ` : ''}
                 </div>
             `;
-            indicator.textContent = `${currentStep + 1} / ${steps.length}`;
+            indicator.textContent = `${currentStep + 1} / ${activeSteps.length}`;
             prevBtn.style.display = currentStep > 0 ? '' : 'none';
-            nextBtn.innerHTML = currentStep < steps.length - 1
+            nextBtn.innerHTML = currentStep < activeSteps.length - 1
                 ? 'Next <span class="material-icons-round">arrow_forward</span>'
-                : 'Get Started! <span class="material-icons-round">rocket_launch</span>';
+                : 'Done <span class="material-icons-round">check</span>';
         };
 
         prevBtn.addEventListener('click', () => {
             if (currentStep > 0) { currentStep--; renderStep(); }
         });
         nextBtn.addEventListener('click', () => {
-            if (currentStep < steps.length - 1) {
+            if (activeSteps && currentStep < activeSteps.length - 1) {
                 currentStep++;
                 renderStep();
             } else {
-                // Finish
-                const check = document.getElementById('tutorial-dont-show-check');
-                if (check && check.checked) {
-                    localStorage.setItem('blockforge_tutorial_seen', 'true');
-                }
-                modal.classList.add('hidden');
+                showTopicPicker();
             }
         });
         closeBtn.addEventListener('click', () => {
-            localStorage.setItem('blockforge_tutorial_seen', 'true');
             modal.classList.add('hidden');
         });
 
-        renderStep();
-        modal.classList.remove('hidden');
+        // Tutorial toolbar button
+        document.getElementById('btn-tutorial').addEventListener('click', () => {
+            showTopicPicker();
+            modal.classList.remove('hidden');
+        });
+
+        // Show getting started on first visit
+        const seen = localStorage.getItem('blockforge_tutorial_seen');
+        if (!seen) {
+            localStorage.setItem('blockforge_tutorial_seen', 'true');
+            startTutorial('getting-started');
+            modal.classList.remove('hidden');
+        }
     }
 
     // ===== Toast =====

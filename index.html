@@ -79,6 +79,9 @@
             <button class="tool-btn" id="btn-settings" title="Game Settings">
                 <span class="material-icons-round">settings</span>
             </button>
+            <button class="tool-btn" id="btn-tutorial" title="Tutorials">
+                <span class="material-icons-round">school</span>
+            </button>
             <div class="toolbar-divider"></div>
             <button class="tool-btn" id="btn-undo" title="Undo (Ctrl+Z)">
                 <span class="material-icons-round">undo</span>
@@ -743,7 +746,7 @@
         <div class="modal" style="max-width:600px">
             <div class="modal-header">
                 <span class="material-icons-round">school</span>
-                <span>Welcome to BlockForge Studio!</span>
+                <span id="tutorial-header-title">Tutorials</span>
                 <button class="modal-close" id="tutorial-close">
                     <span class="material-icons-round">close</span>
                 </button>
@@ -751,12 +754,12 @@
             <div class="modal-body" id="tutorial-body">
                 <!-- Steps populated dynamically -->
             </div>
-            <div class="modal-footer" style="display:flex;justify-content:space-between;padding:16px 24px;border-top:1px solid var(--border)">
+            <div class="modal-footer" id="tutorial-footer" style="display:flex;justify-content:space-between;padding:16px 24px;border-top:1px solid var(--border)">
                 <button class="action-btn" id="tutorial-prev" style="display:none">
                     <span class="material-icons-round">arrow_back</span> Previous
                 </button>
                 <div style="display:flex;gap:8px;align-items:center">
-                    <span id="tutorial-step-indicator" style="color:var(--text-dim);font-size:12px">1 / 7</span>
+                    <span id="tutorial-step-indicator" style="color:var(--text-dim);font-size:12px"></span>
                 </div>
                 <button class="action-btn primary" id="tutorial-next">
                     Next <span class="material-icons-round">arrow_forward</span>
@@ -772,6 +775,7 @@
     <script src="js/scene3d.js"></script>
     <script src="js/blockcode.js"></script>
     <script src="js/runtime.js"></script>
+    <script src="js/guided-tutorial.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

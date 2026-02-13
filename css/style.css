@@ -1905,6 +1905,49 @@ input[type="checkbox"] {
     cursor: pointer;
 }
 
+/* ===== Tutorial Topic Grid ===== */
+.tutorial-topics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.tutorial-topic-card {
+    background: var(--bg-medium);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 14px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+}
+
+.tutorial-topic-card:hover {
+    background: var(--bg-lighter);
+    border-color: var(--accent);
+    transform: translateY(-2px);
+}
+
+.tutorial-topic-card .material-icons-round {
+    font-size: 32px;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 8px;
+}
+
+.tutorial-topic-card .topic-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+}
+
+.tutorial-topic-card .topic-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+}
+
 /* ===== Make a Block Button ===== */
 .make-block-btn {
     display: flex;
@@ -1927,4 +1970,174 @@ input[type="checkbox"] {
 }
 .make-block-btn .material-icons-round {
     font-size: 18px;
+}
+
+/* ===== Guided Interactive Tutorial ===== */
+
+.guided-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 8000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.guided-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.guided-highlight {
+    position: relative !important;
+    z-index: 8001 !important;
+    pointer-events: auto !important;
+    box-shadow: 0 0 0 3px var(--accent), 0 0 24px rgba(76, 151, 255, 0.3) !important;
+    border-radius: 6px;
+    animation: guidedPulse 2s ease-in-out infinite;
+}
+
+@keyframes guidedPulse {
+    0%, 100% { box-shadow: 0 0 0 3px var(--accent), 0 0 24px rgba(76, 151, 255, 0.3) !important; }
+    50% { box-shadow: 0 0 0 5px var(--accent), 0 0 32px rgba(76, 151, 255, 0.5) !important; }
+}
+
+.guided-popover {
+    position: fixed;
+    z-index: 8002;
+    background: var(--bg-dark);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 20px;
+    width: 320px;
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(76, 151, 255, 0.2);
+    animation: guidedPopIn 0.25s ease;
+    pointer-events: auto;
+    display: none;
+}
+
+.guided-popover.visible {
+    display: block;
+}
+
+@keyframes guidedPopIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.guided-popover-icon .material-icons-round {
+    font-size: 36px;
+    color: var(--accent);
+    margin-bottom: 8px;
+    display: block;
+}
+
+.guided-popover-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 8px;
+}
+
+.guided-popover-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+    margin-bottom: 16px;
+}
+
+.guided-action-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 500;
+    padding: 8px 12px;
+    background: rgba(76, 151, 255, 0.08);
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.guided-action-hint .pulse-dot {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulseDot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+.guided-popover-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.guided-skip-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.15s;
+}
+
+.guided-skip-btn:hover {
+    color: var(--text);
+    background: var(--bg-lighter);
+}
+
+.guided-next-btn {
+    background: var(--accent);
+    border: none;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: background 0.15s;
+}
+
+.guided-next-btn:hover {
+    background: var(--accent-hover);
+}
+
+.guided-dots {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.guided-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bg-lighter);
+    transition: background 0.2s;
+}
+
+.guided-dot.active {
+    background: var(--accent);
+    width: 8px;
+    height: 8px;
+}
+
+.guided-dot.completed {
+    background: var(--success);
 }
