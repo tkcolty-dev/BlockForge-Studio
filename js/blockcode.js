@@ -42,7 +42,8 @@ class BlockCode {
             sensing: { name: 'Sensing', color: '#5CB1D6', darkColor: '#2E8EB8' },
             sound: { name: 'Sound', color: '#CF63CF', darkColor: '#BD42BD' },
             variables: { name: 'Variables', color: '#FF8C1A', darkColor: '#DB6E00' },
-            myblocks: { name: 'My Blocks', color: '#FF6680', darkColor: '#CC4466' }
+            myblocks: { name: 'My Blocks', color: '#FF6680', darkColor: '#CC4466' },
+            shooting: { name: 'Shooting', color: '#E03030', darkColor: '#B01818' }
         };
     }
 
@@ -146,7 +147,18 @@ class BlockCode {
             'var_show_message': { category: 'variables', type: 'command', label: 'Show message {text} for {time}s', inputs: { text: { type: 'text', default: 'You win!' }, time: { type: 'number', default: 3 } }, code: 'showMessage' },
             'var_game_over': { category: 'variables', type: 'command', label: 'Game Over {result}', inputs: { result: { type: 'select', options: ['win','lose'], default: 'win' } }, code: 'gameOver' },
             'var_save_checkpoint': { category: 'variables', type: 'command', label: 'Save checkpoint', code: 'saveCheckpoint' },
-            'var_load_checkpoint': { category: 'variables', type: 'command', label: 'Load checkpoint', code: 'loadCheckpoint' }
+            'var_load_checkpoint': { category: 'variables', type: 'command', label: 'Load checkpoint', code: 'loadCheckpoint' },
+
+            // ===== Shooting =====
+            'shoot_event_fire': { category: 'shooting', type: 'hat', label: 'When player shoots', icon: '🔫', code: 'onShoot' },
+            'shoot_event_hit': { category: 'shooting', type: 'hat', label: 'When hit by projectile', icon: '💥', code: 'onProjectileHit' },
+            'shoot_fire_player': { category: 'shooting', type: 'command', label: 'Fire from player speed {speed} color {color}', inputs: { speed: { type: 'number', default: 30 }, color: { type: 'color', default: '#ff0000' } }, code: 'fireFromPlayer' },
+            'shoot_fire_at_player': { category: 'shooting', type: 'command', label: 'Fire at player speed {speed} color {color}', inputs: { speed: { type: 'number', default: 20 }, color: { type: 'color', default: '#ff4400' } }, code: 'fireAtPlayer' },
+            'shoot_fire_forward': { category: 'shooting', type: 'command', label: 'Fire forward speed {speed} color {color}', inputs: { speed: { type: 'number', default: 25 }, color: { type: 'color', default: '#00ccff' } }, code: 'fireForward' },
+            'shoot_set_damage': { category: 'shooting', type: 'command', label: 'Set projectile damage {damage}', inputs: { damage: { type: 'number', default: 10 } }, code: 'setProjectileDamage' },
+            'shoot_set_fire_rate': { category: 'shooting', type: 'command', label: 'Set fire rate every {seconds}s', inputs: { seconds: { type: 'number', default: 0.3 } }, code: 'setFireRate' },
+            'shoot_set_size': { category: 'shooting', type: 'command', label: 'Set projectile size {size}', inputs: { size: { type: 'number', default: 0.15 } }, code: 'setProjectileSize' },
+            'shoot_set_lifetime': { category: 'shooting', type: 'command', label: 'Projectile lifetime {seconds}s', inputs: { seconds: { type: 'number', default: 3 } }, code: 'setProjectileLifetime' }
         };
     }
 

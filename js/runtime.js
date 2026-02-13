@@ -17,6 +17,11 @@ class Runtime {
         this.hudElements = [];
         this.soundVolume = 1.0;
 
+        // Projectile system
+        this.projectiles = [];
+        this._fireRates = new Map();
+        this._projectileConfig = new Map();
+
         // Audio context for sound effects
         this.audioCtx = null;
 
@@ -36,6 +41,9 @@ class Runtime {
         this.activeAnimations = [];
         this.hudElements = [];
         this.runningScripts = [];
+        this.projectiles = [];
+        this._fireRates.clear();
+        this._projectileConfig.clear();
 
         // Apply settings
         this.controlScheme = settings.controlScheme || 'first-person';
@@ -185,6 +193,19 @@ class Runtime {
             });
             this._particles = [];
         }
+
+        // Clean up projectiles
+        if (this.projectiles) {
+            this.projectiles.forEach(p => {
+                this.scene3d.scene.remove(p.mesh);
+                p.mesh.geometry.dispose();
+                p.mesh.material.dispose();
+                if (p.light) this.scene3d.scene.remove(p.light);
+            });
+            this.projectiles = [];
+        }
+        this._fireRates.clear();
+        this._projectileConfig.clear();
 
         // Clean up
         this.scene3d.isPlaying = false;
@@ -480,6 +501,9 @@ class Runtime {
             }
         }
 
+        // Trigger shooting event
+        this.triggerEvent('onShoot');
+
         // Point-click movement: raycast against ground plane
         if (this.controlScheme === 'point-click') {
             this.onPointClick(e);
@@ -494,6 +518,7 @@ class Runtime {
 
         this.updatePlayer(dt);
         this.updateAnimations(dt);
+        this.updateProjectiles(dt);
         this.checkCollisions();
         this.updateHUD();
     }
@@ -851,6 +876,216 @@ class Runtime {
                 this.triggerEvent('onCollide', { object: 'player' }, obj);
             }
         });
+    }
+
+    // ===== Projectile System =====
+
+    updateProjectiles(dt) {
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const p = this.projectiles[i];
+            p.elapsed += dt;
+
+            // Remove if lifetime exceeded
+            if (p.elapsed >= p.lifetime) {
+                this._removeProjectile(i);
+                continue;
+            }
+
+            // Move projectile
+            p.mesh.position.add(p.velocity.clone().multiplyScalar(dt));
+            if (p.light) p.light.position.copy(p.mesh.position);
+
+            // Check collision with scene objects
+            let hit = false;
+            for (const obj of this.scene3d.objects) {
+                if (!obj.visible || !obj.userData.collidable) continue;
+                if (obj === p.owner) continue;
+                if (obj.userData.type === 'spawn' || obj.userData.type === 'light-point') continue;
+
+                const box = new THREE.Box3().setFromObject(obj);
+                if (box.containsPoint(p.mesh.position)) {
+                    this.triggerEvent('onProjectileHit', { damage: p.damage, shooter: p.owner }, obj);
+                    this._spawnImpactEffect(p.mesh.position.clone(), p.color);
+                    this._playImpactSound();
+                    this._removeProjectile(i);
+                    hit = true;
+                    break;
+                }
+            }
+            if (hit) continue;
+
+            // Check collision with player (for enemy projectiles)
+            if (this.playerController && p.owner !== this.playerController.mesh) {
+                const dist = p.mesh.position.distanceTo(this.playerController.mesh.position);
+                if (dist < 0.8) {
+                    this.variables.health = (this.variables.health || 100) - p.damage;
+                    this._spawnImpactEffect(p.mesh.position.clone(), '#ff0000');
+                    this._playImpactSound();
+                    this.playSynthSound('hurt');
+                    this._removeProjectile(i);
+                    continue;
+                }
+            }
+
+            // Ground collision
+            if (p.mesh.position.y < 0) {
+                this._spawnImpactEffect(new THREE.Vector3(p.mesh.position.x, 0.05, p.mesh.position.z), p.color);
+                this._removeProjectile(i);
+                continue;
+            }
+
+            // Out of bounds
+            if (p.mesh.position.length() > 200) {
+                this._removeProjectile(i);
+            }
+        }
+    }
+
+    _removeProjectile(index) {
+        const p = this.projectiles[index];
+        this.scene3d.scene.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        p.mesh.material.dispose();
+        if (p.light) this.scene3d.scene.remove(p.light);
+        this.projectiles.splice(index, 1);
+    }
+
+    _createProjectile(position, velocity, color, owner) {
+        const ownerId = owner?.userData?.id;
+        const config = this._projectileConfig.get(ownerId) || {};
+        const size = config.size || 0.15;
+        const damage = config.damage || 10;
+        const lifetime = config.lifetime || 3;
+        const colorObj = new THREE.Color(color);
+
+        const geo = new THREE.SphereGeometry(size, 8, 8);
+        const mat = new THREE.MeshBasicMaterial({ color: colorObj, transparent: true, opacity: 0.9 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.copy(position);
+        this.scene3d.scene.add(mesh);
+
+        let light = null;
+        if (this.projectiles.length < 20) {
+            light = new THREE.PointLight(colorObj, 0.5, 4);
+            light.position.copy(position);
+            this.scene3d.scene.add(light);
+        }
+
+        const projectile = { mesh, light, velocity: velocity.clone(), damage, lifetime, elapsed: 0, owner, color };
+        this.projectiles.push(projectile);
+        this._spawnMuzzleFlash(position.clone(), color);
+        return projectile;
+    }
+
+    _canFire(obj) {
+        const id = obj?.userData?.id || 'player';
+        const rateConfig = this._fireRates.get(id);
+        const cooldown = rateConfig?.cooldown || 0.3;
+        const now = this.gameTimer;
+        const lastFired = rateConfig?.lastFired || 0;
+
+        if (now - lastFired < cooldown) return false;
+
+        if (!rateConfig) {
+            this._fireRates.set(id, { cooldown, lastFired: now });
+        } else {
+            rateConfig.lastFired = now;
+        }
+        return true;
+    }
+
+    _spawnMuzzleFlash(position, color) {
+        const geo = new THREE.SphereGeometry(0.15, 6, 6);
+        const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.8 });
+        const flash = new THREE.Mesh(geo, mat);
+        flash.position.copy(position);
+        this.scene3d.scene.add(flash);
+
+        const startTime = performance.now();
+        const animate = () => {
+            const elapsed = (performance.now() - startTime) / 1000;
+            if (elapsed > 0.12 || !this.isRunning) {
+                this.scene3d.scene.remove(flash);
+                geo.dispose();
+                mat.dispose();
+                return;
+            }
+            flash.scale.setScalar(1 + elapsed * 15);
+            mat.opacity = 0.8 * (1 - elapsed / 0.12);
+            requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+    }
+
+    _spawnImpactEffect(position, color) {
+        const count = 12;
+        const positions = new Float32Array(count * 3);
+        const velocities = [];
+        for (let i = 0; i < count; i++) {
+            positions[i * 3] = position.x;
+            positions[i * 3 + 1] = position.y;
+            positions[i * 3 + 2] = position.z;
+            velocities.push(new THREE.Vector3(
+                (Math.random() - 0.5) * 3,
+                Math.random() * 2 + 1,
+                (Math.random() - 0.5) * 3
+            ));
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const mat = new THREE.PointsMaterial({
+            color: new THREE.Color(color), size: 0.12,
+            transparent: true, opacity: 0.9, sizeAttenuation: true
+        });
+        const points = new THREE.Points(geo, mat);
+        this.scene3d.scene.add(points);
+        if (!this._particles) this._particles = [];
+        this._particles.push(points);
+        this.activeAnimations.push({
+            type: 'particles', points, velocities,
+            life: 0.5, elapsed: 0, particleType: 'burst'
+        });
+    }
+
+    _playShootSound() {
+        if (!this.audioCtx) return;
+        const ctx = this.audioCtx;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now + 0.12);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(this.soundVolume * 0.2, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+    }
+
+    _playImpactSound() {
+        if (!this.audioCtx) return;
+        const ctx = this.audioCtx;
+        const now = ctx.currentTime;
+        const bufferSize = ctx.sampleRate * 0.08;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(this.soundVolume * 0.15, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 800;
+        noise.connect(filter);
+        filter.connect(g);
+        g.connect(ctx.destination);
+        noise.start(now);
     }
 
     // ===== Script Execution =====
@@ -1951,10 +2186,75 @@ class Runtime {
                 break;
             }
 
+            // ===== Shooting Blocks =====
+            case 'fireFromPlayer': {
+                if (!this.playerController) break;
+                if (!this._canFire(this.playerController.mesh)) break;
+                const cam = this.scene3d.camera;
+                const spawnPos = cam.position.clone();
+                const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+                spawnPos.add(fwd.clone().multiplyScalar(1));
+                const speed = parseFloat(v.speed) || 30;
+                this._createProjectile(spawnPos, fwd.multiplyScalar(speed), v.color || '#ff0000', this.playerController.mesh);
+                this._playShootSound();
+                break;
+            }
+            case 'fireAtPlayer': {
+                if (!this.playerController) break;
+                if (!this._canFire(obj)) break;
+                const spawnPos = obj.position.clone();
+                spawnPos.y += 0.5;
+                const targetPos = this.playerController.mesh.position.clone();
+                targetPos.y += 0.5;
+                const dir = new THREE.Vector3().subVectors(targetPos, spawnPos).normalize();
+                const speed = parseFloat(v.speed) || 20;
+                this._createProjectile(spawnPos, dir.multiplyScalar(speed), v.color || '#ff4400', obj);
+                this._playShootSound();
+                break;
+            }
+            case 'fireForward': {
+                if (!this._canFire(obj)) break;
+                const spawnPos = obj.position.clone();
+                const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(obj.quaternion);
+                spawnPos.add(fwd.clone().multiplyScalar(1));
+                const speed = parseFloat(v.speed) || 25;
+                this._createProjectile(spawnPos, fwd.multiplyScalar(speed), v.color || '#00ccff', obj);
+                this._playShootSound();
+                break;
+            }
+            case 'setProjectileDamage': {
+                const id = obj.userData.id;
+                if (!this._projectileConfig.has(id)) this._projectileConfig.set(id, {});
+                this._projectileConfig.get(id).damage = parseFloat(v.damage) || 10;
+                break;
+            }
+            case 'setFireRate': {
+                const id = obj.userData.id;
+                const cooldown = parseFloat(v.seconds) || 0.3;
+                if (!this._fireRates.has(id)) {
+                    this._fireRates.set(id, { cooldown, lastFired: 0 });
+                } else {
+                    this._fireRates.get(id).cooldown = cooldown;
+                }
+                break;
+            }
+            case 'setProjectileSize': {
+                const id = obj.userData.id;
+                if (!this._projectileConfig.has(id)) this._projectileConfig.set(id, {});
+                this._projectileConfig.get(id).size = parseFloat(v.size) || 0.15;
+                break;
+            }
+            case 'setProjectileLifetime': {
+                const id = obj.userData.id;
+                if (!this._projectileConfig.has(id)) this._projectileConfig.set(id, {});
+                this._projectileConfig.get(id).lifetime = parseFloat(v.seconds) || 3;
+                break;
+            }
+
             default: {
                 // Handle custom block calls (customCall_xxx)
-                if (code.startsWith('customCall_')) {
-                    const customId = code.replace('customCall_', '');
+                if (cmd.code.startsWith('customCall_')) {
+                    const customId = cmd.code.replace('customCall_', '');
                     const defCode = 'customDef_' + customId;
                     // Find the define hat's commands on this object
                     for (const rs of this.runningScripts) {

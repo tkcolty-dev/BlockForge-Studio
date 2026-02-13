@@ -1237,6 +1237,7 @@ input[type="checkbox"] {
 .block-sensing { background-color: #5CB1D6; }
 .block-sound { background-color: #CF63CF; }
 .block-variables { background-color: #FF8C1A; }
+.block-shooting { background-color: #E03030; }
 
 /* C-block parts inherit color */
 .block.c-block-container.block-control .c-block-top,
@@ -1253,6 +1254,10 @@ input[type="checkbox"] {
 .block.c-block-container.block-variables .c-block-top,
 .block.c-block-container.block-variables .c-block-bottom { background-color: #FF8C1A; }
 .block.c-block-container.block-variables .c-block-body { background-color: rgba(180,100,10,0.3); border-color: rgba(255,140,26,0.25); }
+
+.block.c-block-container.block-shooting .c-block-top,
+.block.c-block-container.block-shooting .c-block-bottom { background-color: #E03030; }
+.block.c-block-container.block-shooting .c-block-body { background-color: rgba(180,30,30,0.3); border-color: rgba(224,48,48,0.25); }
 
 /* ===== Script Workspace ===== */
 #script-workspace {
