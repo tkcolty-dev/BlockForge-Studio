@@ -747,6 +747,7 @@ input[type="checkbox"] {
     top: 10px;
     left: 10px;
     display: flex;
+    align-items: center;
     gap: 12px;
     font-size: 11px;
     color: var(--text-dim);
@@ -754,6 +755,37 @@ input[type="checkbox"] {
     padding: 4px 10px;
     border-radius: 6px;
     backdrop-filter: blur(4px);
+    pointer-events: auto;
+}
+
+.viewport-fullscreen-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+}
+
+.viewport-fullscreen-btn:hover {
+    color: var(--text-bright);
+    background: rgba(255,255,255,0.1);
+}
+
+.viewport-fullscreen-btn .material-icons-round {
+    font-size: 18px;
+}
+
+#viewport-container.fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9000;
 }
 
 /* ===== ViewCube ===== */
@@ -1066,6 +1098,7 @@ input[type="checkbox"] {
 }
 
 .c-block-bottom {
+    position: relative;
     padding: 8px 14px 6px;
     border-radius: 0 0 4px 4px;
     box-shadow: 0 4px 0 -1px rgba(0,0,0,0.15);
@@ -1207,14 +1240,15 @@ input[type="checkbox"] {
 .script-stack .block {
     cursor: grab;
     border-radius: 4px;
+    margin-bottom: 0;
 }
 
 .script-stack .block + .block {
-    margin-top: 3px;
+    margin-top: -2px;
 }
 
 .script-stack .block:first-child.hat + .block {
-    margin-top: 3px;
+    margin-top: -2px;
 }
 
 .workspace-block {
@@ -1226,17 +1260,76 @@ input[type="checkbox"] {
     display: block;
 }
 
-.drop-indicator {
+/* ===== Block Connectors (Scratch-like notch/tab) ===== */
+.script-stack .block:not(.hat):not(.reporter)::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 16px;
+    width: 16px;
+    height: 4px;
+    background: inherit;
+    border-radius: 2px 2px 0 0;
+}
+
+.script-stack .block:not(.reporter):not(.c-block-container)::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 16px;
+    width: 16px;
+    height: 4px;
+    background: inherit;
+    border-radius: 0 0 2px 2px;
+    z-index: 1;
+}
+
+.script-stack .block.c-block-container .c-block-bottom::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 16px;
+    width: 16px;
+    height: 4px;
+    background: inherit;
+    border-radius: 0 0 2px 2px;
+    z-index: 1;
+}
+
+.script-stack .block.c-block-container:not(:first-child)::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 16px;
+    width: 16px;
+    height: 4px;
+    background: inherit;
+    border-radius: 2px 2px 0 0;
+}
+
+/* ===== Snap Indicator ===== */
+.snap-indicator {
+    position: absolute;
     height: 4px;
     background: var(--accent);
     border-radius: 2px;
-    margin: -2px 0;
-    transition: opacity 0.15s;
-    opacity: 0;
+    pointer-events: none;
+    z-index: 50;
+    box-shadow: 0 0 10px var(--accent), 0 0 4px var(--accent);
+    display: none;
 }
 
-.drop-indicator.visible {
-    opacity: 1;
+/* Ghost stack (for split drags) */
+.block-ghost-stack {
+    display: flex;
+    flex-direction: column;
+    opacity: 0.85;
+    pointer-events: none;
+    z-index: 10000;
+}
+
+.block-ghost-stack .block + .block {
+    margin-top: -2px;
 }
 
 /* ===== Status Bar ===== */

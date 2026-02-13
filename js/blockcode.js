@@ -18,9 +18,14 @@ class BlockCode {
 
         // Drag state
         this._ghost = null;
-        this._dragSource = null; // 'drawer' or {stackIdx, blockIdx} or {stackIdx, blockIdx, childIdx}
+        this._dragSource = null;
         this._dragBlockId = null;
         this._dragBlockDef = null;
+        this._currentSnapTarget = null;
+        this._snapIndicator = null;
+        this._excludeStackIdx = null;
+        this._draggedBlocks = null;
+        this._dragStackData = null;
 
         this.initPalette();
         this.renderDrawer();
@@ -234,9 +239,24 @@ class BlockCode {
         this._ghost.style.left = (e.clientX - this._ghostOffsetX) + 'px';
         this._ghost.style.top = (e.clientY - this._ghostOffsetY) + 'px';
 
-        // Highlight delete zone (drawer/palette area)
         const overDeleteZone = this._isOverDeleteZone(e);
         this._ghost.classList.toggle('ghost-deleting', overDeleteZone);
+
+        // Snap detection - use ghost block's top edge position
+        if (!overDeleteZone) {
+            const ghostTopY = e.clientY - (this._ghostOffsetY || 0);
+            this._currentSnapTarget = this._findSnapTarget(e, ghostTopY);
+
+            // Visually snap ghost to target position when snapping
+            if (this._currentSnapTarget) {
+                this._ghost.style.top = this._currentSnapTarget.y + 'px';
+                const stackRect = this._currentSnapTarget.stackEl.getBoundingClientRect();
+                this._ghost.style.left = stackRect.left + 'px';
+            }
+        } else {
+            this._currentSnapTarget = null;
+        }
+        this._updateSnapIndicator();
     }
 
     _isOverDeleteZone(e) {
@@ -252,10 +272,104 @@ class BlockCode {
         return el === ws || ws.contains(el);
     }
 
+    _findSnapTarget(e, ghostTopY) {
+        const SNAP_DIST = 50;
+        const checkY = ghostTopY !== undefined ? ghostTopY : e.clientY;
+        let closest = null;
+        let closestDist = SNAP_DIST;
+
+        // Determine if dragged content starts with a hat
+        let isHat = false;
+        if (this._dragBlockDef) {
+            isHat = this._dragBlockDef.type === 'hat';
+        } else if (this._draggedBlocks?.length > 0) {
+            isHat = this.blocks[this._draggedBlocks[0].blockId]?.type === 'hat';
+        } else if (this._dragStackData?.blocks?.length > 0) {
+            isHat = this.blocks[this._dragStackData.blocks[0].blockId]?.type === 'hat';
+        }
+
+        const stacks = this.workspace.querySelectorAll('.script-stack');
+
+        for (const stackEl of stacks) {
+            const stackIdx = parseInt(stackEl.dataset.stackIdx);
+            if (stackIdx === this._excludeStackIdx) continue;
+
+            const stack = this.workspaceScripts[stackIdx];
+            if (!stack) continue;
+
+            const blockEls = Array.from(stackEl.children).filter(el => el.classList.contains('block'));
+            if (blockEls.length === 0) continue;
+
+            const stackRect = stackEl.getBoundingClientRect();
+            // Must be horizontally near the stack
+            if (e.clientX < stackRect.left - 80 || e.clientX > stackRect.right + 80) continue;
+
+            for (let i = 0; i <= blockEls.length; i++) {
+                // Hat blocks can only snap to position 0
+                if (isHat && i > 0) continue;
+                // Don't insert before an existing hat block
+                if (i === 0) {
+                    const firstDef = this.blocks[stack.blocks[0]?.blockId];
+                    if (firstDef?.type === 'hat') continue;
+                }
+
+                let gapY;
+                if (i === 0) {
+                    gapY = blockEls[0].getBoundingClientRect().top;
+                } else if (i === blockEls.length) {
+                    gapY = blockEls[blockEls.length - 1].getBoundingClientRect().bottom;
+                } else {
+                    gapY = blockEls[i].getBoundingClientRect().top;
+                }
+
+                const dist = Math.abs(checkY - gapY);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closest = { stackIdx, insertIdx: i, y: gapY, stackEl };
+                }
+            }
+        }
+        return closest;
+    }
+
+    _updateSnapIndicator() {
+        if (!this._snapIndicator) {
+            this._snapIndicator = document.createElement('div');
+            this._snapIndicator.className = 'snap-indicator';
+        }
+
+        if (this._currentSnapTarget) {
+            const { stackEl, y } = this._currentSnapTarget;
+            const wsRect = this.workspace.getBoundingClientRect();
+            const stackRect = stackEl.getBoundingClientRect();
+
+            this._snapIndicator.style.left = (stackRect.left - wsRect.left - 2) + 'px';
+            this._snapIndicator.style.top = (y - wsRect.top - 2) + 'px';
+            this._snapIndicator.style.width = (stackRect.width + 4) + 'px';
+            this._snapIndicator.style.display = 'block';
+
+            if (!this._snapIndicator.parentNode) {
+                this.workspace.appendChild(this._snapIndicator);
+            }
+        } else if (this._snapIndicator) {
+            this._snapIndicator.style.display = 'none';
+        }
+    }
+
+    _hideSnapIndicator() {
+        if (this._snapIndicator) {
+            this._snapIndicator.style.display = 'none';
+        }
+        this._currentSnapTarget = null;
+    }
+
     _endDrag(e) {
         if (!this._ghost) return;
         this._ghost.remove();
         this._ghost = null;
+
+        // Hide indicator but preserve snap target for drop logic
+        if (this._snapIndicator) this._snapIndicator.style.display = 'none';
 
         // Restore dimmed source
         if (this._dragSourceEl) {
@@ -264,24 +378,23 @@ class BlockCode {
         }
 
         const overDelete = this._isOverDeleteZone(e);
-        const overWorkspace = this._isOverWorkspace(e);
 
-        if (!this.targetObject) return;
+        if (!this.targetObject) {
+            this._currentSnapTarget = null;
+            return;
+        }
 
         if (this._dragSource === 'drawer') {
-            // Dragging from drawer -> drop on workspace to add
-            if (overWorkspace) {
+            if (!overDelete) {
                 this._dropNewBlock(e);
             }
         } else {
-            // Dragging from workspace
             if (overDelete) {
-                // Drop on drawer/palette = delete
                 this._deleteFromSource();
             }
-            // Otherwise: block stays where it was (snap back)
         }
 
+        this._currentSnapTarget = null;
         this._dragSource = null;
         this._dragBlockId = null;
         this._dragBlockDef = null;
@@ -297,12 +410,7 @@ class BlockCode {
             children: []
         };
 
-        // Calculate position relative to workspace canvas
-        const wsRect = this.workspace.getBoundingClientRect();
-        const dropX = e.clientX - wsRect.left;
-        const dropY = e.clientY - wsRect.top;
-
-        // Check if dropping into a c-block body
+        // 1. Check if dropping into a c-block body (highest priority)
         const cBlockTarget = this._findCBlockBodyAt(e);
         if (cBlockTarget && blockDef.type !== 'hat') {
             const parent = this.workspaceScripts[cBlockTarget.stackIdx]?.blocks[cBlockTarget.blockIdx];
@@ -315,16 +423,20 @@ class BlockCode {
             }
         }
 
-        // Check if dropping onto an existing stack (append at end)
-        const stackTarget = this._findStackAt(e);
-        if (stackTarget !== null && blockDef.type !== 'hat') {
-            this.workspaceScripts[stackTarget].blocks.push(blockData);
+        // 2. Use snap target to insert into an existing stack
+        if (this._currentSnapTarget) {
+            const { stackIdx, insertIdx } = this._currentSnapTarget;
+            this.workspaceScripts[stackIdx].blocks.splice(insertIdx, 0, blockData);
             this.renderWorkspace();
             this.saveScriptsToObject();
             return;
         }
 
-        // Create new stack at drop position
+        // 3. Create new stack at drop position
+        const wsRect = this.workspace.getBoundingClientRect();
+        const dropX = e.clientX - wsRect.left;
+        const dropY = e.clientY - wsRect.top;
+
         const stack = {
             id: this.nextBlockId++,
             x: Math.max(10, dropX - 20),
@@ -334,18 +446,6 @@ class BlockCode {
         this.workspaceScripts.push(stack);
         this.renderWorkspace();
         this.saveScriptsToObject();
-    }
-
-    _findStackAt(e) {
-        const stacks = this.workspace.querySelectorAll('.script-stack');
-        for (const stackEl of stacks) {
-            const rect = stackEl.getBoundingClientRect();
-            if (e.clientX >= rect.left && e.clientX <= rect.right &&
-                e.clientY >= rect.top - 10 && e.clientY <= rect.bottom + 20) {
-                return parseInt(stackEl.dataset.stackIdx);
-            }
-        }
-        return null;
     }
 
     _findCBlockBodyAt(e) {
@@ -387,10 +487,127 @@ class BlockCode {
         this.saveScriptsToObject();
     }
 
+    // ===== Stack Split Drag =====
+
+    _startStackSplit(e, stackIdx, blockIdx, blockEl) {
+        const stack = this.workspaceScripts[stackIdx];
+        if (!stack) return;
+
+        // Create ghost BEFORE modifying data (DOM still intact)
+        const ghost = document.createElement('div');
+        ghost.className = 'block-ghost-stack';
+        ghost.style.position = 'fixed';
+        ghost.style.pointerEvents = 'none';
+        ghost.style.zIndex = '10000';
+        ghost.style.opacity = '0.85';
+
+        // Clone this block and all siblings after it in the stack
+        let sibling = blockEl;
+        while (sibling) {
+            if (sibling.classList.contains('block')) {
+                ghost.appendChild(sibling.cloneNode(true));
+            }
+            sibling = sibling.nextElementSibling;
+        }
+
+        document.body.appendChild(ghost);
+
+        this._ghost = ghost;
+        this._ghostOffsetX = e.clientX - blockEl.getBoundingClientRect().left;
+        this._ghostOffsetY = e.clientY - blockEl.getBoundingClientRect().top;
+
+        // Detach blocks from data
+        const detachedBlocks = stack.blocks.splice(blockIdx);
+        if (stack.blocks.length === 0) {
+            this.workspaceScripts.splice(stackIdx, 1);
+        }
+
+        this._draggedBlocks = detachedBlocks;
+
+        // Re-render workspace (shows shortened stack)
+        this.renderWorkspace();
+        this.saveScriptsToObject();
+
+        this._moveGhost(e);
+
+        const onMove = (ev) => this._moveGhost(ev);
+        const onUp = (ev) => {
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            this._endSplitDrag(ev);
+        };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+    }
+
+    _endSplitDrag(e) {
+        if (this._ghost) {
+            this._ghost.remove();
+            this._ghost = null;
+        }
+        // Hide indicator but preserve snap target for drop logic
+        if (this._snapIndicator) this._snapIndicator.style.display = 'none';
+
+        const blocks = this._draggedBlocks;
+        const snapTarget = this._currentSnapTarget;
+        this._draggedBlocks = null;
+
+        if (!blocks || blocks.length === 0) return;
+
+        // Delete zone
+        if (this._isOverDeleteZone(e)) {
+            this.renderWorkspace();
+            this.saveScriptsToObject();
+            return;
+        }
+
+        // Check c-block body target (for single blocks)
+        if (blocks.length === 1) {
+            const cBlockTarget = this._findCBlockBodyAt(e);
+            const blockDef = this.blocks[blocks[0].blockId];
+            if (cBlockTarget && blockDef?.type !== 'hat') {
+                const parent = this.workspaceScripts[cBlockTarget.stackIdx]?.blocks[cBlockTarget.blockIdx];
+                if (parent) {
+                    if (!parent.children) parent.children = [];
+                    parent.children.push(blocks[0]);
+                    this.renderWorkspace();
+                    this.saveScriptsToObject();
+                    return;
+                }
+            }
+        }
+
+        // Snap target - insert into existing stack
+        if (snapTarget) {
+            const { stackIdx, insertIdx } = snapTarget;
+            this.workspaceScripts[stackIdx].blocks.splice(insertIdx, 0, ...blocks);
+            this._currentSnapTarget = null;
+            this.renderWorkspace();
+            this.saveScriptsToObject();
+            return;
+        }
+
+        this._currentSnapTarget = null;
+
+        // Create new stack at drop position
+        const wsRect = this.workspace.getBoundingClientRect();
+        const newStack = {
+            id: this.nextBlockId++,
+            x: Math.max(10, (e.clientX - wsRect.left) - 20),
+            y: Math.max(10, (e.clientY - wsRect.top) - 10),
+            blocks: blocks
+        };
+        this.workspaceScripts.push(newStack);
+        this.renderWorkspace();
+        this.saveScriptsToObject();
+    }
+
     // ===== Workspace Rendering =====
 
     renderWorkspace() {
         this.workspace.innerHTML = '';
+        // Reset snap indicator reference since innerHTML cleared it
+        if (this._snapIndicator) this._snapIndicator = null;
 
         this.workspaceScripts.forEach((stack, stackIdx) => {
             const stackEl = document.createElement('div');
@@ -471,6 +688,16 @@ class BlockCode {
             el.innerHTML = this._buildLabel(blockDef, blockData);
         }
 
+        // Mid-stack split: drag a non-first block to detach it and blocks below
+        if (blockIdx > 0) {
+            el.addEventListener('pointerdown', (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+                e.preventDefault();
+                e.stopPropagation();
+                this._startStackSplit(e, stackIdx, blockIdx, el);
+            });
+        }
+
         return el;
     }
 
@@ -489,6 +716,9 @@ class BlockCode {
             stackEl.style.zIndex = '100';
             e.preventDefault();
 
+            this._excludeStackIdx = parseInt(stackEl.dataset.stackIdx);
+            this._dragStackData = stackData;
+
             const onMove = (ev) => {
                 if (!isDragging) return;
                 stackData.x = origX + (ev.clientX - startX);
@@ -496,18 +726,29 @@ class BlockCode {
                 stackEl.style.left = stackData.x + 'px';
                 stackEl.style.top = stackData.y + 'px';
 
-                // Visual feedback when over delete zone
-                stackEl.style.opacity = this._isOverDeleteZone(ev) ? '0.4' : '';
+                if (this._isOverDeleteZone(ev)) {
+                    stackEl.style.opacity = '0.4';
+                    this._currentSnapTarget = null;
+                } else {
+                    stackEl.style.opacity = '';
+                    // Use stack's top edge for snap detection
+                    const stackTop = stackEl.getBoundingClientRect().top;
+                    this._currentSnapTarget = this._findSnapTarget(ev, stackTop);
+                }
+                this._updateSnapIndicator();
             };
 
             const onUp = (ev) => {
                 isDragging = false;
                 stackEl.style.zIndex = '';
                 stackEl.style.opacity = '';
+                this._excludeStackIdx = null;
+                this._dragStackData = null;
                 document.removeEventListener('pointermove', onMove);
                 document.removeEventListener('pointerup', onUp);
+                this._hideSnapIndicator();
 
-                // If dropped on palette/drawer, delete the stack
+                // Delete stack
                 if (this._isOverDeleteZone(ev)) {
                     const idx = this.workspaceScripts.indexOf(stackData);
                     if (idx !== -1) {
@@ -515,7 +756,23 @@ class BlockCode {
                         this.renderWorkspace();
                         this.saveScriptsToObject();
                     }
+                    return;
                 }
+
+                // Merge into another stack at snap point
+                if (this._currentSnapTarget) {
+                    const { stackIdx: targetIdx, insertIdx } = this._currentSnapTarget;
+                    const targetStack = this.workspaceScripts[targetIdx];
+                    targetStack.blocks.splice(insertIdx, 0, ...stackData.blocks);
+                    const draggedIdx = this.workspaceScripts.indexOf(stackData);
+                    if (draggedIdx !== -1) {
+                        this.workspaceScripts.splice(draggedIdx, 1);
+                    }
+                    this.renderWorkspace();
+                    this.saveScriptsToObject();
+                }
+
+                this._currentSnapTarget = null;
             };
 
             document.addEventListener('pointermove', onMove);

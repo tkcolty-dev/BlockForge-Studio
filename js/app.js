@@ -80,6 +80,26 @@ class App {
         // Undo/Redo
         document.getElementById('btn-undo').addEventListener('click', () => this.undo());
         document.getElementById('btn-redo').addEventListener('click', () => this.redo());
+
+        // Viewport fullscreen
+        document.getElementById('btn-fullscreen-viewport').addEventListener('click', () => {
+            this.toggleFullscreenViewport();
+        });
+    }
+
+    toggleFullscreenViewport() {
+        const container = document.getElementById('viewport-container');
+        const icon = document.querySelector('#btn-fullscreen-viewport .material-icons-round');
+
+        if (container.classList.contains('fullscreen')) {
+            container.classList.remove('fullscreen');
+            icon.textContent = 'fullscreen';
+        } else {
+            container.classList.add('fullscreen');
+            icon.textContent = 'fullscreen_exit';
+        }
+
+        setTimeout(() => this.scene3d.onResize(), 50);
     }
 
     startPlay() {
@@ -730,6 +750,8 @@ class App {
                 case 'Escape':
                     if (this.runtime.isRunning) {
                         this.stopPlay();
+                    } else if (document.getElementById('viewport-container').classList.contains('fullscreen')) {
+                        this.toggleFullscreenViewport();
                     } else if (document.getElementById('block-editor').classList.contains('fullscreen')) {
                         this.toggleFullscreenEditor();
                     } else {
