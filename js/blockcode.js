@@ -46,7 +46,8 @@ class BlockCode {
             myblocks: { name: 'My Blocks', color: '#FF6680', darkColor: '#CC4466' },
             shooting: { name: 'Shooting', color: '#E03030', darkColor: '#B01818' },
             enemies: { name: 'Enemies', color: '#CC3333', darkColor: '#991919' },
-            items: { name: 'Items', color: '#44BB44', darkColor: '#2D882D' }
+            items: { name: 'Items', color: '#44BB44', darkColor: '#2D882D' },
+            effects: { name: 'Effects', color: '#E67E22', darkColor: '#BA6418' }
         };
     }
 
@@ -139,7 +140,12 @@ class BlockCode {
             'physics_unfreeze': { category: 'physics', type: 'command', label: 'Unfreeze', code: 'unfreeze' },
             'physics_attract': { category: 'physics', type: 'command', label: 'Attract force {force} range {radius}', inputs: { force: { type: 'number', default: 3 }, radius: { type: 'number', default: 8 } }, code: 'attract' },
             'physics_set_gravity': { category: 'physics', type: 'command', label: 'Gravity {g}', inputs: { g: { type: 'number', default: -20 } }, code: 'setWorldGravity' },
-            'physics_spawn_object': { category: 'physics', type: 'command', label: 'Spawn {shape} at {x} {y} {z}', inputs: { shape: { type: 'select', options: ['box','sphere','coin','gem'], default: 'box' }, x: { type: 'number', default: 0 }, y: { type: 'number', default: 2 }, z: { type: 'number', default: 0 } }, code: 'spawnObject' },
+            'physics_spawn_object': { category: 'physics', type: 'command', label: 'Spawn {shape} {x} {y} {z}', inputs: { shape: { type: 'select', options: ['box','sphere','cylinder','cone','wall','platform','pyramid','coin','gem'], default: 'box' }, x: { type: 'number', default: 0 }, y: { type: 'number', default: 2 }, z: { type: 'number', default: 0 } }, code: 'spawnObject' },
+            'physics_spawn_color': { category: 'physics', type: 'command', label: 'Spawn {shape} color {color}', inputs: { shape: { type: 'select', options: ['box','sphere','cylinder','cone','wall','platform','pyramid'], default: 'box' }, color: { type: 'color', default: '#4c97ff' } }, code: 'spawnObjectColor' },
+            'physics_spawn_at_player': { category: 'physics', type: 'command', label: 'Spawn {shape} at player', inputs: { shape: { type: 'select', options: ['box','sphere','cylinder','cone','wall','platform','pyramid'], default: 'box' } }, code: 'spawnAtPlayer' },
+            'physics_remove_last': { category: 'physics', type: 'command', label: 'Remove last spawned', code: 'removeLastSpawned' },
+            'physics_remove_all': { category: 'physics', type: 'command', label: 'Remove all spawned', code: 'removeAllSpawned' },
+            'physics_clone_at': { category: 'physics', type: 'command', label: 'Clone at {x} {y} {z}', inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 0 }, z: { type: 'number', default: 0 } }, code: 'cloneAt' },
 
             // === New Sound ===
             'sound_stop_all': { category: 'sound', type: 'command', label: 'Stop all sounds', code: 'stopAllSounds' },
@@ -198,7 +204,37 @@ class BlockCode {
             // ===== Background Music =====
             'sound_play_music': { category: 'sound', type: 'command', label: 'Play music {track}', inputs: { track: { type: 'select', options: ['adventure','chill','action','mystery','retro','none'], default: 'adventure' } }, code: 'playMusic' },
             'sound_stop_music': { category: 'sound', type: 'command', label: 'Stop music', code: 'stopMusic' },
-            'sound_music_volume': { category: 'sound', type: 'command', label: 'Music volume {percent}%', inputs: { percent: { type: 'number', default: 50 } }, code: 'setMusicVolume' }
+            'sound_music_volume': { category: 'sound', type: 'command', label: 'Music volume {percent}%', inputs: { percent: { type: 'number', default: 50 } }, code: 'setMusicVolume' },
+
+            // ===== More Motion =====
+            'motion_zigzag': { category: 'motion', type: 'command', label: 'Zigzag width {w} speed {s}', inputs: { w: { type: 'number', default: 3 }, s: { type: 'number', default: 2 } }, code: 'zigzag' },
+            'motion_spiral': { category: 'motion', type: 'command', label: 'Spiral radius {r} speed {s}', inputs: { r: { type: 'number', default: 3 }, s: { type: 'number', default: 1 } }, code: 'spiral' },
+            'motion_hover': { category: 'motion', type: 'command', label: 'Hover height {h} speed {s}', inputs: { h: { type: 'number', default: 0.5 }, s: { type: 'number', default: 1.5 } }, code: 'hover' },
+            'motion_teleport': { category: 'motion', type: 'command', label: 'Teleport to {x} {y} {z}', inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 5 }, z: { type: 'number', default: 0 } }, code: 'teleportObject' },
+            'motion_launch_up': { category: 'motion', type: 'command', label: 'Launch up force {force}', inputs: { force: { type: 'number', default: 10 } }, code: 'launchUp' },
+            'motion_move_toward': { category: 'motion', type: 'command', label: 'Toward player {speed} stop {dist}', inputs: { speed: { type: 'number', default: 3 }, dist: { type: 'number', default: 2 } }, code: 'moveToward' },
+
+            // ===== Game Logic =====
+            'var_set_lives': { category: 'variables', type: 'command', label: 'Set lives to {n}', inputs: { n: { type: 'number', default: 3 } }, code: 'setLives' },
+            'var_change_lives': { category: 'variables', type: 'command', label: 'Change lives by {n}', inputs: { n: { type: 'number', default: -1 } }, code: 'changeLives' },
+            'var_show_lives': { category: 'variables', type: 'command', label: 'Show lives on HUD', code: 'showLives' },
+            'event_lives_zero': { category: 'events', type: 'hat', label: 'When lives reach 0', icon: '💀', code: 'onLivesZero' },
+            'var_show_dialog': { category: 'variables', type: 'command', label: 'Dialog {text}', inputs: { text: { type: 'text', default: 'Hello!' } }, code: 'showDialog' },
+            'control_next_level': { category: 'control', type: 'command', label: 'Next level', code: 'nextLevel' },
+            'event_level_start': { category: 'events', type: 'hat', label: 'When level starts', icon: '🎬', code: 'onLevelStart' },
+            'var_start_timer': { category: 'variables', type: 'command', label: 'Countdown {seconds}s', inputs: { seconds: { type: 'number', default: 60 } }, code: 'startCountdown' },
+            'var_show_timer': { category: 'variables', type: 'command', label: 'Show timer on HUD', code: 'showTimer' },
+            'event_timer_done': { category: 'events', type: 'hat', label: 'When timer ends', icon: '⏰', code: 'onTimerDone' },
+
+            // ===== Visual Effects =====
+            'fx_screen_shake': { category: 'effects', type: 'command', label: 'Screen shake {intensity}', inputs: { intensity: { type: 'number', default: 5 } }, code: 'screenShake' },
+            'fx_fade_out': { category: 'effects', type: 'command', label: 'Fade out {seconds}s', inputs: { seconds: { type: 'number', default: 1 } }, code: 'fadeOut' },
+            'fx_fade_in': { category: 'effects', type: 'command', label: 'Fade in {seconds}s', inputs: { seconds: { type: 'number', default: 1 } }, code: 'fadeIn' },
+            'fx_flash_screen': { category: 'effects', type: 'command', label: 'Flash screen {color}', inputs: { color: { type: 'color', default: '#ffffff' } }, code: 'flashScreen' },
+            'fx_slow_motion': { category: 'effects', type: 'command', label: 'Slow motion {speed}x for {seconds}s', inputs: { speed: { type: 'number', default: 0.3 }, seconds: { type: 'number', default: 3 } }, code: 'slowMotion' },
+            'fx_camera_zoom': { category: 'effects', type: 'command', label: 'Camera zoom {factor}x in {time}s', inputs: { factor: { type: 'number', default: 1.5 }, time: { type: 'number', default: 0.5 } }, code: 'cameraZoom' },
+            'fx_camera_reset': { category: 'effects', type: 'command', label: 'Reset camera zoom', code: 'cameraReset' },
+            'fx_screen_tint': { category: 'effects', type: 'command', label: 'Tint screen {color} {opacity}%', inputs: { color: { type: 'color', default: '#ff0000' }, opacity: { type: 'number', default: 30 } }, code: 'screenTint' }
         };
     }
 

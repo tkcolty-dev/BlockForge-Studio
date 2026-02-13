@@ -1240,6 +1240,7 @@ input[type="checkbox"] {
 .block-shooting { background-color: #E03030; }
 .block-enemies { background-color: #CC3333; }
 .block-items { background-color: #44BB44; }
+.block-effects { background-color: #E67E22; }
 
 /* C-block parts inherit color */
 .block.c-block-container.block-control .c-block-top,
@@ -1264,6 +1265,10 @@ input[type="checkbox"] {
 .block.c-block-container.block-items .c-block-top,
 .block.c-block-container.block-items .c-block-bottom { background-color: #44BB44; }
 .block.c-block-container.block-items .c-block-body { background-color: rgba(40,120,40,0.3); border-color: rgba(68,187,68,0.25); }
+
+.block.c-block-container.block-effects .c-block-top,
+.block.c-block-container.block-effects .c-block-bottom { background-color: #E67E22; }
+.block.c-block-container.block-effects .c-block-body { background-color: rgba(180,100,20,0.3); border-color: rgba(230,126,34,0.25); }
 
 /* ===== Script Workspace ===== */
 #script-workspace {

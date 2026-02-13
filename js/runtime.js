@@ -42,6 +42,24 @@ class Runtime {
         this._musicVolume = 0.3;
         this._musicNodes = null;
 
+        // Spawned objects tracking
+        this._spawnedObjects = [];
+
+        // Lives system
+        this._lives = 3;
+        this._showingLives = false;
+        this._livesWasAboveZero = true;
+
+        // Countdown timer
+        this._countdown = null;
+        this._showingTimer = false;
+        this._countdownInterval = null;
+
+        // Visual effects
+        this._screenOverlay = null;
+        this._timeScale = 1;
+        this._originalFov = null;
+
         // Reusable temp objects to reduce allocations in hot loops
         this._tempVec3 = new THREE.Vector3();
         this._tempBox3 = new THREE.Box3();
@@ -90,6 +108,30 @@ class Runtime {
         this.inventory = [];
         this._pickupConfig.clear();
         this._showingInventory = false;
+
+        // Spawned objects
+        this._spawnedObjects.forEach(obj => {
+            this.scene3d.scene.remove(obj);
+            const idx = this.scene3d.objects.indexOf(obj);
+            if (idx !== -1) this.scene3d.objects.splice(idx, 1);
+        });
+        this._spawnedObjects = [];
+
+        // Lives system
+        this._lives = 3;
+        this._showingLives = false;
+        this._livesWasAboveZero = true;
+
+        // Countdown timer
+        if (this._countdownInterval) clearInterval(this._countdownInterval);
+        this._countdown = null;
+        this._showingTimer = false;
+        this._countdownInterval = null;
+
+        // Visual effects
+        if (this._screenOverlay) { this._screenOverlay.remove(); this._screenOverlay = null; }
+        this._timeScale = 1;
+        this._originalFov = null;
 
         // Music system
         this._stopMusic();
@@ -282,6 +324,28 @@ class Runtime {
 
         // Stop music
         this._stopMusic();
+
+        // Clean up spawned objects
+        this._spawnedObjects.forEach(obj => {
+            this.scene3d.scene.remove(obj);
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) obj.material.dispose();
+        });
+        this._spawnedObjects = [];
+
+        // Clean up countdown timer
+        if (this._countdownInterval) { clearInterval(this._countdownInterval); this._countdownInterval = null; }
+
+        // Clean up screen overlay
+        if (this._screenOverlay) { this._screenOverlay.remove(); this._screenOverlay = null; }
+        this._timeScale = 1;
+
+        // Restore camera FOV
+        if (this._originalFov !== null) {
+            this.scene3d.camera.fov = this._originalFov;
+            this.scene3d.camera.updateProjectionMatrix();
+            this._originalFov = null;
+        }
 
         // Clean up
         this.scene3d.isPlaying = false;
@@ -592,8 +656,9 @@ class Runtime {
     // ===== Game Loop =====
 
     update() {
-        const dt = 1 / 60; // Fixed timestep
-        this.gameTimer += dt;
+        const rawDt = 1 / 60; // Fixed timestep
+        const dt = rawDt * this._timeScale;
+        this.gameTimer += rawDt; // timer always runs at real speed
 
         this.updatePlayer(dt);
         this.updateAnimations(dt);
@@ -602,6 +667,7 @@ class Runtime {
         this.updateHUD();
         this.updateEnemyHealthBars();
         this._checkHealthZero();
+        this._checkLivesZero();
     }
 
     _isKeyBound(action) {
@@ -956,6 +1022,50 @@ class Runtime {
                     }
                     break;
                 }
+
+                case 'zigzag': {
+                    anim.phase = (anim.phase || 0) + dt * anim.speed;
+                    anim.object.position.x = anim.baseX + Math.sin(anim.phase) * anim.width;
+                    break;
+                }
+
+                case 'spiral': {
+                    anim.angle = (anim.angle || 0) + dt * anim.speed;
+                    anim.object.position.x = anim.baseX + Math.cos(anim.angle) * anim.radius;
+                    anim.object.position.z = anim.baseZ + Math.sin(anim.angle) * anim.radius;
+                    break;
+                }
+
+                case 'hover': {
+                    anim.phase = (anim.phase || 0) + dt * anim.speed;
+                    anim.object.position.y = anim.baseY + Math.sin(anim.phase) * anim.height;
+                    break;
+                }
+
+                case 'launchArc': {
+                    anim.vy += -20 * dt; // gravity
+                    anim.object.position.y += anim.vy * dt;
+                    if (anim.object.position.y <= anim.groundY) {
+                        anim.object.position.y = anim.groundY;
+                        anim.done = true;
+                    }
+                    break;
+                }
+
+                case 'cameraZoom': {
+                    anim.elapsed2 = (anim.elapsed2 || 0) + dt;
+                    const t = Math.min(1, anim.elapsed2 / anim.duration);
+                    const eased = t * (2 - t); // ease out
+                    this.scene3d.camera.fov = anim.startFov + (anim.targetFov - anim.startFov) * eased;
+                    this.scene3d.camera.updateProjectionMatrix();
+                    if (t >= 1) anim.done = true;
+                    break;
+                }
+            }
+
+            // Remove finished one-shot animations
+            if (anim.done) {
+                this.activeAnimations.splice(i, 1);
             }
         }
     }
@@ -2069,39 +2179,68 @@ class Runtime {
                     obj.position.y + oy,
                     obj.position.z + oz
                 );
-                let geometry, material;
-                switch (shape) {
-                    case 'sphere':
-                        geometry = new THREE.SphereGeometry(0.5, 16, 16);
-                        material = new THREE.MeshStandardMaterial({ color: 0x4c97ff, roughness: 0.4 });
-                        break;
-                    case 'coin':
-                        geometry = new THREE.CylinderGeometry(0.4, 0.4, 0.08, 16);
-                        material = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 });
-                        break;
-                    case 'gem':
-                        geometry = new THREE.OctahedronGeometry(0.4);
-                        material = new THREE.MeshStandardMaterial({ color: 0xff00ff, metalness: 0.6, roughness: 0.2 });
-                        break;
-                    default: // box
-                        geometry = new THREE.BoxGeometry(1, 1, 1);
-                        material = new THREE.MeshStandardMaterial({ color: 0x59c059, roughness: 0.4 });
-                        break;
-                }
-                const spawned = new THREE.Mesh(geometry, material);
+                const spawned = this._createSpawnedMesh(shape, 0x59c059);
                 spawned.position.copy(spawnPos);
-                spawned.castShadow = true;
-                spawned.receiveShadow = true;
-                spawned.userData = {
-                    id: 'spawned_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                    name: shape,
-                    type: shape,
-                    collidable: true,
-                    isClone: true,
-                    scripts: []
-                };
                 this.scene3d.scene.add(spawned);
                 this.scene3d.objects.push(spawned);
+                this._spawnedObjects.push(spawned);
+                break;
+            }
+            case 'spawnObjectColor': {
+                const shape2 = v.shape || 'box';
+                const color = new THREE.Color(v.color || '#4c97ff');
+                const spawned2 = this._createSpawnedMesh(shape2, color);
+                spawned2.position.copy(obj.position);
+                spawned2.position.y += 1;
+                this.scene3d.scene.add(spawned2);
+                this.scene3d.objects.push(spawned2);
+                this._spawnedObjects.push(spawned2);
+                break;
+            }
+            case 'spawnAtPlayer': {
+                if (this.playerController) {
+                    const shape3 = v.shape || 'box';
+                    const spawned3 = this._createSpawnedMesh(shape3, 0x59c059);
+                    spawned3.position.copy(this.playerController.mesh.position);
+                    spawned3.position.y += 1;
+                    this.scene3d.scene.add(spawned3);
+                    this.scene3d.objects.push(spawned3);
+                    this._spawnedObjects.push(spawned3);
+                }
+                break;
+            }
+            case 'removeLastSpawned': {
+                if (this._spawnedObjects.length > 0) {
+                    const last = this._spawnedObjects.pop();
+                    this.scene3d.scene.remove(last);
+                    const idx = this.scene3d.objects.indexOf(last);
+                    if (idx !== -1) this.scene3d.objects.splice(idx, 1);
+                    if (last.geometry) last.geometry.dispose();
+                    if (last.material) last.material.dispose();
+                }
+                break;
+            }
+            case 'removeAllSpawned': {
+                this._spawnedObjects.forEach(s => {
+                    this.scene3d.scene.remove(s);
+                    const idx = this.scene3d.objects.indexOf(s);
+                    if (idx !== -1) this.scene3d.objects.splice(idx, 1);
+                    if (s.geometry) s.geometry.dispose();
+                    if (s.material) s.material.dispose();
+                });
+                this._spawnedObjects = [];
+                break;
+            }
+            case 'cloneAt': {
+                const cx = parseFloat(v.x) || 0;
+                const cy = parseFloat(v.y) || 0;
+                const cz = parseFloat(v.z) || 0;
+                const cloned = obj.clone();
+                cloned.position.set(cx, cy, cz);
+                cloned.userData = { ...obj.userData, id: 'clone_' + Date.now(), isClone: true, scripts: [] };
+                this.scene3d.scene.add(cloned);
+                this.scene3d.objects.push(cloned);
+                this._spawnedObjects.push(cloned);
                 break;
             }
 
@@ -2585,6 +2724,243 @@ class Runtime {
                 break;
             }
 
+            // ===== More Motion Blocks =====
+            case 'zigzag': {
+                this.activeAnimations.push({
+                    type: 'zigzag', object: obj,
+                    baseX: obj.position.x,
+                    width: parseFloat(v.w) || 3,
+                    speed: parseFloat(v.s) || 2,
+                    phase: 0, elapsed: 0
+                });
+                break;
+            }
+            case 'spiral': {
+                this.activeAnimations.push({
+                    type: 'spiral', object: obj,
+                    baseX: obj.position.x,
+                    baseZ: obj.position.z,
+                    radius: parseFloat(v.r) || 3,
+                    speed: parseFloat(v.s) || 1,
+                    angle: 0, elapsed: 0
+                });
+                break;
+            }
+            case 'hover': {
+                this.activeAnimations.push({
+                    type: 'hover', object: obj,
+                    baseY: obj.position.y,
+                    height: parseFloat(v.h) || 0.5,
+                    speed: parseFloat(v.s) || 1.5,
+                    phase: 0, elapsed: 0
+                });
+                break;
+            }
+            case 'teleportObject': {
+                obj.position.set(
+                    parseFloat(v.x) || 0,
+                    parseFloat(v.y) || 5,
+                    parseFloat(v.z) || 0
+                );
+                break;
+            }
+            case 'launchUp': {
+                const launchForce = parseFloat(v.force) || 10;
+                this.activeAnimations.push({
+                    type: 'launchArc', object: obj,
+                    vy: launchForce,
+                    groundY: obj.position.y,
+                    elapsed: 0
+                });
+                break;
+            }
+            case 'moveToward': {
+                if (this.playerController) {
+                    const mtSpeed = parseFloat(v.speed) || 3;
+                    const mtDist = parseFloat(v.dist) || 2;
+                    const pp = this.playerController.mesh.position;
+                    const dx = pp.x - obj.position.x;
+                    const dz = pp.z - obj.position.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    if (dist > mtDist) {
+                        const step = mtSpeed * (1 / 60);
+                        obj.position.x += (dx / dist) * step;
+                        obj.position.z += (dz / dist) * step;
+                        obj.rotation.y = Math.atan2(dx, dz);
+                    }
+                }
+                break;
+            }
+
+            // ===== Game Logic Blocks =====
+            case 'setLives': {
+                this._lives = parseInt(v.n) || 3;
+                break;
+            }
+            case 'changeLives': {
+                this._lives += parseInt(v.n) || -1;
+                break;
+            }
+            case 'showLives': {
+                this._showingLives = true;
+                break;
+            }
+            case 'showDialog': {
+                const dialogText = v.text || 'Hello!';
+                const overlay = document.createElement('div');
+                overlay.style.cssText = `
+                    position:fixed;top:0;left:0;right:0;bottom:0;
+                    background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;
+                    z-index:10002;backdrop-filter:blur(4px);
+                `;
+                const box = document.createElement('div');
+                box.style.cssText = `
+                    background:white;color:#333;padding:32px 48px;border-radius:16px;
+                    font-size:20px;font-weight:500;text-align:center;max-width:400px;
+                    box-shadow:0 8px 32px rgba(0,0,0,0.3);
+                `;
+                box.textContent = dialogText;
+                const btn = document.createElement('button');
+                btn.textContent = 'OK';
+                btn.style.cssText = `
+                    display:block;margin:20px auto 0;padding:10px 32px;border:none;
+                    background:#4C97FF;color:white;border-radius:8px;font-size:16px;
+                    font-weight:600;cursor:pointer;
+                `;
+                box.appendChild(btn);
+                overlay.appendChild(box);
+                document.body.appendChild(overlay);
+                await new Promise(resolve => {
+                    btn.addEventListener('click', () => { overlay.remove(); resolve(); });
+                });
+                break;
+            }
+            case 'nextLevel': {
+                this.variables.level = (this.variables.level || 1) + 1;
+                this.triggerEvent('onLevelStart');
+                break;
+            }
+            case 'startCountdown': {
+                const secs = parseFloat(v.seconds) || 60;
+                this._countdown = secs;
+                if (this._countdownInterval) clearInterval(this._countdownInterval);
+                this._countdownInterval = setInterval(() => {
+                    if (!this.isRunning) { clearInterval(this._countdownInterval); return; }
+                    this._countdown -= 1;
+                    if (this._countdown <= 0) {
+                        this._countdown = 0;
+                        clearInterval(this._countdownInterval);
+                        this._countdownInterval = null;
+                        this.triggerEvent('onTimerDone');
+                    }
+                }, 1000);
+                break;
+            }
+            case 'showTimer': {
+                this._showingTimer = true;
+                break;
+            }
+
+            // ===== Visual Effects Blocks =====
+            case 'screenShake': {
+                const intensity = parseFloat(v.intensity) || 5;
+                const cam = this.scene3d.camera;
+                const origPos = cam.position.clone();
+                let shakeTime = 0;
+                const shakeAnim = () => {
+                    if (shakeTime > 300 || !this.isRunning) {
+                        cam.position.copy(origPos);
+                        return;
+                    }
+                    cam.position.x = origPos.x + (Math.random() - 0.5) * intensity * 0.02;
+                    cam.position.y = origPos.y + (Math.random() - 0.5) * intensity * 0.02;
+                    shakeTime += 16;
+                    requestAnimationFrame(shakeAnim);
+                };
+                shakeAnim();
+                break;
+            }
+            case 'fadeOut': {
+                const fadeSecs = parseFloat(v.seconds) || 1;
+                if (!this._screenOverlay) {
+                    this._screenOverlay = document.createElement('div');
+                    this._screenOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:9999;transition-property:opacity;';
+                    document.body.appendChild(this._screenOverlay);
+                }
+                this._screenOverlay.style.background = 'black';
+                this._screenOverlay.style.opacity = '0';
+                this._screenOverlay.style.transitionDuration = fadeSecs + 's';
+                requestAnimationFrame(() => { this._screenOverlay.style.opacity = '1'; });
+                await this.sleep(fadeSecs * 1000);
+                break;
+            }
+            case 'fadeIn': {
+                const fadeInSecs = parseFloat(v.seconds) || 1;
+                if (this._screenOverlay) {
+                    this._screenOverlay.style.transitionDuration = fadeInSecs + 's';
+                    this._screenOverlay.style.opacity = '0';
+                    await this.sleep(fadeInSecs * 1000);
+                    this._screenOverlay.remove();
+                    this._screenOverlay = null;
+                }
+                break;
+            }
+            case 'flashScreen': {
+                const flashColor = v.color || '#ffffff';
+                const flashEl = document.createElement('div');
+                flashEl.style.cssText = `position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:9999;background:${flashColor};opacity:0.8;transition:opacity 0.2s;`;
+                document.body.appendChild(flashEl);
+                requestAnimationFrame(() => { flashEl.style.opacity = '0'; });
+                setTimeout(() => flashEl.remove(), 300);
+                break;
+            }
+            case 'slowMotion': {
+                const slowSpeed = parseFloat(v.speed) || 0.3;
+                const slowDur = (parseFloat(v.seconds) || 3) * 1000;
+                this._timeScale = slowSpeed;
+                setTimeout(() => { this._timeScale = 1; }, slowDur);
+                break;
+            }
+            case 'cameraZoom': {
+                const factor = parseFloat(v.factor) || 1.5;
+                const zoomTime = parseFloat(v.time) || 0.5;
+                const cam2 = this.scene3d.camera;
+                if (this._originalFov === null) this._originalFov = cam2.fov;
+                this.activeAnimations.push({
+                    type: 'cameraZoom',
+                    startFov: cam2.fov,
+                    targetFov: (this._originalFov || 60) / factor,
+                    duration: zoomTime,
+                    elapsed: 0, elapsed2: 0
+                });
+                break;
+            }
+            case 'cameraReset': {
+                if (this._originalFov !== null) {
+                    const cam3 = this.scene3d.camera;
+                    this.activeAnimations.push({
+                        type: 'cameraZoom',
+                        startFov: cam3.fov,
+                        targetFov: this._originalFov,
+                        duration: 0.3,
+                        elapsed: 0, elapsed2: 0
+                    });
+                }
+                break;
+            }
+            case 'screenTint': {
+                const tintColor = v.color || '#ff0000';
+                const tintOpacity = (parseFloat(v.opacity) || 30) / 100;
+                if (!this._screenOverlay) {
+                    this._screenOverlay = document.createElement('div');
+                    this._screenOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:9999;';
+                    document.body.appendChild(this._screenOverlay);
+                }
+                this._screenOverlay.style.background = tintColor;
+                this._screenOverlay.style.opacity = String(tintOpacity);
+                break;
+            }
+
             default: {
                 // Handle custom block calls (customCall_xxx)
                 if (cmd.code.startsWith('customCall_')) {
@@ -2661,6 +3037,25 @@ class Runtime {
             });
             hud.appendChild(invContainer);
         }
+
+        // Lives display
+        if (this._showingLives) {
+            const livesEl = document.createElement('div');
+            livesEl.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:8px 16px;border-radius:8px;font-size:16px;font-weight:600;backdrop-filter:blur(8px);';
+            livesEl.textContent = '❤'.repeat(Math.max(0, this._lives)) + (this._lives <= 0 ? ' 0' : '');
+            hud.appendChild(livesEl);
+        }
+
+        // Countdown timer display
+        if (this._showingTimer && this._countdown !== null) {
+            const timerEl = document.createElement('div');
+            timerEl.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:8px 16px;border-radius:8px;font-size:16px;font-weight:700;backdrop-filter:blur(8px);font-variant-numeric:tabular-nums;';
+            const mins = Math.floor(this._countdown / 60);
+            const secs = Math.floor(this._countdown % 60);
+            timerEl.textContent = `⏱ ${mins}:${secs.toString().padStart(2, '0')}`;
+            if (this._countdown <= 10) timerEl.style.color = '#e74c3c';
+            hud.appendChild(timerEl);
+        }
     }
 
     // ===== Speech Bubbles =====
@@ -2714,6 +3109,16 @@ class Runtime {
         }
         if (this.variables.health > 0) {
             this._healthWasAboveZero = true;
+        }
+    }
+
+    _checkLivesZero() {
+        if (this._livesWasAboveZero && this._lives <= 0) {
+            this._livesWasAboveZero = false;
+            this.triggerEvent('onLivesZero');
+        }
+        if (this._lives > 0) {
+            this._livesWasAboveZero = true;
         }
     }
 
@@ -2797,6 +3202,58 @@ class Runtime {
         obj.visible = false;
         obj.userData.collidable = false;
         this.triggerEvent('onItemCollected', { item: itemName }, obj);
+    }
+
+    // ===== Spawn Helper =====
+
+    _createSpawnedMesh(shape, color) {
+        let geometry, material;
+        const c = (color instanceof THREE.Color) ? color : new THREE.Color(color);
+        switch (shape) {
+            case 'sphere':
+                geometry = new THREE.SphereGeometry(0.5, 16, 16);
+                break;
+            case 'cylinder':
+                geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+                break;
+            case 'cone':
+                geometry = new THREE.ConeGeometry(0.5, 1, 16);
+                break;
+            case 'wall':
+                geometry = new THREE.BoxGeometry(3, 2, 0.3);
+                break;
+            case 'platform':
+                geometry = new THREE.BoxGeometry(3, 0.3, 3);
+                break;
+            case 'pyramid': {
+                const pyrGeom = new THREE.ConeGeometry(0.7, 1, 4);
+                pyrGeom.rotateY(Math.PI / 4);
+                geometry = pyrGeom;
+                break;
+            }
+            case 'coin':
+                geometry = new THREE.CylinderGeometry(0.4, 0.4, 0.08, 16);
+                material = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 });
+                break;
+            case 'gem':
+                geometry = new THREE.OctahedronGeometry(0.4);
+                material = new THREE.MeshStandardMaterial({ color: 0xff00ff, metalness: 0.6, roughness: 0.2 });
+                break;
+            default: // box
+                geometry = new THREE.BoxGeometry(1, 1, 1);
+                break;
+        }
+        if (!material) {
+            material = new THREE.MeshStandardMaterial({ color: c, roughness: 0.4 });
+        }
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData = {
+            id: 'spawned_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            name: shape, type: shape, collidable: true, isClone: true, scripts: []
+        };
+        return mesh;
     }
 
     // ===== Music System =====
