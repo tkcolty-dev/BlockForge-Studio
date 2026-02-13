@@ -11,6 +11,7 @@ class BlockCode {
         this.workspaceScripts = [];
         this.nextBlockId = 1;
         this.customBlocks = {}; // user-created blocks
+        this.customVariables = []; // user-created variable names
 
         this.drawer = document.getElementById('block-drawer');
         this.workspace = document.getElementById('workspace-canvas');
@@ -43,7 +44,9 @@ class BlockCode {
             sound: { name: 'Sound', color: '#CF63CF', darkColor: '#BD42BD' },
             variables: { name: 'Variables', color: '#FF8C1A', darkColor: '#DB6E00' },
             myblocks: { name: 'My Blocks', color: '#FF6680', darkColor: '#CC4466' },
-            shooting: { name: 'Shooting', color: '#E03030', darkColor: '#B01818' }
+            shooting: { name: 'Shooting', color: '#E03030', darkColor: '#B01818' },
+            enemies: { name: 'Enemies', color: '#CC3333', darkColor: '#991919' },
+            items: { name: 'Items', color: '#44BB44', darkColor: '#2D882D' }
         };
     }
 
@@ -158,7 +161,44 @@ class BlockCode {
             'shoot_set_damage': { category: 'shooting', type: 'command', label: 'Set projectile damage {damage}', inputs: { damage: { type: 'number', default: 10 } }, code: 'setProjectileDamage' },
             'shoot_set_fire_rate': { category: 'shooting', type: 'command', label: 'Set fire rate every {seconds}s', inputs: { seconds: { type: 'number', default: 0.3 } }, code: 'setFireRate' },
             'shoot_set_size': { category: 'shooting', type: 'command', label: 'Set projectile size {size}', inputs: { size: { type: 'number', default: 0.15 } }, code: 'setProjectileSize' },
-            'shoot_set_lifetime': { category: 'shooting', type: 'command', label: 'Projectile lifetime {seconds}s', inputs: { seconds: { type: 'number', default: 3 } }, code: 'setProjectileLifetime' }
+            'shoot_set_lifetime': { category: 'shooting', type: 'command', label: 'Projectile lifetime {seconds}s', inputs: { seconds: { type: 'number', default: 3 } }, code: 'setProjectileLifetime' },
+
+            // ===== Health/Damage =====
+            'health_set_max': { category: 'variables', type: 'command', label: 'Set max health to {value}', inputs: { value: { type: 'number', default: 100 } }, code: 'setMaxHealth' },
+            'health_set': { category: 'variables', type: 'command', label: 'Set health to {value}', inputs: { value: { type: 'number', default: 100 } }, code: 'setHealth' },
+            'health_change': { category: 'variables', type: 'command', label: 'Change health by {amount}', inputs: { amount: { type: 'number', default: -10 } }, code: 'changeHealth' },
+            'health_heal': { category: 'variables', type: 'command', label: 'Heal {amount}', inputs: { amount: { type: 'number', default: 25 } }, code: 'heal' },
+            'health_show_bar': { category: 'variables', type: 'command', label: 'Show health bar', code: 'showHealthBar' },
+            'health_set_damage': { category: 'physics', type: 'command', label: 'Set contact damage {damage}', inputs: { damage: { type: 'number', default: 10 } }, code: 'setContactDamage' },
+            'health_set_invincibility': { category: 'variables', type: 'command', label: 'Invincibility for {seconds}s', inputs: { seconds: { type: 'number', default: 1 } }, code: 'setInvincibility' },
+            'event_health_zero': { category: 'events', type: 'hat', label: 'When health reaches 0', icon: '💀', code: 'onHealthZero' },
+
+            // ===== Enemies =====
+            'enemy_set_as': { category: 'enemies', type: 'command', label: 'Set as enemy health {health}', inputs: { health: { type: 'number', default: 50 } }, code: 'setAsEnemy' },
+            'enemy_follow': { category: 'enemies', type: 'command', label: 'Chase player speed {speed}', inputs: { speed: { type: 'number', default: 3 } }, code: 'enemyFollow' },
+            'enemy_patrol': { category: 'enemies', type: 'command', label: 'Enemy patrol {dist} speed {speed}', inputs: { dist: { type: 'number', default: 5 }, speed: { type: 'number', default: 2 } }, code: 'enemyPatrol' },
+            'enemy_wander': { category: 'enemies', type: 'command', label: 'Wander radius {radius} speed {speed}', inputs: { radius: { type: 'number', default: 5 }, speed: { type: 'number', default: 1.5 } }, code: 'enemyWander' },
+            'enemy_attack_touch': { category: 'enemies', type: 'command', label: 'Attack on touch damage {damage}', inputs: { damage: { type: 'number', default: 10 } }, code: 'enemyAttackTouch' },
+            'enemy_attack_ranged': { category: 'enemies', type: 'command', label: 'Shoot every {seconds}s dmg {damage}', inputs: { seconds: { type: 'number', default: 2 }, damage: { type: 'number', default: 5 } }, code: 'enemyAttackRanged' },
+            'enemy_set_health': { category: 'enemies', type: 'command', label: 'Set enemy health to {value}', inputs: { value: { type: 'number', default: 50 } }, code: 'setEnemyHealth' },
+            'enemy_show_health': { category: 'enemies', type: 'command', label: 'Show enemy health bar', code: 'showEnemyHealthBar' },
+            'event_enemy_defeated': { category: 'events', type: 'hat', label: 'When this enemy defeated', icon: '💀', code: 'onEnemyDefeated' },
+
+            // ===== Items/Inventory =====
+            'item_set_pickup': { category: 'items', type: 'command', label: 'Set as pickup type {type}', inputs: { type: { type: 'select', options: ['key','potion','powerup','coin','gem','custom'], default: 'key' } }, code: 'setAsPickup' },
+            'item_set_pickup_name': { category: 'items', type: 'command', label: 'Set pickup name {name}', inputs: { name: { type: 'text', default: 'Gold Key' } }, code: 'setPickupName' },
+            'item_set_effect': { category: 'items', type: 'command', label: 'On pickup {effect} {amount}', inputs: { effect: { type: 'select', options: ['heal','speed boost','score','none'], default: 'heal' }, amount: { type: 'number', default: 25 } }, code: 'setPickupEffect' },
+            'event_item_collected': { category: 'events', type: 'hat', label: 'When item collected', icon: '🎒', code: 'onItemCollected' },
+            'item_add': { category: 'items', type: 'command', label: 'Add {item} to inventory', inputs: { item: { type: 'text', default: 'Gold Key' } }, code: 'addToInventory' },
+            'item_remove': { category: 'items', type: 'command', label: 'Remove {item} from inventory', inputs: { item: { type: 'text', default: 'Gold Key' } }, code: 'removeFromInventory' },
+            'item_has': { category: 'items', type: 'c-block', label: 'If has {item} in inventory', inputs: { item: { type: 'text', default: 'Gold Key' } }, code: 'ifHasItem' },
+            'item_use': { category: 'items', type: 'command', label: 'Use item {item}', inputs: { item: { type: 'text', default: 'Potion' } }, code: 'useItem' },
+            'item_show_inventory': { category: 'items', type: 'command', label: 'Show inventory on HUD', code: 'showInventory' },
+
+            // ===== Background Music =====
+            'sound_play_music': { category: 'sound', type: 'command', label: 'Play music {track}', inputs: { track: { type: 'select', options: ['adventure','chill','action','mystery','retro','none'], default: 'adventure' } }, code: 'playMusic' },
+            'sound_stop_music': { category: 'sound', type: 'command', label: 'Stop music', code: 'stopMusic' },
+            'sound_music_volume': { category: 'sound', type: 'command', label: 'Music volume {percent}%', inputs: { percent: { type: 'number', default: 50 } }, code: 'setMusicVolume' }
         };
     }
 
@@ -179,6 +219,15 @@ class BlockCode {
 
     renderDrawer() {
         this.drawer.innerHTML = '';
+
+        // Show "Make a Variable" button for Variables category
+        if (this.activeCategory === 'variables') {
+            const makeVarBtn = document.createElement('button');
+            makeVarBtn.className = 'make-block-btn';
+            makeVarBtn.innerHTML = '<span class="material-icons-round">add_circle</span> Make a Variable';
+            makeVarBtn.addEventListener('click', () => this._showMakeVariableDialog());
+            this.drawer.appendChild(makeVarBtn);
+        }
 
         // Show "Make a Block" button for My Blocks category
         if (this.activeCategory === 'myblocks') {
@@ -256,6 +305,36 @@ class BlockCode {
         this.blocks[id + '_call'] = this.customBlocks[id].call;
 
         this.renderDrawer();
+    }
+
+    _showMakeVariableDialog() {
+        const name = prompt('Variable name:', 'myVar');
+        if (!name || !name.trim()) return;
+        const safeName = name.trim().replace(/\s+/g, '_');
+        const allVars = this._getAllVariableNames();
+        if (allVars.includes(safeName)) {
+            alert('A variable with that name already exists.');
+            return;
+        }
+        this.customVariables.push(safeName);
+        this._updateVariableDropdowns();
+        this.renderDrawer();
+    }
+
+    _getAllVariableNames() {
+        const builtIn = ['score', 'health', 'coins', 'speed', 'level'];
+        return [...builtIn, ...this.customVariables];
+    }
+
+    _updateVariableDropdowns() {
+        const allVars = this._getAllVariableNames();
+        const varBlockIds = ['var_set', 'var_change', 'var_show', 'var_if_check'];
+        varBlockIds.forEach(id => {
+            const block = this.blocks[id];
+            if (block && block.inputs && block.inputs.var) {
+                block.inputs.var.options = [...allVars];
+            }
+        });
     }
 
     // ===== Create a block DOM element =====

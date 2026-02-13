@@ -22,6 +22,26 @@ class Runtime {
         this._fireRates = new Map();
         this._projectileConfig = new Map();
 
+        // Health system
+        this.maxHealth = 100;
+        this._invincibleUntil = 0;
+        this._showingHealthBar = false;
+        this._contactDamage = new Map();
+
+        // Enemy system
+        this._enemies = new Map();
+        this._enemyBars = new Map();
+
+        // Inventory system
+        this.inventory = [];
+        this._pickupConfig = new Map();
+        this._showingInventory = false;
+
+        // Music system
+        this._musicTrack = 'none';
+        this._musicVolume = 0.3;
+        this._musicNodes = null;
+
         // Reusable temp objects to reduce allocations in hot loops
         this._tempVec3 = new THREE.Vector3();
         this._tempBox3 = new THREE.Box3();
@@ -43,12 +63,38 @@ class Runtime {
         this.isRunning = true;
         this.gameTimer = 0;
         this.variables = { score: 0, health: 100, coins: 0, speed: 5, level: 1 };
+        // Init custom variables
+        if (this.blockCode.customVariables) {
+            this.blockCode.customVariables.forEach(name => { this.variables[name] = 0; });
+        }
         this.activeAnimations = [];
         this.hudElements = [];
         this.runningScripts = [];
         this.projectiles = [];
         this._fireRates.clear();
         this._projectileConfig.clear();
+
+        // Health system
+        this.maxHealth = 100;
+        this._invincibleUntil = 0;
+        this._showingHealthBar = false;
+        this._contactDamage.clear();
+        this._healthWasAboveZero = true;
+
+        // Enemy system
+        this._enemies.clear();
+        this._enemyBars.forEach(el => el.remove());
+        this._enemyBars.clear();
+
+        // Inventory system
+        this.inventory = [];
+        this._pickupConfig.clear();
+        this._showingInventory = false;
+
+        // Music system
+        this._stopMusic();
+
+        this.settings = settings;
 
         // Apply settings
         this.controlScheme = settings.controlScheme || 'first-person';
@@ -110,6 +156,13 @@ class Runtime {
         // Init audio
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Start background music if configured
+        const bgMusic = this.settings?.bgMusic || 'none';
+        if (bgMusic !== 'none') {
+            this._musicVolume = (this.settings?.musicVolume || 30) / 100;
+            this._startMusic(bgMusic);
         }
 
         // Click handler for in-game object interaction (all modes) and point-click movement
@@ -219,6 +272,16 @@ class Runtime {
         }
         this._fireRates.clear();
         this._projectileConfig.clear();
+
+        // Clean up enemy health bars
+        this._enemyBars.forEach(el => el.remove());
+        this._enemyBars.clear();
+        this._enemies.clear();
+        this._contactDamage.clear();
+        this._pickupConfig.clear();
+
+        // Stop music
+        this._stopMusic();
 
         // Clean up
         this.scene3d.isPlaying = false;
@@ -537,6 +600,8 @@ class Runtime {
         this.updateProjectiles(dt);
         this.checkCollisions();
         this.updateHUD();
+        this.updateEnemyHealthBars();
+        this._checkHealthZero();
     }
 
     _isKeyBound(action) {
@@ -841,6 +906,26 @@ class Runtime {
                     break;
                 }
 
+                case 'wander': {
+                    if (anim.elapsed > anim.nextChange) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const dist = Math.random() * anim.radius;
+                        anim.targetX = anim.baseX + Math.cos(angle) * dist;
+                        anim.targetZ = anim.baseZ + Math.sin(angle) * dist;
+                        anim.nextChange = anim.elapsed + 2 + Math.random() * 3;
+                    }
+                    const dx = anim.targetX - anim.object.position.x;
+                    const dz = anim.targetZ - anim.object.position.z;
+                    const wdist = Math.sqrt(dx * dx + dz * dz);
+                    if (wdist > 0.3) {
+                        const wspeed = anim.speed * dt;
+                        anim.object.position.x += (dx / wdist) * wspeed;
+                        anim.object.position.z += (dz / wdist) * wspeed;
+                        anim.object.rotation.y = Math.atan2(dx, dz);
+                    }
+                    break;
+                }
+
                 case 'trail': {
                     if (anim.elapsed - anim.lastSpawn > 0.05) {
                         anim.lastSpawn = anim.elapsed;
@@ -902,6 +987,29 @@ class Runtime {
 
             if (playerPos.distanceTo(cp) < playerRadius) {
                 this.triggerEvent('onCollide', { object: 'player' }, obj);
+
+                // Contact damage
+                const contactDmg = this._contactDamage.get(obj.userData.id);
+                if (contactDmg && contactDmg > 0 && this.gameTimer >= this._invincibleUntil) {
+                    this.variables.health = Math.max(0, (this.variables.health || 100) - contactDmg);
+                    this._invincibleUntil = this.gameTimer + 0.5;
+                    this.playSynthSound('hurt');
+                    if (this.playerController && this.playerController.mesh.material) {
+                        const origColor = this.playerController.mesh.material.color.clone();
+                        this.playerController.mesh.material.color.set(0xff0000);
+                        setTimeout(() => {
+                            if (this.playerController && this.playerController.mesh.material) {
+                                this.playerController.mesh.material.color.copy(origColor);
+                            }
+                        }, 200);
+                    }
+                }
+
+                // Pickup collection
+                const pickupData = this._pickupConfig.get(obj.userData.id);
+                if (pickupData && obj.visible) {
+                    this._collectPickup(obj, pickupData);
+                }
             }
         });
     }
@@ -934,6 +1042,12 @@ class Runtime {
                 const box = new THREE.Box3().setFromObject(obj);
                 if (box.containsPoint(p.mesh.position)) {
                     this.triggerEvent('onProjectileHit', { damage: p.damage, shooter: p.owner }, obj);
+                    // Damage enemies
+                    const enemyData = this._enemies.get(obj.userData.id);
+                    if (enemyData) {
+                        enemyData.health -= p.damage;
+                        this._checkEnemyDeath(obj);
+                    }
                     this._spawnImpactEffect(p.mesh.position.clone(), p.color);
                     this._playImpactSound();
                     this._removeProjectile(i);
@@ -947,7 +1061,10 @@ class Runtime {
             if (this.playerController && p.owner !== this.playerController.mesh) {
                 const dist = p.mesh.position.distanceTo(this.playerController.mesh.position);
                 if (dist < 0.8) {
-                    this.variables.health = (this.variables.health || 100) - p.damage;
+                    if (this.gameTimer >= this._invincibleUntil) {
+                        this.variables.health = Math.max(0, (this.variables.health || 100) - p.damage);
+                        this._invincibleUntil = this.gameTimer + 0.5;
+                    }
                     this._spawnImpactEffect(p.mesh.position.clone(), '#ff0000');
                     this._playImpactSound();
                     this.playSynthSound('hurt');
@@ -1466,6 +1583,9 @@ class Runtime {
             }
             case 'resetVars': {
                 this.variables = { score: 0, health: 100, coins: 0, speed: 5, level: 1 };
+                if (this.blockCode.customVariables) {
+                    this.blockCode.customVariables.forEach(name => { this.variables[name] = 0; });
+                }
                 break;
             }
             case 'ifVar': {
@@ -2280,6 +2400,191 @@ class Runtime {
                 break;
             }
 
+            // ===== Health/Damage =====
+            case 'setMaxHealth': {
+                this.maxHealth = parseFloat(v.value) || 100;
+                break;
+            }
+            case 'setHealth': {
+                this.variables.health = parseFloat(v.value) || 100;
+                break;
+            }
+            case 'changeHealth': {
+                const amt = parseFloat(v.amount) || 0;
+                if (amt < 0 && this.gameTimer < this._invincibleUntil) break;
+                this.variables.health = Math.max(0, Math.min(this.maxHealth,
+                    (this.variables.health || 0) + amt));
+                break;
+            }
+            case 'heal': {
+                const healAmt = parseFloat(v.amount) || 25;
+                this.variables.health = Math.min(this.maxHealth,
+                    (this.variables.health || 0) + healAmt);
+                this.playSynthSound('powerup');
+                break;
+            }
+            case 'showHealthBar': {
+                this._showingHealthBar = true;
+                break;
+            }
+            case 'setContactDamage': {
+                this._contactDamage.set(obj.userData.id, parseFloat(v.damage) || 10);
+                break;
+            }
+            case 'setInvincibility': {
+                this._invincibleUntil = this.gameTimer + (parseFloat(v.seconds) || 1);
+                break;
+            }
+
+            // ===== Enemies =====
+            case 'setAsEnemy': {
+                const health = parseFloat(v.health) || 50;
+                this._enemies.set(obj.userData.id, { health, maxHealth: health, showBar: false });
+                break;
+            }
+            case 'enemyFollow': {
+                this.activeAnimations.push({
+                    type: 'followPlayer', object: obj,
+                    speed: parseFloat(v.speed) || 3, elapsed: 0
+                });
+                break;
+            }
+            case 'enemyPatrol': {
+                this.activeAnimations.push({
+                    type: 'patrol', object: obj,
+                    baseX: obj.position.x,
+                    distance: parseFloat(v.dist) || 5,
+                    speed: parseFloat(v.speed) || 2, elapsed: 0
+                });
+                break;
+            }
+            case 'enemyWander': {
+                this.activeAnimations.push({
+                    type: 'wander', object: obj,
+                    radius: parseFloat(v.radius) || 5,
+                    speed: parseFloat(v.speed) || 1.5,
+                    baseX: obj.position.x, baseZ: obj.position.z,
+                    targetX: obj.position.x, targetZ: obj.position.z,
+                    elapsed: 0, nextChange: 0
+                });
+                break;
+            }
+            case 'enemyAttackTouch': {
+                this._contactDamage.set(obj.userData.id, parseFloat(v.damage) || 10);
+                break;
+            }
+            case 'enemyAttackRanged': {
+                const interval = (parseFloat(v.seconds) || 2) * 1000;
+                const damage = parseFloat(v.damage) || 5;
+                const attackInterval = setInterval(() => {
+                    if (!this.isRunning || !obj.visible) { clearInterval(attackInterval); return; }
+                    if (!this.playerController) return;
+                    const dist = obj.position.distanceTo(this.playerController.mesh.position);
+                    if (dist < 15) {
+                        const spawnPos = obj.position.clone(); spawnPos.y += 0.5;
+                        const targetPos = this.playerController.mesh.position.clone(); targetPos.y += 0.5;
+                        const dir = new THREE.Vector3().subVectors(targetPos, spawnPos).normalize();
+                        if (!this._projectileConfig.has(obj.userData.id)) {
+                            this._projectileConfig.set(obj.userData.id, {});
+                        }
+                        this._projectileConfig.get(obj.userData.id).damage = damage;
+                        this._createProjectile(spawnPos, dir.multiplyScalar(15), '#ff4400', obj);
+                    }
+                }, interval);
+                this._timerIntervals.push(attackInterval);
+                break;
+            }
+            case 'setEnemyHealth': {
+                const data = this._enemies.get(obj.userData.id);
+                if (data) {
+                    data.health = parseFloat(v.value) || 50;
+                    data.maxHealth = Math.max(data.maxHealth, data.health);
+                }
+                break;
+            }
+            case 'showEnemyHealthBar': {
+                const data = this._enemies.get(obj.userData.id);
+                if (data) data.showBar = true;
+                break;
+            }
+
+            // ===== Items/Inventory =====
+            case 'setAsPickup': {
+                const config = this._pickupConfig.get(obj.userData.id) || {};
+                config.type = v.type || 'key';
+                if (!config.name) config.name = config.type;
+                if (!config.effect) config.effect = 'none';
+                if (!config.effectAmount) config.effectAmount = 0;
+                this._pickupConfig.set(obj.userData.id, config);
+                break;
+            }
+            case 'setPickupName': {
+                const config = this._pickupConfig.get(obj.userData.id) || { type: 'custom', effect: 'none', effectAmount: 0 };
+                config.name = v.name || 'Item';
+                this._pickupConfig.set(obj.userData.id, config);
+                break;
+            }
+            case 'setPickupEffect': {
+                const config = this._pickupConfig.get(obj.userData.id) || { type: 'custom', name: 'Item' };
+                config.effect = v.effect || 'none';
+                config.effectAmount = parseFloat(v.amount) || 25;
+                this._pickupConfig.set(obj.userData.id, config);
+                break;
+            }
+            case 'addToInventory': {
+                const itemName = v.item || 'Item';
+                const existing = this.inventory.find(i => i.name === itemName);
+                if (existing) { existing.count++; }
+                else { this.inventory.push({ name: itemName, type: 'custom', count: 1 }); }
+                break;
+            }
+            case 'removeFromInventory': {
+                const itemName = v.item || 'Item';
+                const idx = this.inventory.findIndex(i => i.name === itemName);
+                if (idx !== -1) {
+                    this.inventory[idx].count--;
+                    if (this.inventory[idx].count <= 0) this.inventory.splice(idx, 1);
+                }
+                break;
+            }
+            case 'ifHasItem': {
+                const hasItem = this.inventory.some(i => i.name === (v.item || 'Item') && i.count > 0);
+                if (hasItem && cmd.children) {
+                    await this.executeCommands(obj, cmd.children);
+                }
+                break;
+            }
+            case 'useItem': {
+                const uItemName = v.item || 'Item';
+                const uIdx = this.inventory.findIndex(i => i.name === uItemName && i.count > 0);
+                if (uIdx !== -1) {
+                    this.inventory[uIdx].count--;
+                    if (this.inventory[uIdx].count <= 0) this.inventory.splice(uIdx, 1);
+                }
+                break;
+            }
+            case 'showInventory': {
+                this._showingInventory = true;
+                break;
+            }
+
+            // ===== Music =====
+            case 'playMusic': {
+                this._startMusic(v.track || 'adventure');
+                break;
+            }
+            case 'stopMusic': {
+                this._stopMusic();
+                break;
+            }
+            case 'setMusicVolume': {
+                this._musicVolume = (parseFloat(v.percent) || 50) / 100;
+                if (this._musicNodes && this._musicNodes.masterGain) {
+                    this._musicNodes.masterGain.gain.value = this._musicVolume;
+                }
+                break;
+            }
+
             default: {
                 // Handle custom block calls (customCall_xxx)
                 if (cmd.code.startsWith('customCall_')) {
@@ -2319,6 +2624,43 @@ class Runtime {
             el.textContent = `${varName}: ${this.variables[varName] ?? 0}`;
             hud.appendChild(el);
         });
+
+        // Health bar
+        if (this._showingHealthBar) {
+            const barContainer = document.createElement('div');
+            barContainer.style.cssText = 'background:rgba(0,0,0,0.6);padding:8px 16px;border-radius:8px;backdrop-filter:blur(8px);min-width:150px;';
+            const label = document.createElement('div');
+            label.style.cssText = 'color:white;font-size:11px;font-weight:600;margin-bottom:4px;';
+            label.textContent = `Health: ${Math.max(0, Math.round(this.variables.health))} / ${this.maxHealth}`;
+            const barBg = document.createElement('div');
+            barBg.style.cssText = 'background:rgba(255,255,255,0.2);border-radius:4px;height:10px;overflow:hidden;';
+            const barFill = document.createElement('div');
+            const healthPct = Math.max(0, Math.min(100, (this.variables.health / this.maxHealth) * 100));
+            const barColor = healthPct > 50 ? '#2ecc71' : healthPct > 25 ? '#f1c40f' : '#e74c3c';
+            barFill.style.cssText = `background:${barColor};height:100%;width:${healthPct}%;border-radius:4px;`;
+            barBg.appendChild(barFill);
+            barContainer.appendChild(label);
+            barContainer.appendChild(barBg);
+            hud.appendChild(barContainer);
+        }
+
+        // Inventory
+        if (this._showingInventory && this.inventory.length > 0) {
+            const invContainer = document.createElement('div');
+            invContainer.style.cssText = 'background:rgba(0,0,0,0.6);padding:8px 12px;border-radius:8px;backdrop-filter:blur(8px);';
+            const invTitle = document.createElement('div');
+            invTitle.style.cssText = 'color:white;font-size:11px;font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;';
+            invTitle.textContent = 'Inventory';
+            invContainer.appendChild(invTitle);
+            this.inventory.forEach(item => {
+                const row = document.createElement('div');
+                row.style.cssText = 'color:rgba(255,255,255,0.9);font-size:12px;padding:2px 0;';
+                const icon = item.type === 'key' ? '🔑' : item.type === 'potion' ? '🧪' : item.type === 'powerup' ? '⚡' : item.type === 'gem' ? '💎' : item.type === 'coin' ? '🪙' : '📦';
+                row.textContent = `${icon} ${item.name}${item.count > 1 ? ' x' + item.count : ''}`;
+                invContainer.appendChild(row);
+            });
+            hud.appendChild(invContainer);
+        }
     }
 
     // ===== Speech Bubbles =====
@@ -2361,6 +2703,260 @@ class Runtime {
         updatePos();
 
         setTimeout(() => bubble.remove(), duration * 1000);
+    }
+
+    // ===== Health System =====
+
+    _checkHealthZero() {
+        if (this._healthWasAboveZero && this.variables.health <= 0) {
+            this._healthWasAboveZero = false;
+            this.triggerEvent('onHealthZero');
+        }
+        if (this.variables.health > 0) {
+            this._healthWasAboveZero = true;
+        }
+    }
+
+    // ===== Enemy System =====
+
+    updateEnemyHealthBars() {
+        this._enemies.forEach((data, objId) => {
+            if (!data.showBar) return;
+            const obj = this.scene3d.objects.find(o => o.userData.id === objId);
+            if (!obj || !obj.visible) {
+                const bar = this._enemyBars.get(objId);
+                if (bar) bar.style.display = 'none';
+                return;
+            }
+
+            let bar = this._enemyBars.get(objId);
+            if (!bar) {
+                bar = document.createElement('div');
+                bar.style.cssText = 'position:fixed;pointer-events:none;z-index:999;transform:translate(-50%,-100%);';
+                bar.innerHTML = '<div style="background:rgba(0,0,0,0.5);border-radius:4px;padding:2px;width:60px;height:8px;"><div class="enemy-bar-fill" style="background:#e74c3c;height:100%;border-radius:3px;"></div></div>';
+                document.body.appendChild(bar);
+                this._enemyBars.set(objId, bar);
+            }
+
+            bar.style.display = '';
+            const pos = obj.position.clone();
+            pos.y += 2.2;
+            pos.project(this.scene3d.camera);
+            const rect = this.scene3d.canvas.getBoundingClientRect();
+            bar.style.left = ((pos.x + 1) / 2 * rect.width + rect.left) + 'px';
+            bar.style.top = ((-pos.y + 1) / 2 * rect.height + rect.top) + 'px';
+
+            const pct = Math.max(0, (data.health / data.maxHealth) * 100);
+            const fill = bar.querySelector('.enemy-bar-fill');
+            if (fill) fill.style.width = pct + '%';
+        });
+    }
+
+    _checkEnemyDeath(obj) {
+        const data = this._enemies.get(obj.userData.id);
+        if (!data || data.health > 0) return;
+
+        this.triggerEvent('onEnemyDefeated', {}, obj);
+        this.playSynthSound('boom');
+        this._spawnImpactEffect(obj.position.clone(), '#ff4444');
+
+        obj.visible = false;
+        obj.userData.collidable = false;
+
+        const bar = this._enemyBars.get(obj.userData.id);
+        if (bar) { bar.remove(); this._enemyBars.delete(obj.userData.id); }
+    }
+
+    // ===== Inventory System =====
+
+    _collectPickup(obj, config) {
+        const itemName = config.name || config.type || 'item';
+
+        const existing = this.inventory.find(i => i.name === itemName);
+        if (existing) { existing.count++; }
+        else { this.inventory.push({ name: itemName, type: config.type, count: 1 }); }
+
+        switch (config.effect) {
+            case 'heal':
+                this.variables.health = Math.min(this.maxHealth,
+                    (this.variables.health || 0) + (config.effectAmount || 25));
+                this.playSynthSound('powerup');
+                break;
+            case 'speed boost':
+                if (this.playerController) this.playerController.speed += (config.effectAmount || 2);
+                this.playSynthSound('powerup');
+                break;
+            case 'score':
+                this.variables.score = (this.variables.score || 0) + (config.effectAmount || 10);
+                this.playSynthSound('coin');
+                break;
+            default:
+                this.playSynthSound('coin');
+        }
+
+        obj.visible = false;
+        obj.userData.collidable = false;
+        this.triggerEvent('onItemCollected', { item: itemName }, obj);
+    }
+
+    // ===== Music System =====
+
+    _getMusicTracks() {
+        return {
+            adventure: {
+                bpm: 120,
+                melody: [
+                    { note: 'C4', dur: 0.25 }, { note: 'E4', dur: 0.25 },
+                    { note: 'G4', dur: 0.5 }, { note: 'A4', dur: 0.25 },
+                    { note: 'G4', dur: 0.25 }, { note: 'E4', dur: 0.5 },
+                    { note: 'D4', dur: 0.25 }, { note: 'E4', dur: 0.25 },
+                    { note: 'C4', dur: 0.5 }, { note: null, dur: 0.5 }
+                ],
+                bass: [
+                    { note: 'C2', dur: 1 }, { note: 'G2', dur: 1 },
+                    { note: 'A2', dur: 1 }, { note: 'F2', dur: 1 }
+                ],
+                waveform: 'triangle'
+            },
+            chill: {
+                bpm: 80,
+                melody: [
+                    { note: 'F4', dur: 0.5 }, { note: 'A4', dur: 0.5 },
+                    { note: 'C5', dur: 1 }, { note: 'A4', dur: 0.5 },
+                    { note: 'G4', dur: 0.5 }, { note: 'F4', dur: 1 }
+                ],
+                bass: [
+                    { note: 'F2', dur: 2 }, { note: 'C3', dur: 2 }
+                ],
+                waveform: 'sine'
+            },
+            action: {
+                bpm: 140,
+                melody: [
+                    { note: 'A3', dur: 0.125 }, { note: 'A3', dur: 0.125 },
+                    { note: 'C4', dur: 0.25 }, { note: 'D4', dur: 0.25 },
+                    { note: 'E4', dur: 0.25 }, { note: 'A3', dur: 0.125 },
+                    { note: 'A3', dur: 0.125 }, { note: 'G3', dur: 0.25 },
+                    { note: 'E3', dur: 0.5 }
+                ],
+                bass: [
+                    { note: 'A1', dur: 0.5 }, { note: 'A1', dur: 0.5 },
+                    { note: 'E2', dur: 0.5 }, { note: 'G2', dur: 0.5 }
+                ],
+                waveform: 'sawtooth'
+            },
+            mystery: {
+                bpm: 70,
+                melody: [
+                    { note: 'D4', dur: 1 }, { note: 'F4', dur: 0.5 },
+                    { note: 'E4', dur: 0.5 }, { note: 'D4', dur: 0.5 },
+                    { note: 'C4', dur: 0.5 }, { note: 'D4', dur: 1 }
+                ],
+                bass: [
+                    { note: 'D2', dur: 2 }, { note: 'A2', dur: 2 }
+                ],
+                waveform: 'sine'
+            },
+            retro: {
+                bpm: 130,
+                melody: [
+                    { note: 'C4', dur: 0.25 }, { note: 'D4', dur: 0.25 },
+                    { note: 'E4', dur: 0.25 }, { note: 'G4', dur: 0.25 },
+                    { note: 'E4', dur: 0.25 }, { note: 'D4', dur: 0.25 },
+                    { note: 'C4', dur: 0.5 }
+                ],
+                bass: [
+                    { note: 'C2', dur: 0.5 }, { note: 'G2', dur: 0.5 },
+                    { note: 'E2', dur: 0.5 }, { note: 'C2', dur: 0.5 }
+                ],
+                waveform: 'square'
+            }
+        };
+    }
+
+    _startMusic(trackName) {
+        this._stopMusic();
+        if (trackName === 'none' || !this.audioCtx) return;
+
+        const tracks = this._getMusicTracks();
+        const track = tracks[trackName];
+        if (!track) return;
+
+        this._musicTrack = trackName;
+
+        const noteFreqs = {
+            'A1': 55, 'B1': 61.74, 'C2': 65.41, 'D2': 73.42, 'E2': 82.41,
+            'F2': 87.31, 'G2': 98, 'A2': 110, 'B2': 123.47, 'C3': 130.81,
+            'D3': 146.83, 'E3': 164.81, 'F3': 174.61, 'G3': 196, 'A3': 220,
+            'B3': 246.94, 'C4': 261.63, 'D4': 293.66, 'E4': 329.63,
+            'F4': 349.23, 'G4': 392, 'A4': 440, 'B4': 493.88, 'C5': 523.25
+        };
+
+        const ctx = this.audioCtx;
+        const beatDur = 60 / track.bpm;
+        const masterGain = ctx.createGain();
+        masterGain.gain.value = this._musicVolume;
+        masterGain.connect(ctx.destination);
+
+        let melodyIdx = 0;
+        let bassIdx = 0;
+
+        const scheduleLoop = () => {
+            if (!this.isRunning || this._musicTrack !== trackName) return;
+            const now = ctx.currentTime;
+
+            const melNote = track.melody[melodyIdx % track.melody.length];
+            if (melNote.note) {
+                const freq = noteFreqs[melNote.note] || 440;
+                const dur = melNote.dur * beatDur;
+                const osc = ctx.createOscillator();
+                osc.type = track.waveform;
+                osc.frequency.value = freq;
+                const g = ctx.createGain();
+                g.gain.setValueAtTime(0.15, now);
+                g.gain.setValueAtTime(0.15, now + dur * 0.7);
+                g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+                osc.connect(g);
+                g.connect(masterGain);
+                osc.start(now);
+                osc.stop(now + dur);
+            }
+            melodyIdx++;
+
+            if (melodyIdx % 2 === 0) {
+                const bassNote = track.bass[bassIdx % track.bass.length];
+                if (bassNote.note) {
+                    const freq = noteFreqs[bassNote.note] || 65;
+                    const dur = bassNote.dur * beatDur;
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    const g = ctx.createGain();
+                    g.gain.setValueAtTime(0.1, now);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+                    osc.connect(g);
+                    g.connect(masterGain);
+                    osc.start(now);
+                    osc.stop(now + dur);
+                }
+                bassIdx++;
+            }
+        };
+
+        const melNote = track.melody[0];
+        const intervalMs = (melNote.dur || 0.25) * beatDur * 1000;
+        const interval = setInterval(scheduleLoop, intervalMs);
+
+        this._musicNodes = { masterGain, interval };
+    }
+
+    _stopMusic() {
+        if (this._musicNodes) {
+            clearInterval(this._musicNodes.interval);
+            if (this._musicNodes.masterGain) this._musicNodes.masterGain.gain.value = 0;
+            this._musicNodes = null;
+        }
+        this._musicTrack = 'none';
     }
 
     // ===== Sound Synthesis =====

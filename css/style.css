@@ -1009,10 +1009,10 @@ input[type="checkbox"] {
 .palette-category {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
+    gap: 8px;
+    padding: 7px 14px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--text-dim);
     transition: all 0.12s;
@@ -1031,9 +1031,9 @@ input[type="checkbox"] {
 }
 
 .cat-color {
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
     flex-shrink: 0;
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
@@ -1238,6 +1238,8 @@ input[type="checkbox"] {
 .block-sound { background-color: #CF63CF; }
 .block-variables { background-color: #FF8C1A; }
 .block-shooting { background-color: #E03030; }
+.block-enemies { background-color: #CC3333; }
+.block-items { background-color: #44BB44; }
 
 /* C-block parts inherit color */
 .block.c-block-container.block-control .c-block-top,
@@ -1258,6 +1260,10 @@ input[type="checkbox"] {
 .block.c-block-container.block-shooting .c-block-top,
 .block.c-block-container.block-shooting .c-block-bottom { background-color: #E03030; }
 .block.c-block-container.block-shooting .c-block-body { background-color: rgba(180,30,30,0.3); border-color: rgba(224,48,48,0.25); }
+
+.block.c-block-container.block-items .c-block-top,
+.block.c-block-container.block-items .c-block-bottom { background-color: #44BB44; }
+.block.c-block-container.block-items .c-block-body { background-color: rgba(40,120,40,0.3); border-color: rgba(68,187,68,0.25); }
 
 /* ===== Script Workspace ===== */
 #script-workspace {

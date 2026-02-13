@@ -299,6 +299,19 @@
                                 <option value="fireflies">Fireflies</option>
                             </select>
                         </label>
+                        <label>Background Music
+                            <select id="bg-music" class="prop-input">
+                                <option value="none">None</option>
+                                <option value="adventure">Adventure</option>
+                                <option value="chill">Chill</option>
+                                <option value="action">Action</option>
+                                <option value="mystery">Mystery</option>
+                                <option value="retro">Retro</option>
+                            </select>
+                        </label>
+                        <label>Music Volume
+                            <input type="range" id="music-volume" min="0" max="100" value="30">
+                        </label>
                         <label>
                             <input type="checkbox" id="shadows-enabled" checked> Shadows
                         </label>
@@ -576,6 +589,14 @@
                 <div class="palette-category" data-category="shooting">
                     <span class="cat-color" style="background:#E03030"></span>
                     Shooting
+                </div>
+                <div class="palette-category" data-category="enemies">
+                    <span class="cat-color" style="background:#CC3333"></span>
+                    Enemies
+                </div>
+                <div class="palette-category" data-category="items">
+                    <span class="cat-color" style="background:#44BB44"></span>
+                    Items
                 </div>
             </div>
 

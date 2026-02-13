@@ -832,6 +832,14 @@ class App {
         document.getElementById('weather-type').addEventListener('change', (e) => {
             this.scene3d.setWeather(e.target.value);
         });
+
+        document.getElementById('bg-music').addEventListener('change', (e) => {
+            this.gameSettings.bgMusic = e.target.value;
+        });
+
+        document.getElementById('music-volume').addEventListener('input', (e) => {
+            this.gameSettings.musicVolume = parseInt(e.target.value);
+        });
     }
 
     // ===== Save/Load =====
@@ -1161,12 +1169,15 @@ class App {
             version: 1,
             name: 'My Game',
             scene: this.scene3d.serialize(),
+            customVariables: this.blockCode.customVariables,
             environment: {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
                 fogDensity: document.getElementById('fog-density').value,
                 shadows: document.getElementById('shadows-enabled').checked,
-                weather: document.getElementById('weather-type').value
+                weather: document.getElementById('weather-type').value,
+                bgMusic: document.getElementById('bg-music').value,
+                musicVolume: document.getElementById('music-volume').value
             }
         };
 
@@ -1185,6 +1196,11 @@ class App {
             const data = JSON.parse(raw);
             this.scene3d.deserialize(data.scene);
 
+            if (data.customVariables) {
+                this.blockCode.customVariables = data.customVariables;
+                this.blockCode._updateVariableDropdowns();
+            }
+
             if (data.environment) {
                 document.getElementById('sky-color').value = data.environment.skyColor;
                 document.getElementById('ambient-light').value = data.environment.ambientLight;
@@ -1199,6 +1215,14 @@ class App {
                 if (data.environment.weather) {
                     document.getElementById('weather-type').value = data.environment.weather;
                     this.scene3d.setWeather(data.environment.weather);
+                }
+                if (data.environment.bgMusic) {
+                    document.getElementById('bg-music').value = data.environment.bgMusic;
+                    this.gameSettings.bgMusic = data.environment.bgMusic;
+                }
+                if (data.environment.musicVolume) {
+                    document.getElementById('music-volume').value = data.environment.musicVolume;
+                    this.gameSettings.musicVolume = parseInt(data.environment.musicVolume);
                 }
             }
 
@@ -1216,12 +1240,15 @@ class App {
             version: 1,
             name: 'My Game',
             scene: this.scene3d.serialize(),
+            customVariables: this.blockCode.customVariables,
             environment: {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
                 fogDensity: document.getElementById('fog-density').value,
                 shadows: document.getElementById('shadows-enabled').checked,
-                weather: document.getElementById('weather-type').value
+                weather: document.getElementById('weather-type').value,
+                bgMusic: document.getElementById('bg-music').value,
+                musicVolume: document.getElementById('music-volume').value
             }
         };
 
@@ -1311,12 +1338,15 @@ class App {
             version: 1,
             name: 'My Game',
             scene: this.scene3d.serialize(),
+            customVariables: this.blockCode.customVariables,
             environment: {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
                 fogDensity: document.getElementById('fog-density').value,
                 shadows: document.getElementById('shadows-enabled').checked,
-                weather: document.getElementById('weather-type').value
+                weather: document.getElementById('weather-type').value,
+                bgMusic: document.getElementById('bg-music').value,
+                musicVolume: document.getElementById('music-volume').value
             }
         };
         try {
@@ -1348,6 +1378,12 @@ class App {
             const json = decodeURIComponent(escape(atob(encoded)));
             const data = JSON.parse(json);
             this.scene3d.deserialize(data.scene);
+
+            if (data.customVariables) {
+                this.blockCode.customVariables = data.customVariables;
+                this.blockCode._updateVariableDropdowns();
+            }
+
             if (data.environment) {
                 document.getElementById('sky-color').value = data.environment.skyColor;
                 document.getElementById('ambient-light').value = data.environment.ambientLight;
@@ -1361,6 +1397,14 @@ class App {
                 if (data.environment.weather) {
                     document.getElementById('weather-type').value = data.environment.weather;
                     this.scene3d.setWeather(data.environment.weather);
+                }
+                if (data.environment.bgMusic) {
+                    document.getElementById('bg-music').value = data.environment.bgMusic;
+                    this.gameSettings.bgMusic = data.environment.bgMusic;
+                }
+                if (data.environment.musicVolume) {
+                    document.getElementById('music-volume').value = data.environment.musicVolume;
+                    this.gameSettings.musicVolume = parseInt(data.environment.musicVolume);
                 }
             }
             this.refreshExplorer();
