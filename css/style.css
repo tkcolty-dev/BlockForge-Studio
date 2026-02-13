@@ -1397,6 +1397,49 @@ input[type="checkbox"] {
     margin: 4px 8px;
 }
 
+/* ===== Tooltip Popups ===== */
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%) translateY(4px);
+    background: var(--bg-darkest);
+    color: var(--text-bright);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 9999;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    transform: translateX(-50%) translateY(8px);
+}
+
+[data-tooltip]:hover::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(4px);
+}
+
+/* Tooltip above for buttons near the bottom of the screen */
+[data-tooltip-pos="top"]::after {
+    top: auto;
+    bottom: 100%;
+    transform: translateX(-50%) translateY(-8px);
+}
+
+[data-tooltip-pos="top"]:hover::after {
+    transform: translateX(-50%) translateY(-4px);
+}
+
 /* ===== Utility ===== */
 .hidden { display: none !important; }
 

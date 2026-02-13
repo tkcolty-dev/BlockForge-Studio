@@ -139,6 +139,8 @@ class Runtime {
         document.getElementById('btn-play').classList.add('hidden');
         document.getElementById('btn-stop').classList.remove('hidden');
         document.getElementById('status-mode').textContent = 'Play Mode';
+        const viewcube = document.querySelector('.viewcube-wrapper');
+        if (viewcube) viewcube.classList.add('hidden');
 
         // Update controls hint
         const hints = {
@@ -249,6 +251,8 @@ class Runtime {
         document.getElementById('btn-play').classList.remove('hidden');
         document.getElementById('btn-stop').classList.add('hidden');
         document.getElementById('status-mode').textContent = 'Edit Mode';
+        const viewcube = document.querySelector('.viewcube-wrapper');
+        if (viewcube) viewcube.classList.remove('hidden');
 
         // Clear timers
         if (this._timerIntervals) {

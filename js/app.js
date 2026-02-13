@@ -44,6 +44,7 @@ class App {
         setTimeout(() => this.scene3d.onResize(), 100);
 
         this.initTutorial();
+        this.initTooltips();
 
         this.toast('BlockForge Studio loaded! Start building your game.');
     }
@@ -1136,6 +1137,18 @@ class App {
     }
 
     // ===== Tutorial =====
+
+    initTooltips() {
+        const selectors = '#toolbar .tool-btn[title], .viewport-fullscreen-btn[title], #block-editor-header .tool-btn[title]';
+        document.querySelectorAll(selectors).forEach(el => {
+            el.dataset.tooltip = el.getAttribute('title');
+            el.removeAttribute('title');
+        });
+        // Block editor buttons are at the bottom — show tooltips above
+        document.querySelectorAll('#block-editor-header .tool-btn[data-tooltip]').forEach(el => {
+            el.dataset.tooltipPos = 'top';
+        });
+    }
 
     initTutorial() {
         const steps = [
