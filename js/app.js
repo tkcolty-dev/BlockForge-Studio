@@ -27,6 +27,7 @@ class App {
         this.initSaveLoad();
         this.initTemplates();
         this.initSettings();
+        this.initCustomObjects();
 
         this.scene3d.onObjectSelected = (obj) => this.onObjectSelected(obj);
         this.scene3d.onObjectDeselected = () => this.onObjectDeselected();
@@ -129,6 +130,7 @@ class App {
     }
 
     startPlay() {
+        this.runtime.playerColors = this.gameSettings.playerColors;
         this.runtime.start(this.gameSettings);
     }
 
@@ -310,7 +312,8 @@ class App {
             'platform': 'view_agenda',
             'bridge': 'drag_handle',
             'crate': 'inventory_2',
-            'gem': 'diamond'
+            'gem': 'diamond',
+            'custom': 'widgets'
         };
         return icons[type] || 'category';
     }
@@ -420,6 +423,7 @@ class App {
         document.getElementById('material-content').classList.remove('hidden');
 
         this.updateProperties(obj);
+        this.updateNpcColors(obj);
         this.refreshExplorer();
 
         // Auto-set block code target so drag-and-drop works immediately
@@ -431,6 +435,7 @@ class App {
         document.getElementById('properties-content').classList.add('hidden');
         document.getElementById('material-no-selection').classList.remove('hidden');
         document.getElementById('material-content').classList.add('hidden');
+        document.getElementById('npc-colors-section').classList.add('hidden');
 
         this.blockCode.setTarget(null);
         this.refreshExplorer();
@@ -548,6 +553,9 @@ class App {
                 this.scene3d.selectedObject.material.transparent = opacity < 1;
             }
         });
+
+        // NPC per-part color inputs
+        this.initNpcColorInputs();
 
         // Terrain material swatches
         document.querySelectorAll('.material-swatches .swatch').forEach(swatch => {
@@ -1099,8 +1107,11 @@ class App {
             jumpForce: 8,
             sensitivity: 5,
             mouseOrbit: false,
-            keyBindings: { ...defaultBindings }
+            keyBindings: { ...defaultBindings },
+            playerColors: { body: '#4c97ff', head: '#f5cba7', detail: '#e0b090' }
         };
+
+        this.customObjects = [];
 
         // Populate key binding selects
         document.querySelectorAll('.key-bind-select').forEach(select => {
@@ -1162,6 +1173,14 @@ class App {
             this.gameSettings.mouseOrbit = e.target.checked;
             this.scene3d.orbitControls.enableRotate = e.target.checked;
         });
+
+        // Character appearance color pickers
+        ['body', 'head', 'detail'].forEach(part => {
+            const input = document.getElementById(`setting-player-${part}`);
+            input.addEventListener('input', (e) => {
+                this.gameSettings.playerColors[part] = e.target.value;
+            });
+        });
     }
 
     saveProject() {
@@ -1170,6 +1189,7 @@ class App {
             name: 'My Game',
             scene: this.scene3d.serialize(),
             customVariables: this.blockCode.customVariables,
+            customObjects: this.customObjects,
             environment: {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
@@ -1177,7 +1197,8 @@ class App {
                 shadows: document.getElementById('shadows-enabled').checked,
                 weather: document.getElementById('weather-type').value,
                 bgMusic: document.getElementById('bg-music').value,
-                musicVolume: document.getElementById('music-volume').value
+                musicVolume: document.getElementById('music-volume').value,
+                playerColors: this.gameSettings.playerColors
             }
         };
 
@@ -1199,6 +1220,11 @@ class App {
             if (data.customVariables) {
                 this.blockCode.customVariables = data.customVariables;
                 this.blockCode._updateVariableDropdowns();
+            }
+
+            if (data.customObjects) {
+                this.customObjects = data.customObjects;
+                this.renderCustomObjectButtons();
             }
 
             if (data.environment) {
@@ -1224,6 +1250,12 @@ class App {
                     document.getElementById('music-volume').value = data.environment.musicVolume;
                     this.gameSettings.musicVolume = parseInt(data.environment.musicVolume);
                 }
+                if (data.environment.playerColors) {
+                    this.gameSettings.playerColors = data.environment.playerColors;
+                    document.getElementById('setting-player-body').value = data.environment.playerColors.body;
+                    document.getElementById('setting-player-head').value = data.environment.playerColors.head;
+                    document.getElementById('setting-player-detail').value = data.environment.playerColors.detail;
+                }
             }
 
             this.refreshExplorer();
@@ -1241,6 +1273,7 @@ class App {
             name: 'My Game',
             scene: this.scene3d.serialize(),
             customVariables: this.blockCode.customVariables,
+            customObjects: this.customObjects,
             environment: {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
@@ -1248,7 +1281,8 @@ class App {
                 shadows: document.getElementById('shadows-enabled').checked,
                 weather: document.getElementById('weather-type').value,
                 bgMusic: document.getElementById('bg-music').value,
-                musicVolume: document.getElementById('music-volume').value
+                musicVolume: document.getElementById('music-volume').value,
+                playerColors: this.gameSettings.playerColors
             }
         };
 
@@ -1339,6 +1373,7 @@ class App {
             name: 'My Game',
             scene: this.scene3d.serialize(),
             customVariables: this.blockCode.customVariables,
+            customObjects: this.customObjects,
             environment: {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
@@ -1346,7 +1381,8 @@ class App {
                 shadows: document.getElementById('shadows-enabled').checked,
                 weather: document.getElementById('weather-type').value,
                 bgMusic: document.getElementById('bg-music').value,
-                musicVolume: document.getElementById('music-volume').value
+                musicVolume: document.getElementById('music-volume').value,
+                playerColors: this.gameSettings.playerColors
             }
         };
         try {
@@ -1384,6 +1420,11 @@ class App {
                 this.blockCode._updateVariableDropdowns();
             }
 
+            if (data.customObjects) {
+                this.customObjects = data.customObjects;
+                this.renderCustomObjectButtons();
+            }
+
             if (data.environment) {
                 document.getElementById('sky-color').value = data.environment.skyColor;
                 document.getElementById('ambient-light').value = data.environment.ambientLight;
@@ -1405,6 +1446,12 @@ class App {
                 if (data.environment.musicVolume) {
                     document.getElementById('music-volume').value = data.environment.musicVolume;
                     this.gameSettings.musicVolume = parseInt(data.environment.musicVolume);
+                }
+                if (data.environment.playerColors) {
+                    this.gameSettings.playerColors = data.environment.playerColors;
+                    document.getElementById('setting-player-body').value = data.environment.playerColors.body;
+                    document.getElementById('setting-player-head').value = data.environment.playerColors.head;
+                    document.getElementById('setting-player-detail').value = data.environment.playerColors.detail;
                 }
             }
             this.refreshExplorer();
@@ -1667,6 +1714,278 @@ class App {
             startTutorial('getting-started');
             modal.classList.remove('hidden');
         }
+    }
+
+    // ===== Custom Objects =====
+
+    _getBuilderParts() {
+        const rows = document.getElementById('obj-builder-parts').querySelectorAll('.obj-part-row');
+        const parts = [];
+        rows.forEach(row => {
+            parts.push({
+                shape: row.querySelector('.part-shape').value,
+                color: row.querySelector('.part-color').value,
+                offset: {
+                    x: parseFloat(row.querySelector('.part-ox').value) || 0,
+                    y: parseFloat(row.querySelector('.part-oy').value) || 0,
+                    z: parseFloat(row.querySelector('.part-oz').value) || 0
+                },
+                scale: {
+                    x: parseFloat(row.querySelector('.part-sx').value) || 1,
+                    y: parseFloat(row.querySelector('.part-sy').value) || 1,
+                    z: parseFloat(row.querySelector('.part-sz').value) || 1
+                }
+            });
+        });
+        return parts;
+    }
+
+    _updateBuilderPreview() {
+        const parts = this._getBuilderParts();
+        const img = document.getElementById('obj-builder-preview-img');
+        if (parts.length === 0) {
+            img.src = '';
+            return;
+        }
+        img.src = this._renderCustomObjectThumbnail(parts, 128);
+    }
+
+    initCustomObjects() {
+        const modal = document.getElementById('object-builder-modal');
+        const partsContainer = document.getElementById('obj-builder-parts');
+        const closeBtn = document.getElementById('object-builder-close');
+        const cancelBtn = document.getElementById('obj-builder-cancel');
+        const saveBtn = document.getElementById('obj-builder-save');
+        const addPartBtn = document.getElementById('obj-builder-add-part');
+        const createBtn = document.getElementById('btn-create-object');
+
+        const shapeOptions = ['box','sphere','cylinder','cone','pyramid','dome','wedge'];
+
+        const addPartRow = () => {
+            const row = document.createElement('div');
+            row.className = 'obj-part-row';
+            const idx = partsContainer.children.length;
+            row.innerHTML = `
+                <div class="part-header">
+                    <span>Part ${idx + 1}</span>
+                    <button class="part-remove" title="Remove Part"><span class="material-icons-round">close</span></button>
+                </div>
+                <div class="obj-part-fields">
+                    <label>Shape <select class="part-shape">${shapeOptions.map(s => `<option value="${s}">${s}</option>`).join('')}</select></label>
+                    <label>Color <input type="color" class="part-color" value="#4a90d9"></label>
+                    <label>X <input type="number" class="part-ox" value="0" step="0.1"></label>
+                    <label>Y <input type="number" class="part-oy" value="0" step="0.1"></label>
+                    <label>Z <input type="number" class="part-oz" value="0" step="0.1"></label>
+                    <label>SX <input type="number" class="part-sx" value="1" step="0.1"></label>
+                    <label>SY <input type="number" class="part-sy" value="1" step="0.1"></label>
+                    <label>SZ <input type="number" class="part-sz" value="1" step="0.1"></label>
+                </div>
+            `;
+            row.querySelector('.part-remove').addEventListener('click', () => {
+                row.remove();
+                this._updateBuilderPreview();
+            });
+            // Update preview on any field change
+            row.querySelectorAll('select, input').forEach(el => {
+                el.addEventListener('input', () => this._updateBuilderPreview());
+            });
+            partsContainer.appendChild(row);
+            this._updateBuilderPreview();
+        };
+
+        createBtn.addEventListener('click', () => {
+            document.getElementById('obj-builder-name').value = 'My Object';
+            partsContainer.innerHTML = '';
+            addPartRow();
+            modal.classList.remove('hidden');
+        });
+
+        addPartBtn.addEventListener('click', addPartRow);
+
+        const closeModal = () => modal.classList.add('hidden');
+        closeBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+        saveBtn.addEventListener('click', () => {
+            const name = document.getElementById('obj-builder-name').value.trim() || 'My Object';
+            const partRows = partsContainer.querySelectorAll('.obj-part-row');
+            if (partRows.length === 0) { this.toast('Add at least one part', 'error'); return; }
+
+            const parts = [];
+            partRows.forEach(row => {
+                parts.push({
+                    shape: row.querySelector('.part-shape').value,
+                    color: row.querySelector('.part-color').value,
+                    offset: {
+                        x: parseFloat(row.querySelector('.part-ox').value) || 0,
+                        y: parseFloat(row.querySelector('.part-oy').value) || 0,
+                        z: parseFloat(row.querySelector('.part-oz').value) || 0
+                    },
+                    scale: {
+                        x: parseFloat(row.querySelector('.part-sx').value) || 1,
+                        y: parseFloat(row.querySelector('.part-sy').value) || 1,
+                        z: parseFloat(row.querySelector('.part-sz').value) || 1
+                    }
+                });
+            });
+
+            const def = { id: 'custom_' + Date.now(), name, parts };
+            this.customObjects.push(def);
+            this.renderCustomObjectButtons();
+            closeModal();
+            this.toast(`Saved "${name}"`, 'success');
+        });
+    }
+
+    _renderCustomObjectThumbnail(parts, size) {
+        size = size || 64;
+        // Lazy-init offscreen renderer
+        if (!this._thumbRenderer) {
+            this._thumbRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            this._thumbScene = new THREE.Scene();
+            this._thumbCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+            this._thumbScene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+            dir.position.set(2, 3, 4);
+            this._thumbScene.add(dir);
+        }
+        this._thumbRenderer.setSize(size, size);
+        const scene = this._thumbScene;
+        const camera = this._thumbCamera;
+        const renderer = this._thumbRenderer;
+
+        // Clear previous objects (keep lights)
+        for (let i = scene.children.length - 1; i >= 0; i--) {
+            if (!scene.children[i].isLight) scene.remove(scene.children[i]);
+        }
+
+        // Build the object from parts
+        const group = new THREE.Group();
+        parts.forEach(part => {
+            let geom;
+            switch (part.shape) {
+                case 'sphere': geom = new THREE.SphereGeometry(0.5, 16, 12); break;
+                case 'cylinder': geom = new THREE.CylinderGeometry(0.5, 0.5, 1, 16); break;
+                case 'cone': geom = new THREE.ConeGeometry(0.5, 1, 16); break;
+                case 'pyramid': geom = new THREE.ConeGeometry(0.7, 1, 4); geom.rotateY(Math.PI / 4); break;
+                case 'dome': geom = new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2); break;
+                case 'wedge': {
+                    const ws = new THREE.Shape();
+                    ws.moveTo(0, 0); ws.lineTo(1, 0); ws.lineTo(0, 1); ws.lineTo(0, 0);
+                    geom = new THREE.ExtrudeGeometry(ws, { depth: 1, bevelEnabled: false });
+                    geom.center();
+                    break;
+                }
+                default: geom = new THREE.BoxGeometry(1, 1, 1); break;
+            }
+            const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(part.color || '#4a90d9'), roughness: 0.6, metalness: 0.1 });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(part.offset?.x || 0, part.offset?.y || 0, part.offset?.z || 0);
+            mesh.scale.set(part.scale?.x || 1, part.scale?.y || 1, part.scale?.z || 1);
+            group.add(mesh);
+        });
+        scene.add(group);
+
+        // Fit camera to bounding box
+        const box = new THREE.Box3().setFromObject(group);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        camera.position.set(center.x + maxDim * 1.2, center.y + maxDim * 0.8, center.z + maxDim * 1.5);
+        camera.lookAt(center);
+
+        renderer.render(scene, camera);
+        return renderer.domElement.toDataURL();
+    }
+
+    renderCustomObjectButtons() {
+        const grid = document.getElementById('custom-objects-grid');
+        grid.innerHTML = '';
+        this.customObjects.forEach((def, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'object-btn';
+            btn.title = def.name;
+            const thumbUrl = this._renderCustomObjectThumbnail(def.parts);
+            btn.innerHTML = `
+                <img src="${thumbUrl}" style="width:40px;height:40px;image-rendering:pixelated;border-radius:4px;">
+                <span>${def.name}</span>
+                <button class="custom-obj-delete" title="Delete">&times;</button>
+            `;
+            btn.addEventListener('click', (e) => {
+                if (e.target.closest('.custom-obj-delete')) return;
+                const obj = this.scene3d.addObject('custom', {
+                    position: { x: 0, y: 0.5, z: 0 },
+                    customParts: def.parts,
+                    customObjectId: def.id
+                });
+                this.scene3d.selectObject(obj);
+                this.refreshExplorer();
+                this.updateObjectCount();
+                this.saveUndoState();
+            });
+            btn.querySelector('.custom-obj-delete').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.customObjects.splice(idx, 1);
+                this.renderCustomObjectButtons();
+            });
+            grid.appendChild(btn);
+        });
+    }
+
+    // ===== NPC Per-Part Color Editing =====
+
+    updateNpcColors(obj) {
+        const section = document.getElementById('npc-colors-section');
+        if (!obj || obj.userData.type !== 'npc') {
+            section.classList.add('hidden');
+            return;
+        }
+        section.classList.remove('hidden');
+
+        // Get NPC child meshes: body(0), head(1), legL(2), legR(3)
+        const meshChildren = [];
+        obj.traverse(child => {
+            if (child.isMesh && child !== obj && !child.userData.isOutline) meshChildren.push(child);
+        });
+
+        if (meshChildren[0]) {
+            document.getElementById('prop-npc-body').value = '#' + meshChildren[0].material.color.getHexString();
+        }
+        if (meshChildren[1]) {
+            document.getElementById('prop-npc-head').value = '#' + meshChildren[1].material.color.getHexString();
+        }
+        if (meshChildren[2]) {
+            document.getElementById('prop-npc-legs').value = '#' + meshChildren[2].material.color.getHexString();
+        }
+    }
+
+    initNpcColorInputs() {
+        document.getElementById('prop-npc-body').addEventListener('input', (e) => {
+            const obj = this.scene3d.selectedObject;
+            if (!obj || obj.userData.type !== 'npc') return;
+            const meshChildren = [];
+            obj.traverse(child => { if (child.isMesh && child !== obj && !child.userData.isOutline) meshChildren.push(child); });
+            if (meshChildren[0]) meshChildren[0].material.color.set(e.target.value);
+            this.scene3d._needsRender = true;
+        });
+        document.getElementById('prop-npc-head').addEventListener('input', (e) => {
+            const obj = this.scene3d.selectedObject;
+            if (!obj || obj.userData.type !== 'npc') return;
+            const meshChildren = [];
+            obj.traverse(child => { if (child.isMesh && child !== obj && !child.userData.isOutline) meshChildren.push(child); });
+            if (meshChildren[1]) meshChildren[1].material.color.set(e.target.value);
+            this.scene3d._needsRender = true;
+        });
+        document.getElementById('prop-npc-legs').addEventListener('input', (e) => {
+            const obj = this.scene3d.selectedObject;
+            if (!obj || obj.userData.type !== 'npc') return;
+            const meshChildren = [];
+            obj.traverse(child => { if (child.isMesh && child !== obj && !child.userData.isOutline) meshChildren.push(child); });
+            if (meshChildren[2]) meshChildren[2].material.color.set(e.target.value);
+            if (meshChildren[3]) meshChildren[3].material.color.set(e.target.value);
+            this.scene3d._needsRender = true;
+        });
     }
 
     // ===== Toast =====

@@ -134,6 +134,8 @@ class BlockCode {
             'looks_wireframe': { category: 'looks', type: 'command', label: 'Set wireframe {state}', inputs: { state: { type: 'select', options: ['on','off'], default: 'on' } }, code: 'wireframe' },
             'looks_flash': { category: 'looks', type: 'command', label: 'Flash {color} {times} times', inputs: { color: { type: 'color', default: '#ffffff' }, times: { type: 'number', default: 3 } }, code: 'flash' },
             'looks_billboard_text': { category: 'looks', type: 'command', label: 'Show label {text}', inputs: { text: { type: 'text', default: 'Label' } }, code: 'billboardText' },
+            'looks_player_color': { category: 'looks', type: 'command', label: 'Set player {part} color {color}', inputs: { part: { type: 'select', options: ['body','head','detail'], default: 'body' }, color: { type: 'color', default: '#4c97ff' } }, code: 'setPlayerColor' },
+            'looks_npc_color': { category: 'looks', type: 'command', label: 'Set NPC {part} color {color}', inputs: { part: { type: 'select', options: ['body','head','legs'], default: 'body' }, color: { type: 'color', default: '#3498db' } }, code: 'setNpcColor' },
 
             // === New Physics ===
             'physics_freeze': { category: 'physics', type: 'command', label: 'Freeze in place', code: 'freeze' },

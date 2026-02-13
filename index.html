@@ -234,6 +234,17 @@
                         </button>
                     </div>
                 </div>
+                <div class="panel-section" id="custom-objects-section">
+                    <div class="section-header">
+                        <span>My Objects</span>
+                        <button class="small-btn" id="btn-create-object" title="Create Custom Object">
+                            <span class="material-icons-round">add_circle</span>
+                        </button>
+                    </div>
+                    <div class="object-grid" id="custom-objects-grid">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
             </div>
 
             <!-- Terrain Tab -->
@@ -526,6 +537,21 @@
                             <input type="range" id="prop-opacity" min="0" max="100" value="100">
                         </div>
                     </div>
+                    <div class="panel-section hidden" id="npc-colors-section">
+                        <div class="section-header"><span>Character Parts</span></div>
+                        <div class="prop-row">
+                            <label>Body</label>
+                            <input type="color" id="prop-npc-body" value="#3498db" class="color-picker">
+                        </div>
+                        <div class="prop-row">
+                            <label>Head</label>
+                            <input type="color" id="prop-npc-head" value="#f5cba7" class="color-picker">
+                        </div>
+                        <div class="prop-row">
+                            <label>Legs</label>
+                            <input type="color" id="prop-npc-legs" value="#2c3e50" class="color-picker">
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -777,6 +803,21 @@
                         <span class="setting-value" id="setting-sensitivity-val">5</span>
                     </div>
                 </div>
+                <div class="settings-section">
+                    <div class="settings-section-title">Character Appearance</div>
+                    <div class="settings-row">
+                        <label>Body Color</label>
+                        <input type="color" id="setting-player-body" value="#4c97ff">
+                    </div>
+                    <div class="settings-row">
+                        <label>Head Color</label>
+                        <input type="color" id="setting-player-head" value="#f5cba7">
+                    </div>
+                    <div class="settings-row">
+                        <label>Detail Color</label>
+                        <input type="color" id="setting-player-detail" value="#e0b090">
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -823,6 +864,36 @@
                 <div class="template-grid" id="template-grid">
                     <!-- Populated dynamically -->
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Object Builder Modal -->
+    <div id="object-builder-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:500px">
+            <div class="modal-header">
+                <span class="material-icons-round">widgets</span>
+                <span>Custom Object Builder</span>
+                <button class="modal-close" id="object-builder-close">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="obj-builder-preview" style="display:flex;justify-content:center;padding:12px 0;margin-bottom:8px;background:var(--surface);border-radius:8px;border:1px solid var(--border)">
+                    <img id="obj-builder-preview-img" style="width:128px;height:128px;border-radius:6px;image-rendering:auto;">
+                </div>
+                <div class="settings-row">
+                    <label>Name</label>
+                    <input type="text" id="obj-builder-name" class="prop-input" value="My Object">
+                </div>
+                <div id="obj-builder-parts" style="margin-top:12px"></div>
+                <button class="action-btn" id="obj-builder-add-part" style="margin-top:8px">
+                    <span class="material-icons-round">add</span> Add Part
+                </button>
+            </div>
+            <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border)">
+                <button class="action-btn" id="obj-builder-cancel">Cancel</button>
+                <button class="action-btn primary" id="obj-builder-save">Save Object</button>
             </div>
         </div>
     </div>

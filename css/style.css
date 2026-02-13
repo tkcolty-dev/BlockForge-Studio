@@ -2218,3 +2218,132 @@ input[type="checkbox"] {
     color: var(--text-dim);
     line-height: 1.4;
 }
+
+/* ===== Custom Object Builder ===== */
+.obj-part-row {
+    background: var(--bg-medium);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    position: relative;
+}
+
+.obj-part-row .part-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+}
+
+.obj-part-row .part-remove {
+    background: none;
+    border: none;
+    color: var(--danger);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+}
+
+.obj-part-row .part-remove:hover {
+    background: rgba(231,76,60,0.15);
+}
+
+.obj-part-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.obj-part-fields label {
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.obj-part-fields input[type="number"] {
+    width: 50px;
+    background: var(--bg-darkest);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 2px 4px;
+    font-size: 11px;
+}
+
+.obj-part-fields input[type="color"] {
+    width: 32px;
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    background: none;
+    padding: 1px;
+}
+
+.obj-part-fields select {
+    background: var(--bg-darkest);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 2px 4px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+/* Custom object grid buttons */
+#custom-objects-grid .object-btn {
+    position: relative;
+}
+
+#custom-objects-grid .custom-obj-delete {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 16px;
+    height: 16px;
+    background: var(--danger);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 10px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+#custom-objects-grid .object-btn:hover .custom-obj-delete {
+    display: flex;
+}
+
+/* ===== NPC Per-Part Colors ===== */
+#npc-colors-section .prop-row {
+    padding: 4px 8px;
+}
+
+#npc-colors-section .color-picker {
+    width: 60px;
+    height: 26px;
+}
+
+/* ===== Character Appearance Settings ===== */
+.settings-row input[type="color"] {
+    width: 48px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    background: none;
+    padding: 2px;
+}

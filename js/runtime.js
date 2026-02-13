@@ -446,8 +446,9 @@ class Runtime {
 
         // Create player body
         const playerGeom = new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8);
+        const bodyColor = this.playerColors?.body || '#4c97ff';
         const playerMat = showBody
-            ? new THREE.MeshStandardMaterial({ color: 0x4c97ff, roughness: 0.6 })
+            ? new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.6 })
             : new THREE.MeshBasicMaterial({ visible: false });
         const playerMesh = new THREE.Mesh(playerGeom, playerMat);
         playerMesh.position.copy(spawnPos);
@@ -458,14 +459,16 @@ class Runtime {
         // For visible modes, add a head so orientation is clear
         if (showBody) {
             const headGeom = new THREE.SphereGeometry(0.25, 12, 8);
-            const headMat = new THREE.MeshStandardMaterial({ color: 0xf5cba7, roughness: 0.6 });
+            const headColor = this.playerColors?.head || '#f5cba7';
+            const headMat = new THREE.MeshStandardMaterial({ color: headColor, roughness: 0.6 });
             const head = new THREE.Mesh(headGeom, headMat);
             head.position.y = 1.05;
             head.castShadow = true;
             playerMesh.add(head);
 
             const noseGeom = new THREE.BoxGeometry(0.08, 0.08, 0.12);
-            const noseMat = new THREE.MeshStandardMaterial({ color: 0xe0b090 });
+            const detailColor = this.playerColors?.detail || '#e0b090';
+            const noseMat = new THREE.MeshStandardMaterial({ color: detailColor });
             const nose = new THREE.Mesh(noseGeom, noseMat);
             nose.position.set(0, 1.03, 0.28);
             playerMesh.add(nose);
@@ -1593,6 +1596,36 @@ class Runtime {
                     speed: parseFloat(v.speed) || 1,
                     elapsed: 0
                 });
+                break;
+            }
+            case 'setPlayerColor': {
+                const pc = this.playerController;
+                if (pc && pc.mesh) {
+                    const color = v.color || '#4c97ff';
+                    const part = v.part || 'body';
+                    if (part === 'body' && pc.mesh.material) {
+                        pc.mesh.material.color.set(color);
+                    } else if (part === 'head' && pc.mesh.children[0]) {
+                        pc.mesh.children[0].material.color.set(color);
+                    } else if (part === 'detail' && pc.mesh.children[1]) {
+                        pc.mesh.children[1].material.color.set(color);
+                    }
+                }
+                break;
+            }
+            case 'setNpcColor': {
+                if (obj && obj.isGroup) {
+                    const color = v.color || '#3498db';
+                    const part = v.part || 'body';
+                    if (part === 'body' && obj.children[0]) {
+                        obj.children[0].material.color.set(color);
+                    } else if (part === 'head' && obj.children[1]) {
+                        obj.children[1].material.color.set(color);
+                    } else if (part === 'legs') {
+                        if (obj.children[2]) obj.children[2].material.color.set(color);
+                        if (obj.children[3]) obj.children[3].material.color.set(color);
+                    }
+                }
                 break;
             }
 

@@ -611,29 +611,67 @@ class Scene3D {
             }
             case 'npc': {
                 const npcGroup = new THREE.Group();
+                const npcBodyColor = options.childColors?.[0] || 0x3498db;
+                const npcHeadColor = options.childColors?.[1] || 0xf5cba7;
+                const npcLegColor = options.childColors?.[2] || 0x2c3e50;
                 // Body
-                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3498db });
+                const bodyMat = new THREE.MeshStandardMaterial({ color: npcBodyColor });
                 const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.4), bodyMat);
                 body.position.y = 0.4;
                 body.castShadow = true;
                 npcGroup.add(body);
                 // Head
-                const headMat = new THREE.MeshStandardMaterial({ color: 0xf5cba7 });
+                const headMat = new THREE.MeshStandardMaterial({ color: npcHeadColor });
                 const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMat);
                 head.position.y = 1.05;
                 head.castShadow = true;
                 npcGroup.add(head);
                 // Legs
-                const legMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50 });
+                const legMat = new THREE.MeshStandardMaterial({ color: npcLegColor });
                 const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.4), legMat);
                 legL.position.set(-0.15, -0.3, 0);
                 legL.castShadow = true;
                 npcGroup.add(legL);
-                const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.4), legMat);
+                const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.4), legMat.clone());
                 legR.position.set(0.15, -0.3, 0);
                 legR.castShadow = true;
                 npcGroup.add(legR);
                 mesh = npcGroup;
+                break;
+            }
+            case 'custom': {
+                const customGroup = new THREE.Group();
+                const parts = options.customParts || [];
+                parts.forEach(part => {
+                    let partGeom;
+                    switch (part.shape) {
+                        case 'sphere': partGeom = new THREE.SphereGeometry(0.5, 16, 12); break;
+                        case 'cylinder': partGeom = new THREE.CylinderGeometry(0.5, 0.5, 1, 16); break;
+                        case 'cone': partGeom = new THREE.ConeGeometry(0.5, 1, 16); break;
+                        case 'pyramid': partGeom = new THREE.ConeGeometry(0.7, 1, 4); partGeom.rotateY(Math.PI / 4); break;
+                        case 'dome': partGeom = new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2); break;
+                        case 'wedge': {
+                            const ws = new THREE.Shape();
+                            ws.moveTo(0, 0); ws.lineTo(1, 0); ws.lineTo(0, 1); ws.lineTo(0, 0);
+                            partGeom = new THREE.ExtrudeGeometry(ws, { depth: 1, bevelEnabled: false });
+                            partGeom.center();
+                            break;
+                        }
+                        default: partGeom = new THREE.BoxGeometry(1, 1, 1); break;
+                    }
+                    const partMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(part.color || '#4a90d9'), roughness: 0.6, metalness: 0.1 });
+                    const partMesh = new THREE.Mesh(partGeom, partMat);
+                    partMesh.position.set(part.offset?.x || 0, part.offset?.y || 0, part.offset?.z || 0);
+                    partMesh.scale.set(part.scale?.x || 1, part.scale?.y || 1, part.scale?.z || 1);
+                    partMesh.castShadow = true;
+                    partMesh.receiveShadow = true;
+                    customGroup.add(partMesh);
+                });
+                mesh = customGroup;
+                if (options.customObjectId) {
+                    mesh.userData.customObjectId = options.customObjectId;
+                }
+                mesh.userData.customParts = parts;
                 break;
             }
             default:
@@ -690,7 +728,7 @@ class Scene3D {
             locked: false,
             visible: true,
             scripts: [],
-            isPrefab: ['spawn', 'light-point', 'coin', 'npc', 'tree', 'house', 'platform', 'bridge', 'crate', 'gem'].includes(type)
+            isPrefab: ['spawn', 'light-point', 'coin', 'npc', 'tree', 'house', 'platform', 'bridge', 'crate', 'gem', 'custom'].includes(type)
         };
 
         this.scene.add(mesh);
@@ -1459,7 +1497,20 @@ class Scene3D {
             if (obj.material && obj.material.color) {
                 color = '#' + obj.material.color.getHexString();
             }
-            return {
+
+            // Collect child mesh colors for group objects (npc, tree, house, etc.)
+            let childColors = null;
+            if (!obj.isMesh && obj.isGroup !== false) {
+                const children = [];
+                obj.traverse(child => {
+                    if (child.isMesh && child.material && child.material.color && child !== obj) {
+                        children.push('#' + child.material.color.getHexString());
+                    }
+                });
+                if (children.length > 0) childColors = children;
+            }
+
+            const data = {
                 type: obj.userData.type,
                 name: obj.userData.name,
                 position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
@@ -1478,8 +1529,17 @@ class Scene3D {
                     roughness: obj.material.roughness,
                     metalness: obj.material.metalness,
                     opacity: obj.material.opacity
-                } : null
+                } : null,
+                childColors: childColors
             };
+
+            // Custom object data
+            if (obj.userData.type === 'custom') {
+                data.customObjectId = obj.userData.customObjectId;
+                data.customParts = obj.userData.customParts;
+            }
+
+            return data;
         });
     }
 
@@ -1489,7 +1549,7 @@ class Scene3D {
         this._needsRender = true;
 
         data.forEach(item => {
-            const obj = this.addObject(item.type, {
+            const opts = {
                 name: item.name,
                 position: item.position,
                 rotation: item.rotation,
@@ -1498,13 +1558,39 @@ class Scene3D {
                 anchored: item.anchored,
                 collidable: item.collidable,
                 mass: item.mass
-            });
+            };
+
+            // Pass childColors for NPC and other group objects
+            if (item.childColors) {
+                opts.childColors = item.childColors;
+            }
+
+            // Pass custom object data
+            if (item.type === 'custom') {
+                opts.customParts = item.customParts;
+                opts.customObjectId = item.customObjectId;
+            }
+
+            const obj = this.addObject(item.type, opts);
             obj.userData.scripts = item.scripts || [];
             if (item.material && obj.material) {
                 obj.material.roughness = item.material.roughness;
                 obj.material.metalness = item.material.metalness;
                 obj.material.opacity = item.material.opacity;
                 obj.material.transparent = item.material.opacity < 1;
+            }
+
+            // Apply childColors to existing group children (for non-NPC groups that don't use opts.childColors in addObject)
+            if (item.childColors && !obj.isMesh && item.type !== 'npc') {
+                const meshChildren = [];
+                obj.traverse(child => {
+                    if (child.isMesh && child !== obj) meshChildren.push(child);
+                });
+                item.childColors.forEach((c, i) => {
+                    if (meshChildren[i] && meshChildren[i].material) {
+                        meshChildren[i].material.color.set(c);
+                    }
+                });
             }
         });
     }
