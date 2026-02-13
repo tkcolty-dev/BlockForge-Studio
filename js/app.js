@@ -36,11 +36,14 @@ class App {
 
         this.runtime.onStop = () => this.onPlayStop();
 
+        this.loadFromHash();
         this.refreshExplorer();
         this.updateObjectCount();
 
         // Ensure viewport is properly sized with editor open
         setTimeout(() => this.scene3d.onResize(), 100);
+
+        this.initTutorial();
 
         this.toast('BlockForge Studio loaded! Start building your game.');
     }
@@ -693,7 +696,9 @@ class App {
             switch (e.key) {
                 case 'v':
                 case 'V':
-                    document.getElementById('btn-select').click();
+                    if (!e.ctrlKey && !e.metaKey) {
+                        document.getElementById('btn-select').click();
+                    }
                     break;
                 case 'g':
                 case 'G':
@@ -760,6 +765,16 @@ class App {
                     break;
             }
 
+            // Ctrl+C to copy
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+                e.preventDefault();
+                this.copySelected();
+            }
+            // Ctrl+V to paste
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+                e.preventDefault();
+                this.pasteObjects();
+            }
             // Ctrl+S to save
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
@@ -773,6 +788,10 @@ class App {
     initEnvironment() {
         document.getElementById('sky-color').addEventListener('input', (e) => {
             this.scene3d.setSkyColor(e.target.value);
+        });
+
+        document.getElementById('skybox-type').addEventListener('change', (e) => {
+            this.scene3d.setSkybox(e.target.value);
         });
 
         document.getElementById('ambient-light').addEventListener('input', (e) => {
@@ -794,6 +813,7 @@ class App {
         document.getElementById('btn-save').addEventListener('click', () => this.saveProject());
         document.getElementById('btn-load').addEventListener('click', () => this.loadProject());
         document.getElementById('btn-export').addEventListener('click', () => this.exportGame());
+        document.getElementById('btn-share').addEventListener('click', () => this.shareProject());
     }
 
     // ===== Settings =====
@@ -1010,6 +1030,180 @@ class App {
         this.refreshExplorer();
         this.updateObjectCount();
         this.toast('Redo');
+    }
+
+    // ===== Copy/Paste =====
+
+    copySelected() {
+        const objects = this.scene3d.selectedObjects.length > 0
+            ? this.scene3d.selectedObjects
+            : (this.scene3d.selectedObject ? [this.scene3d.selectedObject] : []);
+        if (objects.length === 0) return;
+
+        this._clipboard = objects.map(obj => {
+            const data = {
+                type: obj.userData.type,
+                name: obj.userData.name,
+                position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+                rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
+                scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
+                color: obj.material?.color ? '#' + obj.material.color.getHexString() : '#4c97ff',
+                scripts: obj.userData.scripts ? JSON.parse(JSON.stringify(obj.userData.scripts)) : []
+            };
+            return data;
+        });
+        this.toast(`Copied ${this._clipboard.length} object(s)`);
+    }
+
+    pasteObjects() {
+        if (!this._clipboard || this._clipboard.length === 0) return;
+        this._clipboard.forEach(data => {
+            const obj = this.scene3d.addObject(data.type, data.color);
+            if (obj) {
+                obj.position.set(data.position.x + 1, data.position.y, data.position.z + 1);
+                obj.rotation.set(data.rotation.x, data.rotation.y, data.rotation.z);
+                obj.scale.set(data.scale.x, data.scale.y, data.scale.z);
+                obj.userData.name = data.name + ' Copy';
+                obj.userData.scripts = data.scripts;
+            }
+        });
+        this.refreshExplorer();
+        this.updateObjectCount();
+        this.toast(`Pasted ${this._clipboard.length} object(s)`);
+    }
+
+    // ===== Share Link =====
+
+    shareProject() {
+        const data = {
+            version: 1,
+            name: 'My Game',
+            scene: this.scene3d.serialize(),
+            environment: {
+                skyColor: document.getElementById('sky-color').value,
+                ambientLight: document.getElementById('ambient-light').value,
+                fogDensity: document.getElementById('fog-density').value,
+                shadows: document.getElementById('shadows-enabled').checked
+            }
+        };
+        try {
+            const json = JSON.stringify(data);
+            const encoded = btoa(unescape(encodeURIComponent(json)));
+            const url = window.location.origin + window.location.pathname + '#project=' + encoded;
+            navigator.clipboard.writeText(url).then(() => {
+                this.toast('Share link copied to clipboard!', 'success');
+            }).catch(() => {
+                // Fallback
+                const input = document.createElement('input');
+                input.value = url;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                input.remove();
+                this.toast('Share link copied to clipboard!', 'success');
+            });
+        } catch (e) {
+            this.toast('Project too large to share via link', 'error');
+        }
+    }
+
+    loadFromHash() {
+        const hash = window.location.hash;
+        if (!hash || !hash.startsWith('#project=')) return;
+        try {
+            const encoded = hash.substring('#project='.length);
+            const json = decodeURIComponent(escape(atob(encoded)));
+            const data = JSON.parse(json);
+            this.scene3d.deserialize(data.scene);
+            if (data.environment) {
+                document.getElementById('sky-color').value = data.environment.skyColor;
+                document.getElementById('ambient-light').value = data.environment.ambientLight;
+                document.getElementById('fog-density').value = data.environment.fogDensity;
+                document.getElementById('shadows-enabled').checked = data.environment.shadows;
+                this.scene3d.setSkyColor(data.environment.skyColor);
+                this.scene3d.setAmbientIntensity(data.environment.ambientLight / 100);
+                this.scene3d.setFog(parseInt(data.environment.fogDensity));
+                this.scene3d.setShadows(data.environment.shadows);
+            }
+            this.refreshExplorer();
+            this.updateObjectCount();
+            // Clear hash so it doesn't reload on refresh
+            history.replaceState(null, '', window.location.pathname);
+            this.toast('Shared project loaded!', 'success');
+        } catch (e) {
+            console.error('Failed to load shared project:', e);
+        }
+    }
+
+    // ===== Tutorial =====
+
+    initTutorial() {
+        const steps = [
+            { icon: 'view_in_ar', title: 'Welcome to BlockForge Studio!', text: 'Build 3D games with blocks - no coding required! This quick tour will show you the basics.' },
+            { icon: 'add_box', title: 'Add Objects', text: 'Use the Object Library panel on the left to add 3D shapes, characters, and items to your scene. Click any object to add it.' },
+            { icon: 'open_with', title: 'Transform Objects', text: 'Select objects and use the toolbar to Move (G), Rotate (R), or Scale (S) them. Hold Shift+click to select multiple objects.' },
+            { icon: 'extension', title: 'Block Coding', text: 'Select an object, then open the Block Editor at the bottom. Drag blocks from the drawer to create scripts - they snap together like puzzle pieces!' },
+            { icon: 'play_arrow', title: 'Test Your Game', text: 'Press the Play button or F5 to test your game. Use WASD to move and Space to jump. Press ESC to stop.' },
+            { icon: 'palette', title: 'Customize', text: 'Use the Environment panel to change sky color, skybox, lighting, and fog. Open Settings to configure game controls and physics.' },
+            { icon: 'share', title: 'Save & Share', text: 'Save your project with Ctrl+S, export it as a file, or click the Share button to get a link you can send to friends!' }
+        ];
+
+        const seen = localStorage.getItem('blockforge_tutorial_seen');
+        if (seen) return;
+
+        const modal = document.getElementById('tutorial-modal');
+        const body = document.getElementById('tutorial-body');
+        const prevBtn = document.getElementById('tutorial-prev');
+        const nextBtn = document.getElementById('tutorial-next');
+        const indicator = document.getElementById('tutorial-step-indicator');
+        const closeBtn = document.getElementById('tutorial-close');
+        let currentStep = 0;
+
+        const renderStep = () => {
+            const step = steps[currentStep];
+            body.innerHTML = `
+                <div class="tutorial-step">
+                    <div class="step-icon"><span class="material-icons-round" style="font-size:48px">${step.icon}</span></div>
+                    <h3>${step.title}</h3>
+                    <p>${step.text}</p>
+                    ${currentStep === steps.length - 1 ? `
+                        <div class="tutorial-dont-show">
+                            <input type="checkbox" id="tutorial-dont-show-check" checked>
+                            <label for="tutorial-dont-show-check">Don't show again</label>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            indicator.textContent = `${currentStep + 1} / ${steps.length}`;
+            prevBtn.style.display = currentStep > 0 ? '' : 'none';
+            nextBtn.innerHTML = currentStep < steps.length - 1
+                ? 'Next <span class="material-icons-round">arrow_forward</span>'
+                : 'Get Started! <span class="material-icons-round">rocket_launch</span>';
+        };
+
+        prevBtn.addEventListener('click', () => {
+            if (currentStep > 0) { currentStep--; renderStep(); }
+        });
+        nextBtn.addEventListener('click', () => {
+            if (currentStep < steps.length - 1) {
+                currentStep++;
+                renderStep();
+            } else {
+                // Finish
+                const check = document.getElementById('tutorial-dont-show-check');
+                if (check && check.checked) {
+                    localStorage.setItem('blockforge_tutorial_seen', 'true');
+                }
+                modal.classList.add('hidden');
+            }
+        });
+        closeBtn.addEventListener('click', () => {
+            localStorage.setItem('blockforge_tutorial_seen', 'true');
+            modal.classList.add('hidden');
+        });
+
+        renderStep();
+        modal.classList.remove('hidden');
     }
 
     // ===== Toast =====

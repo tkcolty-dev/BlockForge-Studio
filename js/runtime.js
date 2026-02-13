@@ -174,6 +174,16 @@ class Runtime {
         const toRemove = this.scene3d.objects.filter(obj => obj.userData.isClone);
         toRemove.forEach(obj => this.scene3d.removeObject(obj));
 
+        // Clean up particles
+        if (this._particles) {
+            this._particles.forEach(p => {
+                this.scene3d.scene.remove(p);
+                p.geometry.dispose();
+                p.material.dispose();
+            });
+            this._particles = [];
+        }
+
         // Clean up
         this.scene3d.isPlaying = false;
         this.scene3d.orbitControls.enabled = true;
@@ -665,7 +675,9 @@ class Runtime {
     updateAnimations(dt) {
         for (let i = this.activeAnimations.length - 1; i >= 0; i--) {
             const anim = this.activeAnimations[i];
-            if (!anim.object || !anim.object.parent) {
+            if (anim.type === 'particles') {
+                // particles handled separately
+            } else if (!anim.object || !anim.object.parent) {
                 this.activeAnimations.splice(i, 1);
                 continue;
             }
@@ -751,6 +763,35 @@ class Runtime {
                     break;
                 }
 
+                case 'particles': {
+                    if (!anim.points || !anim.points.parent) {
+                        this.activeAnimations.splice(i, 1);
+                        continue;
+                    }
+                    const posAttr = anim.points.geometry.getAttribute('position');
+                    for (let p = 0; p < anim.velocities.length; p++) {
+                        posAttr.array[p * 3] += anim.velocities[p].x * dt;
+                        posAttr.array[p * 3 + 1] += anim.velocities[p].y * dt;
+                        posAttr.array[p * 3 + 2] += anim.velocities[p].z * dt;
+                        if (anim.particleType !== 'snow') {
+                            anim.velocities[p].y -= 5 * dt; // gravity on particles
+                        }
+                    }
+                    posAttr.needsUpdate = true;
+                    anim.points.material.opacity = Math.max(0, 1 - anim.elapsed / anim.life);
+                    if (anim.elapsed >= anim.life) {
+                        this.scene3d.scene.remove(anim.points);
+                        anim.points.geometry.dispose();
+                        anim.points.material.dispose();
+                        if (this._particles) {
+                            const idx = this._particles.indexOf(anim.points);
+                            if (idx !== -1) this._particles.splice(idx, 1);
+                        }
+                        this.activeAnimations.splice(i, 1);
+                    }
+                    break;
+                }
+
                 case 'trail': {
                     if (anim.elapsed - anim.lastSpawn > 0.05) {
                         anim.lastSpawn = anim.elapsed;
@@ -822,6 +863,9 @@ class Runtime {
             if (eventType === 'onCollide') {
                 if (rs.script.triggerValues.object !== 'any' &&
                     rs.script.triggerValues.object !== eventData.object) return;
+            }
+            if (eventType === 'onMessage') {
+                if (rs.script.triggerValues.msg !== eventData.msg) return;
             }
 
             // Execute commands
@@ -1316,6 +1360,605 @@ class Runtime {
                     g.gain.exponentialRampToValueAtTime(0.001, now + dur);
                     osc.connect(g); g.connect(this.audioCtx.destination);
                     osc.start(now); osc.stop(now + dur);
+                }
+                break;
+            }
+
+            // ===== Particle Effects =====
+            case 'emitParticles': {
+                const pType = v.type || 'burst';
+                const pColor = new THREE.Color(v.color || '#ffff00');
+                const count = pType === 'snow' ? 200 : 30;
+                const positions = new Float32Array(count * 3);
+                const velocities = [];
+                for (let i = 0; i < count; i++) {
+                    positions[i * 3] = obj.position.x;
+                    positions[i * 3 + 1] = obj.position.y + 1;
+                    positions[i * 3 + 2] = obj.position.z;
+                    let vx, vy, vz;
+                    switch (pType) {
+                        case 'burst':
+                            vx = (Math.random() - 0.5) * 4;
+                            vy = Math.random() * 5 + 2;
+                            vz = (Math.random() - 0.5) * 4;
+                            break;
+                        case 'sparkle':
+                            vx = (Math.random() - 0.5) * 2;
+                            vy = Math.random() * 3 + 1;
+                            vz = (Math.random() - 0.5) * 2;
+                            break;
+                        case 'fire':
+                            vx = (Math.random() - 0.5) * 0.8;
+                            vy = Math.random() * 4 + 2;
+                            vz = (Math.random() - 0.5) * 0.8;
+                            break;
+                        case 'snow':
+                            vx = (Math.random() - 0.5) * 0.5;
+                            vy = -(Math.random() * 1 + 0.5);
+                            vz = (Math.random() - 0.5) * 0.5;
+                            positions[i * 3] = obj.position.x + (Math.random() - 0.5) * 10;
+                            positions[i * 3 + 1] = obj.position.y + 8;
+                            positions[i * 3 + 2] = obj.position.z + (Math.random() - 0.5) * 10;
+                            break;
+                    }
+                    velocities.push(new THREE.Vector3(vx, vy, vz));
+                }
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const mat = new THREE.PointsMaterial({
+                    color: pColor, size: pType === 'fire' ? 0.3 : 0.2,
+                    transparent: true, opacity: 0.9, sizeAttenuation: true
+                });
+                const points = new THREE.Points(geo, mat);
+                points.userData._isParticle = true;
+                points.userData._velocities = velocities;
+                points.userData._life = pType === 'snow' ? 8 : 2;
+                points.userData._elapsed = 0;
+                points.userData._sourceObj = obj;
+                this.scene3d.scene.add(points);
+                if (!this._particles) this._particles = [];
+                this._particles.push(points);
+                this.activeAnimations.push({
+                    type: 'particles', points, velocities,
+                    life: points.userData._life, elapsed: 0, particleType: pType
+                });
+                break;
+            }
+            case 'stopParticles': {
+                if (this._particles) {
+                    this._particles.forEach(p => {
+                        this.scene3d.scene.remove(p);
+                        p.geometry.dispose();
+                        p.material.dispose();
+                    });
+                    this._particles = [];
+                    this.activeAnimations = this.activeAnimations.filter(a => a.type !== 'particles');
+                }
+                break;
+            }
+
+            // ===== New Motion Blocks =====
+            case 'smoothMove': {
+                const amt = parseFloat(v.amt) || 3;
+                const time = parseFloat(v.time) || 0.5;
+                const dir = v.dir || 'forward';
+                const startPos = obj.position.clone();
+                const endPos = startPos.clone();
+                switch (dir) {
+                    case 'forward': endPos.z -= amt; break;
+                    case 'backward': endPos.z += amt; break;
+                    case 'left': endPos.x -= amt; break;
+                    case 'right': endPos.x += amt; break;
+                    case 'up': endPos.y += amt; break;
+                    case 'down': endPos.y -= amt; break;
+                }
+                this.activeAnimations.push({
+                    type: 'glide',
+                    object: obj,
+                    startPos: startPos,
+                    endPos: endPos,
+                    duration: time,
+                    elapsed: 0
+                });
+                await this.sleep(time * 1000);
+                break;
+            }
+            case 'snapToGrid': {
+                const size = parseFloat(v.size) || 1;
+                obj.position.x = Math.round(obj.position.x / size) * size;
+                obj.position.y = Math.round(obj.position.y / size) * size;
+                obj.position.z = Math.round(obj.position.z / size) * size;
+                break;
+            }
+            case 'faceDirection': {
+                const dir = v.dir || 'north';
+                switch (dir) {
+                    case 'north': obj.rotation.y = 0; break;
+                    case 'south': obj.rotation.y = Math.PI; break;
+                    case 'east': obj.rotation.y = -Math.PI / 2; break;
+                    case 'west': obj.rotation.y = Math.PI / 2; break;
+                    case 'player': {
+                        if (this.playerController) {
+                            const pp = this.playerController.mesh.position;
+                            obj.lookAt(pp.x, obj.position.y, pp.z);
+                        }
+                        break;
+                    }
+                }
+                break;
+            }
+            case 'setRotation': {
+                obj.rotation.x = THREE.MathUtils.degToRad(parseFloat(v.x) || 0);
+                obj.rotation.y = THREE.MathUtils.degToRad(parseFloat(v.y) || 0);
+                obj.rotation.z = THREE.MathUtils.degToRad(parseFloat(v.z) || 0);
+                break;
+            }
+
+            // ===== New Control Blocks =====
+            case 'broadcast': {
+                this.triggerEvent('onMessage', { msg: v.msg });
+                break;
+            }
+            case 'while': {
+                const evalWhileCondition = () => {
+                    switch (v.condition) {
+                        case 'touching player':
+                            if (this.playerController) return obj.position.distanceTo(this.playerController.mesh.position) < 2;
+                            return false;
+                        case 'key pressed':
+                            return Object.values(this.keys).some(k => k);
+                        case 'variable > 0':
+                            return (this.variables.score || 0) > 0;
+                        case 'health > 0':
+                            return (this.variables.health || 0) > 0;
+                        case 'timer < 10':
+                            return this.gameTimer < 10;
+                        default:
+                            return false;
+                    }
+                };
+                while (this.isRunning && evalWhileCondition()) {
+                    if (cmd.children) {
+                        await this.executeCommands(obj, cmd.children);
+                    }
+                    await this.sleep(16);
+                }
+                break;
+            }
+            case 'forEach': {
+                const varName = v.var || 'i';
+                const start = parseInt(v.start) || 1;
+                const end = parseInt(v.end) || 10;
+                const step = start <= end ? 1 : -1;
+                for (let i = start; step > 0 ? i <= end : i >= end; i += step) {
+                    if (!this.isRunning) break;
+                    this.variables[varName] = i;
+                    if (cmd.children) {
+                        await this.executeCommands(obj, cmd.children);
+                    }
+                }
+                break;
+            }
+
+            // ===== New Looks Blocks =====
+            case 'tint': {
+                const tintColor = new THREE.Color(v.color || '#ff0000');
+                const amount = (parseFloat(v.amount) || 50) / 100;
+                const applyTint = (material) => {
+                    if (!material) return;
+                    const origColor = material.color.clone();
+                    material.color.lerp(tintColor, amount);
+                };
+                if (obj.material) applyTint(obj.material);
+                obj.traverse(child => {
+                    if (child.material && child !== obj) applyTint(child.material);
+                });
+                break;
+            }
+            case 'wireframe': {
+                const wireOn = v.state === 'on';
+                if (obj.material) {
+                    obj.material.wireframe = wireOn;
+                }
+                obj.traverse(child => {
+                    if (child.material && child !== obj) {
+                        child.material.wireframe = wireOn;
+                    }
+                });
+                break;
+            }
+            case 'flash': {
+                const flashColor = new THREE.Color(v.color || '#ffffff');
+                const times = parseInt(v.times) || 3;
+                const origColors = [];
+                if (obj.material) origColors.push({ mat: obj.material, color: obj.material.color.clone() });
+                obj.traverse(child => {
+                    if (child.material && child !== obj) origColors.push({ mat: child.material, color: child.material.color.clone() });
+                });
+                for (let i = 0; i < times && this.isRunning; i++) {
+                    // Flash on
+                    origColors.forEach(entry => entry.mat.color.copy(flashColor));
+                    await this.sleep(100);
+                    // Flash off (restore)
+                    origColors.forEach(entry => entry.mat.color.copy(entry.color));
+                    await this.sleep(100);
+                }
+                break;
+            }
+            case 'billboardText': {
+                const text = v.text || 'Label';
+                // Persistent speech bubble (no timeout)
+                const bubble = document.createElement('div');
+                bubble.className = 'speech-bubble-3d';
+                bubble.textContent = text;
+                bubble.style.cssText = `
+                    position: fixed;
+                    background: white;
+                    color: #333;
+                    padding: 8px 14px;
+                    border-radius: 12px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    pointer-events: none;
+                    z-index: 1000;
+                    transform: translate(-50%, -100%);
+                    white-space: nowrap;
+                `;
+                document.body.appendChild(bubble);
+                const updatePos = () => {
+                    if (!bubble.parentElement || !this.isRunning) {
+                        bubble.remove();
+                        return;
+                    }
+                    const pos = obj.position.clone();
+                    pos.y += 2;
+                    pos.project(this.scene3d.camera);
+                    const rect = this.scene3d.canvas.getBoundingClientRect();
+                    bubble.style.left = ((pos.x + 1) / 2 * rect.width + rect.left) + 'px';
+                    bubble.style.top = ((-pos.y + 1) / 2 * rect.height + rect.top) + 'px';
+                    requestAnimationFrame(updatePos);
+                };
+                updatePos();
+                break;
+            }
+
+            // ===== New Physics Blocks =====
+            case 'freeze': {
+                obj.userData.anchored = true;
+                // Remove any gravity animations for this object
+                this.activeAnimations = this.activeAnimations.filter(
+                    a => !(a.type === 'gravity' && a.object === obj)
+                );
+                break;
+            }
+            case 'unfreeze': {
+                obj.userData.anchored = false;
+                this.activeAnimations.push({
+                    type: 'gravity',
+                    object: obj,
+                    velocity: 0,
+                    elapsed: 0
+                });
+                break;
+            }
+            case 'attract': {
+                const force = parseFloat(v.force) || 3;
+                const radius = parseFloat(v.radius) || 8;
+                this.scene3d.objects.forEach(other => {
+                    if (other === obj || !other.visible) return;
+                    const dist = other.position.distanceTo(obj.position);
+                    if (dist < radius && dist > 0.1) {
+                        const pullDir = new THREE.Vector3().subVectors(obj.position, other.position).normalize();
+                        const strength = (1 - dist / radius) * force * 0.05;
+                        other.position.add(pullDir.multiplyScalar(strength));
+                    }
+                });
+                if (this.playerController) {
+                    const pd = this.playerController.mesh.position.distanceTo(obj.position);
+                    if (pd < radius && pd > 0.1) {
+                        const pullDir = new THREE.Vector3().subVectors(obj.position, this.playerController.mesh.position).normalize();
+                        const strength = (1 - pd / radius) * force * 0.05;
+                        this.playerController.mesh.position.add(pullDir.multiplyScalar(strength));
+                    }
+                }
+                break;
+            }
+            case 'setWorldGravity': {
+                const g = parseFloat(v.g);
+                if (this.playerController) {
+                    this.playerController.gravity = isNaN(g) ? -20 : g;
+                }
+                break;
+            }
+            case 'spawnObject': {
+                const shape = v.shape || 'box';
+                const ox = parseFloat(v.x) || 0;
+                const oy = parseFloat(v.y) || 2;
+                const oz = parseFloat(v.z) || 0;
+                const spawnPos = new THREE.Vector3(
+                    obj.position.x + ox,
+                    obj.position.y + oy,
+                    obj.position.z + oz
+                );
+                let geometry, material;
+                switch (shape) {
+                    case 'sphere':
+                        geometry = new THREE.SphereGeometry(0.5, 16, 16);
+                        material = new THREE.MeshStandardMaterial({ color: 0x4c97ff, roughness: 0.4 });
+                        break;
+                    case 'coin':
+                        geometry = new THREE.CylinderGeometry(0.4, 0.4, 0.08, 16);
+                        material = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 });
+                        break;
+                    case 'gem':
+                        geometry = new THREE.OctahedronGeometry(0.4);
+                        material = new THREE.MeshStandardMaterial({ color: 0xff00ff, metalness: 0.6, roughness: 0.2 });
+                        break;
+                    default: // box
+                        geometry = new THREE.BoxGeometry(1, 1, 1);
+                        material = new THREE.MeshStandardMaterial({ color: 0x59c059, roughness: 0.4 });
+                        break;
+                }
+                const spawned = new THREE.Mesh(geometry, material);
+                spawned.position.copy(spawnPos);
+                spawned.castShadow = true;
+                spawned.receiveShadow = true;
+                spawned.userData = {
+                    id: 'spawned_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                    name: shape,
+                    type: shape,
+                    collidable: true,
+                    isClone: true,
+                    scripts: []
+                };
+                this.scene3d.scene.add(spawned);
+                this.scene3d.objects.push(spawned);
+                break;
+            }
+
+            // ===== New Sound Blocks =====
+            case 'stopAllSounds': {
+                if (this.audioCtx) {
+                    this.audioCtx.close();
+                    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                break;
+            }
+            case 'playNote': {
+                if (this.audioCtx) {
+                    const noteFreqs = {
+                        'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23,
+                        'G4': 392.00, 'A4': 440.00, 'B4': 493.88, 'C5': 523.25
+                    };
+                    const freq = noteFreqs[v.note] || 261.63;
+                    const dur = parseFloat(v.dur) || 0.3;
+                    const now = this.audioCtx.currentTime;
+                    const osc = this.audioCtx.createOscillator();
+                    const g = this.audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now);
+                    g.gain.setValueAtTime(this.soundVolume * 0.3, now);
+                    g.gain.setValueAtTime(this.soundVolume * 0.3, now + dur * 0.7);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+                    osc.connect(g);
+                    g.connect(this.audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + dur);
+                }
+                break;
+            }
+            case 'playDrum': {
+                if (this.audioCtx) {
+                    const ctx = this.audioCtx;
+                    const now = ctx.currentTime;
+                    const drumType = v.type || 'kick';
+                    switch (drumType) {
+                        case 'kick': {
+                            const osc = ctx.createOscillator();
+                            const g = ctx.createGain();
+                            osc.type = 'sine';
+                            osc.frequency.setValueAtTime(150, now);
+                            osc.frequency.exponentialRampToValueAtTime(30, now + 0.15);
+                            g.gain.setValueAtTime(this.soundVolume * 0.5, now);
+                            g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                            osc.connect(g);
+                            g.connect(ctx.destination);
+                            osc.start(now);
+                            osc.stop(now + 0.2);
+                            break;
+                        }
+                        case 'snare': {
+                            // Noise burst + tone
+                            const bufferSize = ctx.sampleRate * 0.15;
+                            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                            const data = buffer.getChannelData(0);
+                            for (let i = 0; i < bufferSize; i++) {
+                                data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+                            }
+                            const noise = ctx.createBufferSource();
+                            noise.buffer = buffer;
+                            const noiseGain = ctx.createGain();
+                            noiseGain.gain.setValueAtTime(this.soundVolume * 0.4, now);
+                            noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                            const filter = ctx.createBiquadFilter();
+                            filter.type = 'highpass';
+                            filter.frequency.value = 1000;
+                            noise.connect(filter);
+                            filter.connect(noiseGain);
+                            noiseGain.connect(ctx.destination);
+                            noise.start(now);
+                            // Tone body
+                            const osc = ctx.createOscillator();
+                            const g = ctx.createGain();
+                            osc.type = 'triangle';
+                            osc.frequency.setValueAtTime(200, now);
+                            osc.frequency.exponentialRampToValueAtTime(100, now + 0.05);
+                            g.gain.setValueAtTime(this.soundVolume * 0.3, now);
+                            g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                            osc.connect(g);
+                            g.connect(ctx.destination);
+                            osc.start(now);
+                            osc.stop(now + 0.1);
+                            break;
+                        }
+                        case 'hihat': {
+                            const bufferSize = ctx.sampleRate * 0.08;
+                            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                            const data = buffer.getChannelData(0);
+                            for (let i = 0; i < bufferSize; i++) {
+                                data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+                            }
+                            const noise = ctx.createBufferSource();
+                            noise.buffer = buffer;
+                            const g = ctx.createGain();
+                            g.gain.setValueAtTime(this.soundVolume * 0.2, now);
+                            g.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                            const filter = ctx.createBiquadFilter();
+                            filter.type = 'highpass';
+                            filter.frequency.value = 5000;
+                            noise.connect(filter);
+                            filter.connect(g);
+                            g.connect(ctx.destination);
+                            noise.start(now);
+                            break;
+                        }
+                        case 'clap': {
+                            // Multiple short noise bursts
+                            for (let b = 0; b < 3; b++) {
+                                const offset = b * 0.01;
+                                const bufferSize = ctx.sampleRate * 0.04;
+                                const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                                const data = buffer.getChannelData(0);
+                                for (let i = 0; i < bufferSize; i++) {
+                                    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+                                }
+                                const noise = ctx.createBufferSource();
+                                noise.buffer = buffer;
+                                const g = ctx.createGain();
+                                g.gain.setValueAtTime(this.soundVolume * 0.3, now + offset);
+                                g.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.08);
+                                const filter = ctx.createBiquadFilter();
+                                filter.type = 'bandpass';
+                                filter.frequency.value = 2000;
+                                filter.Q.value = 1;
+                                noise.connect(filter);
+                                filter.connect(g);
+                                g.connect(ctx.destination);
+                                noise.start(now + offset);
+                            }
+                            break;
+                        }
+                    }
+                }
+                break;
+            }
+
+            // ===== New Variables Blocks =====
+            case 'showMessage': {
+                const text = v.text || 'You win!';
+                const time = (parseFloat(v.time) || 3) * 1000;
+                const msgEl = document.createElement('div');
+                msgEl.style.cssText = `
+                    position: fixed;
+                    top: 30%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: rgba(0,0,0,0.8);
+                    color: white;
+                    padding: 24px 48px;
+                    border-radius: 16px;
+                    font-size: 28px;
+                    font-weight: 700;
+                    z-index: 10000;
+                    pointer-events: none;
+                    text-align: center;
+                    backdrop-filter: blur(8px);
+                    transition: opacity 0.5s;
+                `;
+                msgEl.textContent = text;
+                document.body.appendChild(msgEl);
+                // Fade out near end
+                setTimeout(() => {
+                    msgEl.style.opacity = '0';
+                }, time - 500);
+                setTimeout(() => {
+                    msgEl.remove();
+                }, time);
+                await this.sleep(time);
+                break;
+            }
+            case 'gameOver': {
+                const result = v.result || 'win';
+                const overlay = document.createElement('div');
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0; left: 0; right: 0; bottom: 0;
+                    background: ${result === 'win' ? 'rgba(40,120,40,0.85)' : 'rgba(120,30,30,0.85)'};
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10001;
+                    backdrop-filter: blur(4px);
+                `;
+                const title = document.createElement('div');
+                title.style.cssText = 'color:white;font-size:56px;font-weight:800;margin-bottom:16px;text-shadow:0 4px 12px rgba(0,0,0,0.4);';
+                title.textContent = result === 'win' ? 'YOU WIN!' : 'GAME OVER';
+                const sub = document.createElement('div');
+                sub.style.cssText = 'color:rgba(255,255,255,0.8);font-size:20px;font-weight:500;margin-bottom:32px;';
+                sub.textContent = `Score: ${this.variables.score || 0}`;
+                const btn = document.createElement('button');
+                btn.style.cssText = 'background:white;color:#333;border:none;padding:12px 36px;border-radius:12px;font-size:18px;font-weight:600;cursor:pointer;';
+                btn.textContent = 'Press ESC to exit';
+                overlay.appendChild(title);
+                overlay.appendChild(sub);
+                overlay.appendChild(btn);
+                document.body.appendChild(overlay);
+                btn.addEventListener('click', () => {
+                    overlay.remove();
+                    this.stop();
+                });
+                // Also remove overlay when game stops
+                const checkStop = setInterval(() => {
+                    if (!this.isRunning) {
+                        overlay.remove();
+                        clearInterval(checkStop);
+                    }
+                }, 200);
+                break;
+            }
+            case 'saveCheckpoint': {
+                if (this.playerController) {
+                    this._checkpoint = {
+                        position: this.playerController.mesh.position.clone(),
+                        velocity: this.playerController.velocity.clone(),
+                        variables: { ...this.variables }
+                    };
+                }
+                break;
+            }
+            case 'loadCheckpoint': {
+                if (this.playerController && this._checkpoint) {
+                    this.playerController.mesh.position.copy(this._checkpoint.position);
+                    this.playerController.velocity.copy(this._checkpoint.velocity);
+                    Object.assign(this.variables, this._checkpoint.variables);
+                }
+                break;
+            }
+
+            default: {
+                // Handle custom block calls (customCall_xxx)
+                if (code.startsWith('customCall_')) {
+                    const customId = code.replace('customCall_', '');
+                    const defCode = 'customDef_' + customId;
+                    // Find the define hat's commands on this object
+                    for (const rs of this.runningScripts) {
+                        if (rs.object === obj && rs.script.trigger === defCode) {
+                            await this.executeCommands(obj, rs.script.commands);
+                            break;
+                        }
+                    }
                 }
                 break;
             }

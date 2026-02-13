@@ -7,6 +7,7 @@ class Scene3D {
         this.canvas = canvas;
         this.objects = [];
         this.selectedObject = null;
+        this.selectedObjects = [];
         this.nextId = 1;
         this.snapEnabled = true;
         this.snapSize = 0.5;
@@ -26,6 +27,7 @@ class Scene3D {
         this.onObjectSelected = null;
         this.onObjectDeselected = null;
         this.onObjectChanged = null;
+        this.onMultiSelect = null;
 
         this.animate();
         window.addEventListener('resize', () => this.onResize());
@@ -683,6 +685,12 @@ class Scene3D {
         if (idx !== -1) {
             this.objects.splice(idx, 1);
         }
+        // Remove from multi-select array
+        const multiIdx = this.selectedObjects.indexOf(obj);
+        if (multiIdx !== -1) {
+            this.removeMultiSelectHighlight(obj);
+            this.selectedObjects.splice(multiIdx, 1);
+        }
         if (this.selectedObject === obj) {
             this.deselect();
         }
@@ -813,6 +821,123 @@ class Scene3D {
         });
     }
 
+    // ===== Multi-Selection =====
+
+    selectMultiple(obj) {
+        if (!obj) return;
+        const idx = this.selectedObjects.indexOf(obj);
+        if (idx !== -1) {
+            // Toggle off: remove from multi-select
+            this.removeMultiSelectHighlight(obj);
+            this.selectedObjects.splice(idx, 1);
+            // If this was also the primary selected object, clear it
+            if (this.selectedObject === obj) {
+                this.removeSelectionOutline(obj);
+                this.selectedObject = null;
+                this.transformControls.detach();
+            }
+            // If there are still objects in the multi-select, make the last one the primary
+            if (this.selectedObjects.length > 0) {
+                const last = this.selectedObjects[this.selectedObjects.length - 1];
+                if (this.selectedObject !== last) {
+                    if (this.selectedObject) {
+                        this.removeSelectionOutline(this.selectedObject);
+                    }
+                    this.selectedObject = last;
+                    this.addSelectionOutline(last);
+                    this.transformControls.attach(last);
+                }
+            } else {
+                // Nothing left selected
+                if (this.onObjectDeselected) {
+                    this.onObjectDeselected();
+                }
+            }
+        } else {
+            // Add to multi-select
+            // If there is a current single selection not yet in the array, add it first
+            if (this.selectedObject && !this.selectedObjects.includes(this.selectedObject)) {
+                this.selectedObjects.push(this.selectedObject);
+                this.addMultiSelectHighlight(this.selectedObject);
+            }
+            this.selectedObjects.push(obj);
+            this.addMultiSelectHighlight(obj);
+
+            // Make the new object the primary selection (for transform gizmo)
+            if (this.selectedObject && this.selectedObject !== obj) {
+                this.removeSelectionOutline(this.selectedObject);
+            }
+            this.selectedObject = obj;
+            this.addSelectionOutline(obj);
+            this.transformControls.attach(obj);
+        }
+
+        if (this.onMultiSelect) {
+            this.onMultiSelect(this.selectedObjects);
+        }
+    }
+
+    deselectAll() {
+        // Clear multi-select highlights
+        this.selectedObjects.forEach(obj => {
+            this.removeMultiSelectHighlight(obj);
+        });
+        this.selectedObjects = [];
+        // Also clear the primary selection
+        this.deselect();
+    }
+
+    addMultiSelectHighlight(obj) {
+        // Add a subtle emissive tint to indicate multi-selection
+        const setEmissive = (mesh) => {
+            if (!mesh.material) return;
+            if (mesh.userData.isOutline) return;
+            // Store original emissive values for restoration
+            if (mesh.userData._origEmissive === undefined) {
+                mesh.userData._origEmissive = mesh.material.emissive ? '#' + mesh.material.emissive.getHexString() : '#000000';
+                mesh.userData._origEmissiveIntensity = mesh.material.emissiveIntensity || 0;
+            }
+            if (mesh.material.emissive) {
+                mesh.material.emissive.set(0x2244aa);
+                mesh.material.emissiveIntensity = 0.25;
+            }
+        };
+
+        if (obj.isMesh) {
+            setEmissive(obj);
+        }
+        obj.traverse(child => {
+            if (child.isMesh) {
+                setEmissive(child);
+            }
+        });
+    }
+
+    removeMultiSelectHighlight(obj) {
+        // Restore original emissive values
+        const restoreEmissive = (mesh) => {
+            if (!mesh.material) return;
+            if (mesh.userData.isOutline) return;
+            if (mesh.userData._origEmissive !== undefined) {
+                if (mesh.material.emissive) {
+                    mesh.material.emissive.set(mesh.userData._origEmissive);
+                    mesh.material.emissiveIntensity = mesh.userData._origEmissiveIntensity;
+                }
+                delete mesh.userData._origEmissive;
+                delete mesh.userData._origEmissiveIntensity;
+            }
+        };
+
+        if (obj.isMesh) {
+            restoreEmissive(obj);
+        }
+        obj.traverse(child => {
+            if (child.isMesh) {
+                restoreEmissive(child);
+            }
+        });
+    }
+
     // ===== Interaction =====
 
     _getMouseNDC(event) {
@@ -862,6 +987,10 @@ class Scene3D {
         if (intersects.length > 0) {
             const target = this._findRootObject(intersects[0].object);
             if (target && !target.userData.locked) {
+                if (event.shiftKey) {
+                    this.selectMultiple(target);
+                    return;
+                }
                 this.selectObject(target);
 
                 // Set up drag plane at object's Y, facing up
@@ -965,6 +1094,121 @@ class Scene3D {
 
     setSkyColor(color) {
         this.sky.material.uniforms.topColor.value.set(color);
+    }
+
+    setSkybox(type) {
+        // Remove existing skybox mesh if present
+        if (this._skyboxMesh) {
+            this.scene.remove(this._skyboxMesh);
+            this._skyboxMesh.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            this._skyboxMesh = null;
+        }
+        // Remove existing star points if present
+        if (this._skyboxStars) {
+            this.scene.remove(this._skyboxStars);
+            this._skyboxStars.geometry.dispose();
+            this._skyboxStars.material.dispose();
+            this._skyboxStars = null;
+        }
+
+        // Hide or show the default sky sphere
+        if (type === 'default') {
+            this.sky.visible = true;
+            return;
+        }
+
+        // Hide the default sky for custom skyboxes
+        this.sky.visible = false;
+
+        let topColor, bottomColor, exponent;
+
+        switch (type) {
+            case 'gradient':
+                topColor = new THREE.Color(0x1e90ff);   // Dodger blue
+                bottomColor = new THREE.Color(0x00004d); // Deep blue
+                exponent = 0.6;
+                break;
+            case 'sunset':
+                topColor = new THREE.Color(0x4b0082);    // Indigo/purple
+                bottomColor = new THREE.Color(0xff6a00);  // Deep orange
+                exponent = 0.35;
+                break;
+            case 'night':
+                topColor = new THREE.Color(0x000022);     // Near black with blue tint
+                bottomColor = new THREE.Color(0x000011);  // Very dark
+                exponent = 0.3;
+                break;
+            case 'cloudy':
+                topColor = new THREE.Color(0x8899aa);     // Blue-gray
+                bottomColor = new THREE.Color(0x556677);  // Darker gray
+                exponent = 0.5;
+                break;
+            default:
+                this.sky.visible = true;
+                return;
+        }
+
+        // Create inverted sphere with gradient shader
+        const skyGeo = new THREE.SphereGeometry(500, 32, 15);
+        const skyMat = new THREE.ShaderMaterial({
+            uniforms: {
+                topColor: { value: topColor },
+                bottomColor: { value: bottomColor },
+                offset: { value: 20 },
+                exponent: { value: exponent }
+            },
+            vertexShader: `
+                varying vec3 vWorldPosition;
+                void main() {
+                    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                    vWorldPosition = worldPosition.xyz;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 topColor;
+                uniform vec3 bottomColor;
+                uniform float offset;
+                uniform float exponent;
+                varying vec3 vWorldPosition;
+                void main() {
+                    float h = normalize(vWorldPosition + offset).y;
+                    gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+                }
+            `,
+            side: THREE.BackSide
+        });
+        this._skyboxMesh = new THREE.Mesh(skyGeo, skyMat);
+        this.scene.add(this._skyboxMesh);
+
+        // For night mode, add stars using THREE.Points
+        if (type === 'night') {
+            const starCount = 2000;
+            const starPositions = new Float32Array(starCount * 3);
+            for (let i = 0; i < starCount; i++) {
+                // Distribute on a sphere of radius ~480
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                const r = 480;
+                starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+                starPositions[i * 3 + 1] = Math.abs(r * Math.cos(phi)); // Keep stars above horizon
+                starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+            }
+            const starGeometry = new THREE.BufferGeometry();
+            starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+            const starMaterial = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: 1.5,
+                sizeAttenuation: true,
+                transparent: true,
+                opacity: 0.9
+            });
+            this._skyboxStars = new THREE.Points(starGeometry, starMaterial);
+            this.scene.add(this._skyboxStars);
+        }
     }
 
     setAmbientIntensity(value) {

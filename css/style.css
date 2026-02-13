@@ -1754,3 +1754,53 @@ input[type="checkbox"] {
     }
     .logo-text { display: none; }
 }
+
+/* ===== Tutorial Steps ===== */
+.tutorial-step { text-align: center; padding: 20px; }
+.tutorial-step .step-icon { font-size: 48px; color: var(--accent); margin-bottom: 16px; }
+.tutorial-step h3 { font-size: 18px; margin-bottom: 12px; color: var(--text-bright); }
+.tutorial-step p { font-size: 14px; line-height: 1.6; color: var(--text); }
+.modal-footer { background: var(--bg-dark); }
+
+.tutorial-dont-show {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.tutorial-dont-show input[type="checkbox"] {
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.tutorial-dont-show label {
+    cursor: pointer;
+}
+
+/* ===== Make a Block Button ===== */
+.make-block-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 16px;
+    margin-bottom: 12px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.make-block-btn:hover {
+    background: var(--accent-hover);
+}
+.make-block-btn .material-icons-round {
+    font-size: 18px;
+}

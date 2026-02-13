@@ -64,6 +64,9 @@
             <button class="tool-btn" id="btn-export" title="Export Game">
                 <span class="material-icons-round">publish</span>
             </button>
+            <button class="tool-btn" id="btn-share" title="Share Project">
+                <span class="material-icons-round">share</span>
+            </button>
             <button class="tool-btn" id="btn-settings" title="Game Settings">
                 <span class="material-icons-round">settings</span>
             </button>
@@ -257,6 +260,15 @@
                     <div class="env-controls">
                         <label>Sky Color
                             <input type="color" id="sky-color" value="#87CEEB">
+                        </label>
+                        <label>Skybox
+                            <select id="skybox-type" class="prop-input">
+                                <option value="default">Default</option>
+                                <option value="gradient">Gradient Sky</option>
+                                <option value="sunset">Sunset</option>
+                                <option value="night">Starry Night</option>
+                                <option value="cloudy">Cloudy</option>
+                            </select>
                         </label>
                         <label>Ambient Light
                             <input type="range" id="ambient-light" min="0" max="100" value="60">
@@ -713,6 +725,33 @@
                         <span class="setting-value" id="setting-sensitivity-val">5</span>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tutorial Modal -->
+    <div id="tutorial-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:600px">
+            <div class="modal-header">
+                <span class="material-icons-round">school</span>
+                <span>Welcome to BlockForge Studio!</span>
+                <button class="modal-close" id="tutorial-close">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body" id="tutorial-body">
+                <!-- Steps populated dynamically -->
+            </div>
+            <div class="modal-footer" style="display:flex;justify-content:space-between;padding:16px 24px;border-top:1px solid var(--border)">
+                <button class="action-btn" id="tutorial-prev" style="display:none">
+                    <span class="material-icons-round">arrow_back</span> Previous
+                </button>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <span id="tutorial-step-indicator" style="color:var(--text-dim);font-size:12px">1 / 7</span>
+                </div>
+                <button class="action-btn primary" id="tutorial-next">
+                    Next <span class="material-icons-round">arrow_forward</span>
+                </button>
             </div>
         </div>
     </div>

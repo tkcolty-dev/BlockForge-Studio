@@ -10,6 +10,7 @@ class BlockCode {
         this.targetObject = null;
         this.workspaceScripts = [];
         this.nextBlockId = 1;
+        this.customBlocks = {}; // user-created blocks
 
         this.drawer = document.getElementById('block-drawer');
         this.workspace = document.getElementById('workspace-canvas');
@@ -40,7 +41,8 @@ class BlockCode {
             physics: { name: 'Physics', color: '#59C059', darkColor: '#45993D' },
             sensing: { name: 'Sensing', color: '#5CB1D6', darkColor: '#2E8EB8' },
             sound: { name: 'Sound', color: '#CF63CF', darkColor: '#BD42BD' },
-            variables: { name: 'Variables', color: '#FF8C1A', darkColor: '#DB6E00' }
+            variables: { name: 'Variables', color: '#FF8C1A', darkColor: '#DB6E00' },
+            myblocks: { name: 'My Blocks', color: '#FF6680', darkColor: '#CC4466' }
         };
     }
 
@@ -80,6 +82,8 @@ class BlockCode {
             'looks_effect': { category: 'looks', type: 'command', label: 'Color shift speed {speed}', inputs: { speed: { type: 'number', default: 1 } }, code: 'colorShift' },
             'looks_scale_pulse': { category: 'looks', type: 'command', label: 'Pulse size min {min}% max {max}% speed {spd}', inputs: { min: { type: 'number', default: 80 }, max: { type: 'number', default: 120 }, spd: { type: 'number', default: 2 } }, code: 'scalePulse' },
             'looks_trail': { category: 'looks', type: 'command', label: 'Enable particle trail color {color}', inputs: { color: { type: 'color', default: '#ffff00' } }, code: 'trail' },
+            'looks_particles': { category: 'looks', type: 'command', label: 'Emit particles {type} color {color}', inputs: { type: { type: 'select', options: ['burst','sparkle','fire','snow'], default: 'burst' }, color: { type: 'color', default: '#ffff00' } }, code: 'emitParticles' },
+            'looks_stop_particles': { category: 'looks', type: 'command', label: 'Stop particles', code: 'stopParticles' },
             'physics_gravity': { category: 'physics', type: 'command', label: 'Enable gravity', code: 'enableGravity' },
             'physics_nogravity': { category: 'physics', type: 'command', label: 'Disable gravity', code: 'disableGravity' },
             'physics_velocity': { category: 'physics', type: 'command', label: 'Set velocity X:{x} Y:{y} Z:{z}', inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 5 }, z: { type: 'number', default: 0 } }, code: 'setVelocity' },
@@ -104,7 +108,45 @@ class BlockCode {
             'var_change': { category: 'variables', type: 'command', label: 'Change {var} by {amount}', inputs: { var: { type: 'select', options: ['score','health','coins','speed','level','custom'], default: 'score' }, amount: { type: 'number', default: 1 } }, code: 'changeVar' },
             'var_show': { category: 'variables', type: 'command', label: 'Show {var} on screen', inputs: { var: { type: 'select', options: ['score','health','coins','speed','level','timer'], default: 'score' } }, code: 'showVar' },
             'var_if_check': { category: 'variables', type: 'c-block', label: 'If {var} {op} {value}', inputs: { var: { type: 'select', options: ['score','health','coins','speed','level'], default: 'score' }, op: { type: 'select', options: ['>','<','=','>=','<='], default: '>' }, value: { type: 'number', default: 10 } }, code: 'ifVar' },
-            'var_reset_all': { category: 'variables', type: 'command', label: 'Reset all variables', code: 'resetVars' }
+            'var_reset_all': { category: 'variables', type: 'command', label: 'Reset all variables', code: 'resetVars' },
+
+            // === New Events ===
+            'event_message': { category: 'events', type: 'hat', label: 'When I receive {msg}', icon: '📨', inputs: { msg: { type: 'select', options: ['message1','message2','message3','go','stop','reset'], default: 'message1' } }, code: 'onMessage' },
+
+            // === New Motion ===
+            'motion_smooth_move': { category: 'motion', type: 'command', label: 'Smooth move {dir} by {amt} in {time}s', inputs: { dir: { type: 'select', options: ['forward','backward','left','right','up','down'], default: 'forward' }, amt: { type: 'number', default: 3 }, time: { type: 'number', default: 0.5 } }, code: 'smoothMove' },
+            'motion_align_to_grid': { category: 'motion', type: 'command', label: 'Snap to grid size {size}', inputs: { size: { type: 'number', default: 1 } }, code: 'snapToGrid' },
+            'motion_face_direction': { category: 'motion', type: 'command', label: 'Face {dir}', inputs: { dir: { type: 'select', options: ['north','south','east','west','player'], default: 'north' } }, code: 'faceDirection' },
+            'motion_set_rotation': { category: 'motion', type: 'command', label: 'Set rotation X:{x} Y:{y} Z:{z}', inputs: { x: { type: 'number', default: 0 }, y: { type: 'number', default: 0 }, z: { type: 'number', default: 0 } }, code: 'setRotation' },
+
+            // === New Control ===
+            'control_broadcast': { category: 'control', type: 'command', label: 'Broadcast {msg}', inputs: { msg: { type: 'select', options: ['message1','message2','message3','go','stop','reset'], default: 'message1' } }, code: 'broadcast' },
+            'control_while': { category: 'control', type: 'c-block', label: 'While {condition}', inputs: { condition: { type: 'select', options: ['touching player','key pressed','variable > 0','health > 0','timer < 10'], default: 'touching player' } }, code: 'while' },
+            'control_for_each': { category: 'control', type: 'c-block', label: 'For {var} from {start} to {end}', inputs: { var: { type: 'select', options: ['i','j','count'], default: 'i' }, start: { type: 'number', default: 1 }, end: { type: 'number', default: 10 } }, code: 'forEach' },
+
+            // === New Looks ===
+            'looks_tint': { category: 'looks', type: 'command', label: 'Tint {color} amount {amount}%', inputs: { color: { type: 'color', default: '#ff0000' }, amount: { type: 'number', default: 50 } }, code: 'tint' },
+            'looks_wireframe': { category: 'looks', type: 'command', label: 'Set wireframe {state}', inputs: { state: { type: 'select', options: ['on','off'], default: 'on' } }, code: 'wireframe' },
+            'looks_flash': { category: 'looks', type: 'command', label: 'Flash {color} {times} times', inputs: { color: { type: 'color', default: '#ffffff' }, times: { type: 'number', default: 3 } }, code: 'flash' },
+            'looks_billboard_text': { category: 'looks', type: 'command', label: 'Show label {text}', inputs: { text: { type: 'text', default: 'Label' } }, code: 'billboardText' },
+
+            // === New Physics ===
+            'physics_freeze': { category: 'physics', type: 'command', label: 'Freeze in place', code: 'freeze' },
+            'physics_unfreeze': { category: 'physics', type: 'command', label: 'Unfreeze', code: 'unfreeze' },
+            'physics_attract': { category: 'physics', type: 'command', label: 'Attract nearby objects force {force} radius {radius}', inputs: { force: { type: 'number', default: 3 }, radius: { type: 'number', default: 8 } }, code: 'attract' },
+            'physics_set_gravity': { category: 'physics', type: 'command', label: 'Set world gravity to {g}', inputs: { g: { type: 'number', default: -20 } }, code: 'setWorldGravity' },
+            'physics_spawn_object': { category: 'physics', type: 'command', label: 'Spawn {shape} at offset X:{x} Y:{y} Z:{z}', inputs: { shape: { type: 'select', options: ['box','sphere','coin','gem'], default: 'box' }, x: { type: 'number', default: 0 }, y: { type: 'number', default: 2 }, z: { type: 'number', default: 0 } }, code: 'spawnObject' },
+
+            // === New Sound ===
+            'sound_stop_all': { category: 'sound', type: 'command', label: 'Stop all sounds', code: 'stopAllSounds' },
+            'sound_play_note': { category: 'sound', type: 'command', label: 'Play note {note} for {dur}s', inputs: { note: { type: 'select', options: ['C4','D4','E4','F4','G4','A4','B4','C5'], default: 'C4' }, dur: { type: 'number', default: 0.3 } }, code: 'playNote' },
+            'sound_drum': { category: 'sound', type: 'command', label: 'Play drum {type}', inputs: { type: { type: 'select', options: ['kick','snare','hihat','clap'], default: 'kick' } }, code: 'playDrum' },
+
+            // === New Variables ===
+            'var_show_message': { category: 'variables', type: 'command', label: 'Show message {text} for {time}s', inputs: { text: { type: 'text', default: 'You win!' }, time: { type: 'number', default: 3 } }, code: 'showMessage' },
+            'var_game_over': { category: 'variables', type: 'command', label: 'Game Over {result}', inputs: { result: { type: 'select', options: ['win','lose'], default: 'win' } }, code: 'gameOver' },
+            'var_save_checkpoint': { category: 'variables', type: 'command', label: 'Save checkpoint', code: 'saveCheckpoint' },
+            'var_load_checkpoint': { category: 'variables', type: 'command', label: 'Load checkpoint', code: 'loadCheckpoint' }
         };
     }
 
@@ -125,11 +167,21 @@ class BlockCode {
 
     renderDrawer() {
         this.drawer.innerHTML = '';
+
+        // Show "Make a Block" button for My Blocks category
+        if (this.activeCategory === 'myblocks') {
+            const makeBtn = document.createElement('button');
+            makeBtn.className = 'make-block-btn';
+            makeBtn.innerHTML = '<span class="material-icons-round">add_circle</span> Make a Block';
+            makeBtn.addEventListener('click', () => this._showMakeBlockDialog());
+            this.drawer.appendChild(makeBtn);
+        }
+
+        // Render built-in blocks for the active category
         Object.entries(this.blocks).forEach(([blockId, blockDef]) => {
             if (blockDef.category !== this.activeCategory) return;
             const el = this._createBlockEl(blockDef, null);
             el.dataset.blockId = blockId;
-            // Start drag from drawer
             el.addEventListener('pointerdown', (e) => {
                 if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
                 e.preventDefault();
@@ -137,6 +189,61 @@ class BlockCode {
             });
             this.drawer.appendChild(el);
         });
+
+        // Render custom blocks for My Blocks category
+        if (this.activeCategory === 'myblocks') {
+            Object.entries(this.customBlocks).forEach(([blockId, blockDef]) => {
+                // Show the hat (definition) block
+                const hatEl = this._createBlockEl(blockDef.hat, null);
+                hatEl.dataset.blockId = blockId + '_def';
+                hatEl.addEventListener('pointerdown', (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+                    e.preventDefault();
+                    this._startDrag(e, blockId + '_def', blockDef.hat, 'drawer', hatEl);
+                });
+                this.drawer.appendChild(hatEl);
+
+                // Show the call block
+                const callEl = this._createBlockEl(blockDef.call, null);
+                callEl.dataset.blockId = blockId + '_call';
+                callEl.addEventListener('pointerdown', (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+                    e.preventDefault();
+                    this._startDrag(e, blockId + '_call', blockDef.call, 'drawer', callEl);
+                });
+                this.drawer.appendChild(callEl);
+            });
+        }
+    }
+
+    _showMakeBlockDialog() {
+        const name = prompt('Block name:', 'my block');
+        if (!name || !name.trim()) return;
+        const id = 'custom_' + Date.now();
+        const safeName = name.trim();
+
+        // Create hat (definition) and call (command) block pair
+        this.customBlocks[id] = {
+            hat: {
+                category: 'myblocks',
+                type: 'hat',
+                label: 'Define ' + safeName,
+                icon: '🧩',
+                code: 'customDef_' + id
+            },
+            call: {
+                category: 'myblocks',
+                type: 'command',
+                label: safeName,
+                code: 'customCall_' + id
+            }
+        };
+
+        // Register blocks so they can be dragged
+        this.blocks[id + '_def'] = this.customBlocks[id].hat;
+        this.blocks[id + '_call'] = this.customBlocks[id].call;
+
+        this.renderDrawer();
     }
 
     // ===== Create a block DOM element =====
