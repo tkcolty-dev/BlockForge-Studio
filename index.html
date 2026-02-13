@@ -9,6 +9,28 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 </head>
 <body class="editor-expanded">
+    <!-- Splash Screen (first load only) -->
+    <div id="splash-screen" class="hidden">
+        <div class="splash-content">
+            <span class="splash-logo-icon">&#9670;</span>
+            <span class="splash-logo-text">BlockForge Studio</span>
+            <span class="splash-tagline">Build 3D games with blocks</span>
+            <span class="splash-version" id="splash-version"></span>
+            <button class="splash-start-btn" id="splash-start">
+                <span class="material-icons-round">arrow_forward</span>
+                Get Started
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden">
+        <div class="loading-spinner">
+            <span class="material-icons-round loading-icon">hourglass_empty</span>
+            <span class="loading-text">Loading project...</span>
+        </div>
+    </div>
+
     <!-- Title Screen / Project Browser -->
     <div id="title-screen" class="hidden">
         <div class="title-header">
@@ -29,9 +51,21 @@
                     Import JSON
                 </button>
             </div>
+            <div class="title-search-bar">
+                <span class="material-icons-round">search</span>
+                <input type="text" id="project-search" placeholder="Search projects..." autocomplete="off" spellcheck="false">
+            </div>
             <div class="title-section-header">
                 <span>My Projects</span>
                 <span class="project-count" id="project-count">0</span>
+                <div style="margin-left:auto;display:flex;gap:4px">
+                    <button class="title-sort-btn active" id="sort-date" title="Sort by Date">
+                        <span class="material-icons-round">schedule</span>
+                    </button>
+                    <button class="title-sort-btn" id="sort-name" title="Sort by Name">
+                        <span class="material-icons-round">sort_by_alpha</span>
+                    </button>
+                </div>
             </div>
             <div class="project-grid" id="project-grid">
                 <!-- Populated dynamically -->
@@ -89,6 +123,13 @@
                 <span class="logo-icon">&#9670;</span>
                 <span class="logo-text">BlockForge Studio</span>
             </div>
+            <div class="toolbar-project-name hidden" id="toolbar-project-name">
+                <span class="project-name-text" id="toolbar-project-text"></span>
+                <span class="unsaved-dot hidden" id="unsaved-dot"></span>
+            </div>
+            <button class="tool-btn" id="btn-back-home" title="My Projects">
+                <span class="material-icons-round">home</span>
+            </button>
             <div class="toolbar-divider"></div>
             <div class="toolbar-group">
                 <button class="tool-btn" id="btn-select" title="Select (V)" data-tool="select">
@@ -743,8 +784,10 @@
     <!-- Status Bar -->
     <div id="status-bar">
         <span id="status-text">Ready</span>
+        <span id="status-autosave" class="status-autosave"></span>
         <span id="status-pos">X: 0 Y: 0 Z: 0</span>
         <span id="status-mode">Edit Mode</span>
+        <span id="status-version" class="status-version"></span>
     </div>
 
     <!-- Context Menu -->
@@ -1037,6 +1080,69 @@
                 </button>
                 <button class="action-btn" id="screen-editor-cancel">Cancel</button>
                 <button class="action-btn primary" id="screen-editor-save">Save Screen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:400px">
+            <div class="modal-header">
+                <span class="material-icons-round" id="confirm-modal-icon">warning</span>
+                <span id="confirm-modal-title">Confirm</span>
+                <button class="modal-close" id="confirm-modal-close">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-modal-message" style="font-size:14px;line-height:1.6"></p>
+                <div id="confirm-modal-input-wrap" class="hidden" style="margin-top:12px">
+                    <input type="text" id="confirm-modal-input" class="prop-input" style="width:100%;padding:8px 12px;font-size:14px">
+                </div>
+            </div>
+            <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 20px;border-top:1px solid var(--border)">
+                <button class="action-btn" id="confirm-modal-cancel">Cancel</button>
+                <button class="action-btn" id="confirm-modal-confirm">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcuts-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:480px">
+            <div class="modal-header">
+                <span class="material-icons-round">keyboard</span>
+                <span>Keyboard Shortcuts</span>
+                <button class="modal-close" id="shortcuts-close">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body" id="shortcuts-body">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="about-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:380px">
+            <div class="modal-header">
+                <span class="material-icons-round">info</span>
+                <span>About</span>
+                <button class="modal-close" id="about-close">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body" style="text-align:center;padding:32px 24px">
+                <span style="font-size:48px;color:var(--accent)">&#9670;</span>
+                <div style="font-weight:700;font-size:18px;margin:12px 0 4px;background:linear-gradient(135deg,#4c97ff,#9966ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent">BlockForge Studio</div>
+                <div id="about-version" style="font-size:12px;color:var(--text-dim);margin-bottom:16px"></div>
+                <p style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:12px">
+                    Build 3D games with blocks. Drag and drop objects, write visual block code, and share your creations.
+                </p>
+                <p style="font-size:11px;color:var(--text-dim)">
+                    Press <kbd>?</kbd> for keyboard shortcuts
+                </p>
             </div>
         </div>
     </div>

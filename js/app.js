@@ -30,8 +30,12 @@ class App {
         this.initCustomObjects();
         this.initUIScreens();
 
+        this.VERSION = '1.0.0';
         this.currentProjectId = null;
         this.projectName = null;
+        this.hasUnsavedChanges = false;
+        this.lastSaveTime = null;
+        this.projectSortBy = 'date';
 
         this.scene3d.onObjectSelected = (obj) => this.onObjectSelected(obj);
         this.scene3d.onObjectDeselected = () => this.onObjectDeselected();
@@ -45,6 +49,18 @@ class App {
         // Migrate old single-project storage to multi-project
         this.migrateOldProject();
         this.initTitleScreen();
+        this.initConfirmModal();
+        this.initShortcutsModal();
+        this.initAboutModal();
+
+        // Version + autosave indicator
+        document.getElementById('status-version').textContent = 'v' + this.VERSION;
+        document.getElementById('status-version').addEventListener('click', () => this.showAboutModal());
+        document.getElementById('about-version').textContent = 'Version ' + this.VERSION;
+        document.getElementById('splash-version').textContent = 'v' + this.VERSION;
+
+        // Back-to-home button
+        document.getElementById('btn-back-home').addEventListener('click', () => this.showTitleScreen());
 
         // Check for shared project URL
         const loadedFromHash = this.loadFromHash();
@@ -58,11 +74,20 @@ class App {
         this.initTutorial();
         this.initTooltips();
 
-        // Show title screen if no project was loaded from hash
-        if (!loadedFromHash) {
-            this.showTitleScreen();
-        } else {
+        // Show splash, title screen, or go to editor
+        const splashSeen = localStorage.getItem('blockforge_splash_seen');
+        if (loadedFromHash) {
+            this.updateToolbarProjectName();
             this.toast('BlockForge Studio loaded! Start building your game.');
+        } else if (!splashSeen) {
+            document.getElementById('splash-screen').classList.remove('hidden');
+            document.getElementById('splash-start').addEventListener('click', () => {
+                localStorage.setItem('blockforge_splash_seen', 'true');
+                document.getElementById('splash-screen').classList.add('hidden');
+                this.showTitleScreen();
+            });
+        } else {
+            this.showTitleScreen();
         }
 
         // Auto-save every 60 seconds
@@ -71,6 +96,9 @@ class App {
                 this.saveProject(true);
             }
         }, 60000);
+
+        // Update autosave indicator every 30 seconds
+        setInterval(() => this.updateAutosaveIndicator(), 30000);
     }
 
     // ===== Toolbar =====
@@ -637,9 +665,9 @@ class App {
 
         document.getElementById('btn-clear-script').addEventListener('click', (e) => {
             e.stopPropagation();
-            if (confirm('Clear all scripts for this object?')) {
-                this.blockCode.clearScripts();
-            }
+            this.showConfirm('Clear Scripts', 'Clear all scripts for this object?', 'Clear', 'danger').then(confirmed => {
+                if (confirmed) this.blockCode.clearScripts();
+            });
         });
 
         // Fullscreen toggle
@@ -863,6 +891,10 @@ class App {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
                 this.saveProject();
+            }
+            // ? to toggle shortcuts
+            if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+                this.toggleShortcutsModal();
             }
         });
     }
@@ -1110,6 +1142,25 @@ class App {
             });
         });
 
+        // Search bar
+        const searchInput = document.getElementById('project-search');
+        searchInput.addEventListener('input', () => this.renderProjectGrid());
+        searchInput.addEventListener('keydown', (e) => e.stopPropagation());
+
+        // Sort buttons
+        document.getElementById('sort-date').addEventListener('click', () => {
+            this.projectSortBy = 'date';
+            document.getElementById('sort-date').classList.add('active');
+            document.getElementById('sort-name').classList.remove('active');
+            this.renderProjectGrid();
+        });
+        document.getElementById('sort-name').addEventListener('click', () => {
+            this.projectSortBy = 'name';
+            document.getElementById('sort-name').classList.add('active');
+            document.getElementById('sort-date').classList.remove('active');
+            this.renderProjectGrid();
+        });
+
         // Logo click returns to title screen
         const logo = document.querySelector('#toolbar .logo');
         if (logo) {
@@ -1140,6 +1191,244 @@ class App {
         this.createNewProject(name, templateKey);
     }
 
+    // ===== Toolbar Project Name + Unsaved Indicator =====
+
+    updateToolbarProjectName() {
+        const el = document.getElementById('toolbar-project-name');
+        const textEl = document.getElementById('toolbar-project-text');
+        const dot = document.getElementById('unsaved-dot');
+
+        if (this.currentProjectId && this.projectName) {
+            textEl.textContent = this.projectName;
+            el.classList.remove('hidden');
+            if (this.hasUnsavedChanges) {
+                dot.classList.remove('hidden');
+            } else {
+                dot.classList.add('hidden');
+            }
+        } else {
+            el.classList.add('hidden');
+        }
+    }
+
+    // ===== Autosave Indicator =====
+
+    updateAutosaveIndicator() {
+        const el = document.getElementById('status-autosave');
+        if (!el) return;
+        if (!this.currentProjectId || !this.lastSaveTime) {
+            el.textContent = '';
+            return;
+        }
+        const diff = Date.now() - this.lastSaveTime;
+        const seconds = Math.floor(diff / 1000);
+        if (seconds < 10) {
+            el.textContent = 'Saved just now';
+        } else if (seconds < 60) {
+            el.textContent = 'Saved ' + seconds + 's ago';
+        } else {
+            const minutes = Math.floor(seconds / 60);
+            el.textContent = 'Saved ' + minutes + ' min ago';
+        }
+    }
+
+    // ===== Custom Confirm / Prompt Modals =====
+
+    initConfirmModal() {
+        const modal = document.getElementById('confirm-modal');
+        const input = document.getElementById('confirm-modal-input');
+
+        document.getElementById('confirm-modal-close').addEventListener('click', () => {
+            modal.classList.add('hidden');
+            if (this._confirmReject) this._confirmReject(false);
+        });
+
+        document.getElementById('confirm-modal-cancel').addEventListener('click', () => {
+            modal.classList.add('hidden');
+            if (this._confirmReject) this._confirmReject(false);
+        });
+
+        document.getElementById('confirm-modal-confirm').addEventListener('click', () => {
+            modal.classList.add('hidden');
+            if (this._confirmResolve) {
+                if (this._confirmIsPrompt) {
+                    this._confirmResolve(input.value);
+                } else {
+                    this._confirmResolve(true);
+                }
+            }
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+                if (this._confirmReject) this._confirmReject(false);
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') {
+                document.getElementById('confirm-modal-confirm').click();
+            }
+            if (e.key === 'Escape') {
+                modal.classList.add('hidden');
+                if (this._confirmReject) this._confirmReject(false);
+            }
+        });
+    }
+
+    showConfirm(title, message, confirmLabel, type) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('confirm-modal');
+            const icon = document.getElementById('confirm-modal-icon');
+            const titleEl = document.getElementById('confirm-modal-title');
+            const msgEl = document.getElementById('confirm-modal-message');
+            const confirmBtn = document.getElementById('confirm-modal-confirm');
+            const inputWrap = document.getElementById('confirm-modal-input-wrap');
+
+            titleEl.textContent = title || 'Confirm';
+            msgEl.textContent = message || '';
+            confirmBtn.textContent = confirmLabel || 'OK';
+            inputWrap.classList.add('hidden');
+            this._confirmIsPrompt = false;
+
+            if (type === 'danger') {
+                icon.textContent = 'warning';
+                icon.style.color = '#ff4444';
+                confirmBtn.style.background = '#ff4444';
+                confirmBtn.style.borderColor = '#ff4444';
+            } else {
+                icon.textContent = 'help_outline';
+                icon.style.color = 'var(--accent)';
+                confirmBtn.style.background = 'var(--accent)';
+                confirmBtn.style.borderColor = 'var(--accent)';
+            }
+            confirmBtn.style.color = '#fff';
+
+            this._confirmResolve = resolve;
+            this._confirmReject = (val) => resolve(val === undefined ? false : val);
+            modal.classList.remove('hidden');
+        });
+    }
+
+    showPrompt(title, message, defaultValue) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('confirm-modal');
+            const icon = document.getElementById('confirm-modal-icon');
+            const titleEl = document.getElementById('confirm-modal-title');
+            const msgEl = document.getElementById('confirm-modal-message');
+            const confirmBtn = document.getElementById('confirm-modal-confirm');
+            const inputWrap = document.getElementById('confirm-modal-input-wrap');
+            const input = document.getElementById('confirm-modal-input');
+
+            titleEl.textContent = title || 'Input';
+            msgEl.textContent = message || '';
+            confirmBtn.textContent = 'OK';
+            confirmBtn.style.background = 'var(--accent)';
+            confirmBtn.style.borderColor = 'var(--accent)';
+            confirmBtn.style.color = '#fff';
+            icon.textContent = 'edit';
+            icon.style.color = 'var(--accent)';
+
+            inputWrap.classList.remove('hidden');
+            input.value = defaultValue || '';
+            this._confirmIsPrompt = true;
+
+            this._confirmResolve = resolve;
+            this._confirmReject = () => resolve(null);
+            modal.classList.remove('hidden');
+            setTimeout(() => { input.focus(); input.select(); }, 50);
+        });
+    }
+
+    // ===== Keyboard Shortcuts Modal =====
+
+    initShortcutsModal() {
+        const body = document.getElementById('shortcuts-body');
+        const shortcuts = [
+            { section: 'Tools', items: [
+                ['Select', 'V'], ['Move', 'G'], ['Rotate', 'R'], ['Scale', 'S']
+            ]},
+            { section: 'Edit', items: [
+                ['Undo', 'Ctrl+Z'], ['Redo', 'Ctrl+Shift+Z'], ['Redo', 'Ctrl+Y'],
+                ['Copy', 'Ctrl+C'], ['Paste', 'Ctrl+V'], ['Duplicate', 'Ctrl+D'],
+                ['Delete', 'Del / Backspace']
+            ]},
+            { section: 'File', items: [
+                ['Save', 'Ctrl+S'], ['Play / Stop', 'F5']
+            ]},
+            { section: 'View', items: [
+                ['Fullscreen Viewport', 'Viewport Button'], ['Deselect', 'Escape'],
+                ['Shortcuts', '?']
+            ]}
+        ];
+
+        body.innerHTML = '';
+        shortcuts.forEach(sec => {
+            const sectionEl = document.createElement('div');
+            sectionEl.className = 'shortcut-section';
+            const heading = document.createElement('div');
+            heading.className = 'shortcut-section-title';
+            heading.textContent = sec.section;
+            sectionEl.appendChild(heading);
+
+            sec.items.forEach(([label, key]) => {
+                const row = document.createElement('div');
+                row.className = 'shortcut-row';
+                const labelEl = document.createElement('span');
+                labelEl.className = 'shortcut-label';
+                labelEl.textContent = label;
+                const keyEl = document.createElement('span');
+                keyEl.className = 'shortcut-keys';
+                key.split('+').forEach((k, i) => {
+                    if (i > 0) {
+                        const plus = document.createTextNode(' + ');
+                        keyEl.appendChild(plus);
+                    }
+                    const kbd = document.createElement('kbd');
+                    kbd.textContent = k.trim();
+                    keyEl.appendChild(kbd);
+                });
+                row.appendChild(labelEl);
+                row.appendChild(keyEl);
+                sectionEl.appendChild(row);
+            });
+            body.appendChild(sectionEl);
+        });
+
+        document.getElementById('shortcuts-close').addEventListener('click', () => {
+            document.getElementById('shortcuts-modal').classList.add('hidden');
+        });
+        document.getElementById('shortcuts-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('shortcuts-modal')) {
+                document.getElementById('shortcuts-modal').classList.add('hidden');
+            }
+        });
+    }
+
+    toggleShortcutsModal() {
+        const modal = document.getElementById('shortcuts-modal');
+        modal.classList.toggle('hidden');
+    }
+
+    // ===== About Modal =====
+
+    initAboutModal() {
+        document.getElementById('about-close').addEventListener('click', () => {
+            document.getElementById('about-modal').classList.add('hidden');
+        });
+        document.getElementById('about-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('about-modal')) {
+                document.getElementById('about-modal').classList.add('hidden');
+            }
+        });
+    }
+
+    showAboutModal() {
+        document.getElementById('about-modal').classList.remove('hidden');
+    }
+
     showTitleScreen() {
         // Auto-save current project before showing title screen
         if (this.currentProjectId) {
@@ -1147,8 +1436,11 @@ class App {
         }
         this.currentProjectId = null;
         this.projectName = null;
+        this.hasUnsavedChanges = false;
+        this.updateToolbarProjectName();
 
         document.getElementById('title-screen').classList.remove('hidden');
+        document.getElementById('project-search').value = '';
         this.renderProjectGrid();
     }
 
@@ -1227,7 +1519,9 @@ class App {
         this.updateObjectCount();
 
         // Save project
+        this.hasUnsavedChanges = false;
         this.saveProject(true);
+        this.updateToolbarProjectName();
         this.hideTitleScreen();
         this.toast('New project created: ' + name);
     }
@@ -1239,16 +1533,30 @@ class App {
             return;
         }
 
+        // Show loading spinner
+        const loadingOverlay = document.getElementById('loading-overlay');
+        loadingOverlay.classList.remove('hidden');
+
         const index = this.getProjectIndex();
         this.currentProjectId = id;
         this.projectName = (index[id] && index[id].name) || data.name || 'My Game';
 
         this.undoStack = [];
         this.redoStack = [];
+        this.hasUnsavedChanges = false;
+        this.lastSaveTime = index[id] ? index[id].modifiedAt : Date.now();
 
-        this._applyProjectData(data);
-        this.hideTitleScreen();
-        this.toast('Opened: ' + this.projectName);
+        // Use rAF + setTimeout to let the loading overlay paint
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                this._applyProjectData(data);
+                this.hideTitleScreen();
+                this.updateToolbarProjectName();
+                this.updateAutosaveIndicator();
+                loadingOverlay.classList.add('hidden');
+                this.toast('Opened: ' + this.projectName);
+            }, 50);
+        });
     }
 
     duplicateProject(id) {
@@ -1272,11 +1580,11 @@ class App {
         this.toast('Duplicated: ' + newName, 'success');
     }
 
-    renameProject(id) {
+    async renameProject(id) {
         const index = this.getProjectIndex();
         const meta = index[id];
         if (!meta) return;
-        const newName = prompt('Rename project:', meta.name || 'Untitled');
+        const newName = await this.showPrompt('Rename Project', 'Enter a new name:', meta.name || 'Untitled');
         if (!newName || newName === meta.name) return;
         meta.name = newName;
         this.saveProjectIndex(index);
@@ -1285,6 +1593,10 @@ class App {
         if (data) {
             data.name = newName;
             this.saveProjectData(id, data);
+        }
+        if (this.currentProjectId === id) {
+            this.projectName = newName;
+            this.updateToolbarProjectName();
         }
         this.renderProjectGrid();
     }
@@ -1295,10 +1607,25 @@ class App {
         const countEl = document.getElementById('project-count');
         const index = this.getProjectIndex();
 
-        // Sort by modifiedAt descending
-        const entries = Object.entries(index).sort((a, b) => (b[1].modifiedAt || 0) - (a[1].modifiedAt || 0));
+        // Filter by search query
+        const query = (document.getElementById('project-search').value || '').trim().toLowerCase();
+        let entries = Object.entries(index);
+        if (query) {
+            entries = entries.filter(([, meta]) => (meta.name || '').toLowerCase().includes(query));
+        }
 
-        countEl.textContent = entries.length;
+        // Sort: favorites pinned first, then by sort mode
+        entries.sort((a, b) => {
+            const aFav = a[1].favorite ? 1 : 0;
+            const bFav = b[1].favorite ? 1 : 0;
+            if (aFav !== bFav) return bFav - aFav;
+            if (this.projectSortBy === 'name') {
+                return (a[1].name || '').localeCompare(b[1].name || '');
+            }
+            return (b[1].modifiedAt || 0) - (a[1].modifiedAt || 0);
+        });
+
+        countEl.textContent = Object.keys(index).length;
         grid.innerHTML = '';
 
         if (entries.length === 0) {
@@ -1325,6 +1652,17 @@ class App {
                 thumb.appendChild(icon);
             }
 
+            // Favorite star badge (top-left of thumb)
+            const starBtn = document.createElement('button');
+            starBtn.className = 'project-card-star' + (meta.favorite ? ' active' : '');
+            starBtn.innerHTML = '<span class="material-icons-round">' + (meta.favorite ? 'star' : 'star_border') + '</span>';
+            starBtn.title = meta.favorite ? 'Remove from favorites' : 'Add to favorites';
+            starBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleFavorite(id);
+            });
+            thumb.appendChild(starBtn);
+
             const info = document.createElement('div');
             info.className = 'project-card-info';
             const nameEl = document.createElement('div');
@@ -1332,13 +1670,24 @@ class App {
             nameEl.textContent = meta.name || 'Untitled';
             const dateEl = document.createElement('div');
             dateEl.className = 'project-date';
-            dateEl.textContent = this._formatRelativeTime(meta.modifiedAt);
+            const timeStr = this._formatRelativeTime(meta.modifiedAt);
+            const sizeStr = this._getProjectSize(id);
+            dateEl.textContent = timeStr + (sizeStr ? ' · ' + sizeStr : '');
             info.appendChild(nameEl);
             info.appendChild(dateEl);
 
             // Card action buttons (top-right, shown on hover)
             const actions = document.createElement('div');
             actions.className = 'project-card-actions';
+
+            const exportBtn = document.createElement('button');
+            exportBtn.className = 'project-card-action-btn';
+            exportBtn.innerHTML = '<span class="material-icons-round">download</span>';
+            exportBtn.title = 'Export';
+            exportBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.exportProjectById(id);
+            });
 
             const dupBtn = document.createElement('button');
             dupBtn.className = 'project-card-action-btn';
@@ -1364,12 +1713,20 @@ class App {
             delBtn.title = 'Delete';
             delBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                if (confirm('Delete "' + (meta.name || 'Untitled') + '"? This cannot be undone.')) {
-                    this.deleteProjectData(id);
-                    this.renderProjectGrid();
-                }
+                this.showConfirm(
+                    'Delete Project',
+                    'Delete "' + (meta.name || 'Untitled') + '"? This cannot be undone.',
+                    'Delete',
+                    'danger'
+                ).then(confirmed => {
+                    if (confirmed) {
+                        this.deleteProjectData(id);
+                        this.renderProjectGrid();
+                    }
+                });
             });
 
+            actions.appendChild(exportBtn);
             actions.appendChild(dupBtn);
             actions.appendChild(renameBtn);
             actions.appendChild(delBtn);
@@ -1395,6 +1752,44 @@ class App {
         if (days < 30) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
         const months = Math.floor(days / 30);
         return months + ' month' + (months > 1 ? 's' : '') + ' ago';
+    }
+
+    toggleFavorite(id) {
+        const index = this.getProjectIndex();
+        const meta = index[id];
+        if (!meta) return;
+        meta.favorite = !meta.favorite;
+        this.saveProjectIndex(index);
+        this.renderProjectGrid();
+    }
+
+    exportProjectById(id) {
+        const data = this.getProjectData(id);
+        if (!data) return;
+        const index = this.getProjectIndex();
+        const meta = index[id] || {};
+        const filename = (meta.name || 'blockforge-game').replace(/[^a-z0-9_-]/gi, '_') + '.json';
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.toast('Exported: ' + (meta.name || 'project'), 'success');
+    }
+
+    _getProjectSize(id) {
+        try {
+            const raw = localStorage.getItem('blockforge_project_' + id);
+            if (!raw) return '';
+            const bytes = new Blob([raw]).size;
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        } catch (e) {
+            return '';
+        }
     }
 
     importProjectFromFile() {
@@ -1751,13 +2146,14 @@ class App {
         });
     }
 
-    loadTemplate(key) {
+    async loadTemplate(key) {
         const tmpl = this.templates[key];
         if (!tmpl) return;
 
         // Confirm if scene has objects
         if (this.scene3d.objects.length > 0) {
-            if (!confirm('This will replace your current scene. Continue?')) return;
+            const confirmed = await this.showConfirm('Load Template', 'This will replace your current scene. Continue?', 'Load');
+            if (!confirmed) return;
         }
 
         // Load template scene data
@@ -1923,9 +2319,15 @@ class App {
             name: this.projectName || data.name || 'My Game',
             createdAt: existing.createdAt || Date.now(),
             modifiedAt: Date.now(),
-            thumbnail: thumbnail || existing.thumbnail || null
+            thumbnail: thumbnail || existing.thumbnail || null,
+            favorite: existing.favorite || false
         };
         this.saveProjectIndex(index);
+
+        this.hasUnsavedChanges = false;
+        this.lastSaveTime = Date.now();
+        this.updateToolbarProjectName();
+        this.updateAutosaveIndicator();
 
         if (!silent) {
             this.toast('Project saved!', 'success');
@@ -1958,6 +2360,8 @@ class App {
         this.undoStack.push(JSON.stringify(this.scene3d.serialize()));
         if (this.undoStack.length > 50) this.undoStack.shift();
         this.redoStack = [];
+        this.hasUnsavedChanges = true;
+        this.updateToolbarProjectName();
     }
 
     undo() {
