@@ -828,6 +828,10 @@ class App {
         document.getElementById('shadows-enabled').addEventListener('change', (e) => {
             this.scene3d.setShadows(e.target.checked);
         });
+
+        document.getElementById('weather-type').addEventListener('change', (e) => {
+            this.scene3d.setWeather(e.target.value);
+        });
     }
 
     // ===== Save/Load =====
@@ -1161,7 +1165,8 @@ class App {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
                 fogDensity: document.getElementById('fog-density').value,
-                shadows: document.getElementById('shadows-enabled').checked
+                shadows: document.getElementById('shadows-enabled').checked,
+                weather: document.getElementById('weather-type').value
             }
         };
 
@@ -1190,6 +1195,11 @@ class App {
                 this.scene3d.setAmbientIntensity(data.environment.ambientLight / 100);
                 this.scene3d.setFog(parseInt(data.environment.fogDensity));
                 this.scene3d.setShadows(data.environment.shadows);
+
+                if (data.environment.weather) {
+                    document.getElementById('weather-type').value = data.environment.weather;
+                    this.scene3d.setWeather(data.environment.weather);
+                }
             }
 
             this.refreshExplorer();
@@ -1210,7 +1220,8 @@ class App {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
                 fogDensity: document.getElementById('fog-density').value,
-                shadows: document.getElementById('shadows-enabled').checked
+                shadows: document.getElementById('shadows-enabled').checked,
+                weather: document.getElementById('weather-type').value
             }
         };
 
@@ -1304,7 +1315,8 @@ class App {
                 skyColor: document.getElementById('sky-color').value,
                 ambientLight: document.getElementById('ambient-light').value,
                 fogDensity: document.getElementById('fog-density').value,
-                shadows: document.getElementById('shadows-enabled').checked
+                shadows: document.getElementById('shadows-enabled').checked,
+                weather: document.getElementById('weather-type').value
             }
         };
         try {
@@ -1345,6 +1357,11 @@ class App {
                 this.scene3d.setAmbientIntensity(data.environment.ambientLight / 100);
                 this.scene3d.setFog(parseInt(data.environment.fogDensity));
                 this.scene3d.setShadows(data.environment.shadows);
+
+                if (data.environment.weather) {
+                    document.getElementById('weather-type').value = data.environment.weather;
+                    this.scene3d.setWeather(data.environment.weather);
+                }
             }
             this.refreshExplorer();
             this.updateObjectCount();

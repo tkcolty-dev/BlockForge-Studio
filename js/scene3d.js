@@ -509,7 +509,6 @@ class Scene3D {
             case 'platform': {
                 const platMat = new THREE.MeshStandardMaterial({ color: 0x1abc9c, roughness: 0.5, metalness: 0.2 });
                 mesh = new THREE.Mesh(new THREE.BoxGeometry(3, 0.3, 3), platMat);
-                material = platMat;
                 break;
             }
             case 'bridge': {
@@ -547,7 +546,6 @@ class Scene3D {
             case 'crate': {
                 const crateMat = new THREE.MeshStandardMaterial({ color: 0xd4a24e, roughness: 0.85 });
                 mesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), crateMat);
-                material = crateMat;
                 // Cross detail via edges
                 const edgeMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.9 });
                 const edgeH = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.06, 0.82), edgeMat);
@@ -565,7 +563,6 @@ class Scene3D {
                 });
                 const gemGeom = new THREE.OctahedronGeometry(0.3, 0);
                 mesh = new THREE.Mesh(gemGeom, gemMat);
-                material = gemMat;
                 break;
             }
             case 'spawn': {
@@ -1296,6 +1293,12 @@ class Scene3D {
             this._updateViewCube();
         }
 
+        // Update weather particles
+        if (this._weatherParticles) {
+            this._updateWeather();
+            this._needsRender = true;
+        }
+
         // Render-on-demand: skip render when nothing changed in editor mode
         if (this.isPlaying || this._needsRender) {
             this.renderer.render(this.scene, this.camera);
@@ -1317,6 +1320,135 @@ class Scene3D {
 
     onFPSUpdate(callback) {
         this._fpsCallback = callback;
+    }
+
+    // ===== Weather =====
+
+    setWeather(type) {
+        // Cleanup existing weather particles
+        if (this._weatherParticles) {
+            this.scene.remove(this._weatherParticles);
+            this._weatherParticles.geometry.dispose();
+            this._weatherParticles.material.dispose();
+            this._weatherParticles = null;
+        }
+        this._weatherType = type || 'none';
+
+        if (type === 'none' || !type) {
+            this._needsRender = true;
+            return;
+        }
+
+        let count, geometry, material, positions, volX, volY, volZ;
+
+        if (type === 'rain') {
+            count = 3000;
+            volX = 60; volY = 40; volZ = 60;
+            geometry = new THREE.BufferGeometry();
+            positions = new Float32Array(count * 3);
+            for (let i = 0; i < count; i++) {
+                positions[i * 3]     = (Math.random() - 0.5) * volX;
+                positions[i * 3 + 1] = Math.random() * volY;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * volZ;
+            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            material = new THREE.PointsMaterial({
+                color: 0xaaccff,
+                size: 0.15,
+                transparent: true,
+                opacity: 0.6,
+                depthWrite: false
+            });
+        } else if (type === 'snow') {
+            count = 2000;
+            volX = 60; volY = 40; volZ = 60;
+            geometry = new THREE.BufferGeometry();
+            positions = new Float32Array(count * 3);
+            for (let i = 0; i < count; i++) {
+                positions[i * 3]     = (Math.random() - 0.5) * volX;
+                positions[i * 3 + 1] = Math.random() * volY;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * volZ;
+            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            material = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: 0.2,
+                transparent: true,
+                opacity: 0.8,
+                depthWrite: false
+            });
+        } else if (type === 'fireflies') {
+            count = 200;
+            volX = 30; volY = 15; volZ = 30;
+            geometry = new THREE.BufferGeometry();
+            positions = new Float32Array(count * 3);
+            for (let i = 0; i < count; i++) {
+                positions[i * 3]     = (Math.random() - 0.5) * volX;
+                positions[i * 3 + 1] = Math.random() * volY + 0.5;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * volZ;
+            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            material = new THREE.PointsMaterial({
+                color: 0xffdd44,
+                size: 0.25,
+                transparent: true,
+                opacity: 0.9,
+                depthWrite: false
+            });
+            // Store phase offsets for sinusoidal motion
+            this._fireflyPhases = new Float32Array(count);
+            for (let i = 0; i < count; i++) {
+                this._fireflyPhases[i] = Math.random() * Math.PI * 2;
+            }
+        }
+
+        this._weatherParticles = new THREE.Points(geometry, material);
+        this._weatherParticles.frustumCulled = false;
+        this.scene.add(this._weatherParticles);
+        this._needsRender = true;
+    }
+
+    _updateWeather() {
+        if (!this._weatherParticles) return;
+        const positions = this._weatherParticles.geometry.attributes.position.array;
+        const count = positions.length / 3;
+        const type = this._weatherType;
+
+        if (type === 'rain') {
+            for (let i = 0; i < count; i++) {
+                positions[i * 3 + 1] -= 0.4; // fast fall
+                positions[i * 3] += (Math.random() - 0.5) * 0.01;
+                if (positions[i * 3 + 1] < -1) {
+                    positions[i * 3 + 1] = 40;
+                    positions[i * 3]     = (Math.random() - 0.5) * 60;
+                    positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+                }
+            }
+        } else if (type === 'snow') {
+            for (let i = 0; i < count; i++) {
+                positions[i * 3 + 1] -= 0.05; // slow fall
+                positions[i * 3] += (Math.random() - 0.5) * 0.03; // horizontal drift
+                positions[i * 3 + 2] += (Math.random() - 0.5) * 0.03;
+                if (positions[i * 3 + 1] < -1) {
+                    positions[i * 3 + 1] = 40;
+                    positions[i * 3]     = (Math.random() - 0.5) * 60;
+                    positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+                }
+            }
+        } else if (type === 'fireflies') {
+            const time = performance.now() * 0.001;
+            for (let i = 0; i < count; i++) {
+                const phase = this._fireflyPhases[i];
+                positions[i * 3]     += Math.sin(time + phase) * 0.01;
+                positions[i * 3 + 1] += Math.sin(time * 0.7 + phase * 1.3) * 0.005;
+                positions[i * 3 + 2] += Math.cos(time * 0.8 + phase) * 0.01;
+                // Soft bounds
+                if (positions[i * 3 + 1] < 0.5) positions[i * 3 + 1] = 0.5;
+                if (positions[i * 3 + 1] > 15) positions[i * 3 + 1] = 15;
+            }
+        }
+
+        this._weatherParticles.geometry.attributes.position.needsUpdate = true;
     }
 
     // ===== Serialization =====
