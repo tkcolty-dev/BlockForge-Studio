@@ -25,6 +25,7 @@ class App {
         this.initKeyboard();
         this.initEnvironment();
         this.initSaveLoad();
+        this.initTemplates();
         this.initSettings();
 
         this.scene3d.onObjectSelected = (obj) => this.onObjectSelected(obj);
@@ -836,6 +837,204 @@ class App {
         document.getElementById('btn-load').addEventListener('click', () => this.loadProject());
         document.getElementById('btn-export').addEventListener('click', () => this.exportGame());
         document.getElementById('btn-share').addEventListener('click', () => this.shareProject());
+    }
+
+    // ===== Templates =====
+
+    initTemplates() {
+        this.templates = {
+            'flat-arena': {
+                name: 'Flat Arena',
+                desc: 'Battle arena with walls',
+                icon: 'sports_mma',
+                color: '#e74c3c',
+                scene: [
+                    { type: 'box', name: 'Arena Floor', position: { x: 0, y: -0.25, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 30, y: 0.5, z: 30 }, color: '#4a7c3f', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'North Wall', position: { x: 0, y: 1, z: -15 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 7.5, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'South Wall', position: { x: 0, y: 1, z: 15 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 7.5, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'East Wall', position: { x: 15, y: 1, z: 0 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 7.5, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'West Wall', position: { x: -15, y: 1, z: 0 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 7.5, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'crate', name: 'Cover1', position: { x: -5, y: 0.4, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#d4a24e', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'crate', name: 'Cover2', position: { x: 5, y: 0.4, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#d4a24e', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'crate', name: 'Cover3', position: { x: 5, y: 0.4, z: -5 }, rotation: { x: 0, y: 45, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#d4a24e', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'crate', name: 'Cover4', position: { x: -5, y: 0.4, z: 5 }, rotation: { x: 0, y: 45, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#d4a24e', anchored: true, collidable: true, mass: 1, scripts: [] }
+                ]
+            },
+            'platformer': {
+                name: 'Platformer',
+                desc: 'Floating platforms to jump across',
+                icon: 'layers',
+                color: '#1abc9c',
+                scene: [
+                    { type: 'platform', name: 'Start Platform', position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1, z: 1.5 }, color: '#1abc9c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'platform', name: 'Platform 2', position: { x: 4, y: 1.5, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#1abc9c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'platform', name: 'Platform 3', position: { x: 8, y: 3, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#1abc9c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'platform', name: 'Platform 4', position: { x: 5, y: 4.5, z: 4 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.8, y: 1, z: 0.8 }, color: '#16a085', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'platform', name: 'Platform 5', position: { x: 9, y: 6, z: 6 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.8, y: 1, z: 0.8 }, color: '#16a085', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'platform', name: 'Platform 6', position: { x: 13, y: 7.5, z: 4 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#1abc9c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'platform', name: 'Goal Platform', position: { x: 16, y: 9, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1, z: 1.5 }, color: '#f1c40f', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'gem', name: 'Goal Gem', position: { x: 16, y: 10, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#e74c3c', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 1', position: { x: 4, y: 2.5, z: -2 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 2', position: { x: 8, y: 4, z: 0 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] }
+                ]
+            },
+            'obstacle-course': {
+                name: 'Obstacle Course',
+                desc: 'Navigate walls, ramps & gaps',
+                icon: 'fitness_center',
+                color: '#e67e22',
+                scene: [
+                    { type: 'box', name: 'Start Area', position: { x: 0, y: -0.25, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 6, y: 0.5, z: 6 }, color: '#4a7c3f', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Path 1', position: { x: 0, y: -0.25, z: -6 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 0.5, z: 6 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wall', name: 'Obstacle Wall 1', position: { x: 0, y: 1, z: -7 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.3, y: 0.7, z: 1 }, color: '#e74c3c', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Path 2', position: { x: 0, y: -0.25, z: -12 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 0.5, z: 4 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'wedge', name: 'Ramp 1', position: { x: 0, y: 0.5, z: -15 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#e67e22', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'High Path', position: { x: 0, y: 2, z: -19 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 0.5, z: 6 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Narrow Bridge', position: { x: 4, y: 2, z: -22 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 6, y: 0.5, z: 0.8 }, color: '#8B6914', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Finish Area', position: { x: 8, y: 2, z: -22 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 0.5, z: 4 }, color: '#f1c40f', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'gem', name: 'Finish Gem', position: { x: 8, y: 3.5, z: -22 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#e74c3c', anchored: false, collidable: true, mass: 1, scripts: [] }
+                ]
+            },
+            'village': {
+                name: 'Village',
+                desc: 'Houses, trees & paths',
+                icon: 'holiday_village',
+                color: '#27ae60',
+                scene: [
+                    { type: 'box', name: 'Ground', position: { x: 0, y: -0.25, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 30, y: 0.5, z: 30 }, color: '#4a7c3f', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Main Path', position: { x: 0, y: 0.02, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 3, y: 0.05, z: 20 }, color: '#C2B280', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Cross Path', position: { x: 0, y: 0.02, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 16, y: 0.05, z: 3 }, color: '#C2B280', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'house', name: 'House 1', position: { x: -5, y: 0, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#e67e22', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'house', name: 'House 2', position: { x: 5, y: 0, z: -3 }, rotation: { x: 0, y: 180, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#3498db', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'house', name: 'House 3', position: { x: -5, y: 0, z: 4 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 1.2, y: 1.2, z: 1.2 }, color: '#e67e22', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'tree', name: 'Tree 1', position: { x: -8, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#27ae60', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'tree', name: 'Tree 2', position: { x: 8, y: 0, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.2, y: 1.2, z: 1.2 }, color: '#27ae60', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'tree', name: 'Tree 3', position: { x: -3, y: 0, z: -8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.8, y: 0.8, z: 0.8 }, color: '#27ae60', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'tree', name: 'Tree 4', position: { x: 7, y: 0, z: -7 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#27ae60', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'npc', name: 'Villager', position: { x: 3, y: 0, z: 0 }, rotation: { x: 0, y: -90, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#3498db', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'light-point', name: 'Lamp 1', position: { x: -2, y: 2.5, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'light-point', name: 'Lamp 2', position: { x: 2, y: 2.5, z: 3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: true, collidable: false, mass: 1, scripts: [] }
+                ]
+            },
+            'space-station': {
+                name: 'Space Station',
+                desc: 'Metallic platforms in the void',
+                icon: 'rocket_launch',
+                color: '#3498db',
+                scene: [
+                    { type: 'box', name: 'Main Deck', position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 12, y: 0.3, z: 12 }, color: '#5a6a7a', anchored: true, collidable: true, mass: 1, material: { roughness: 0.3, metalness: 0.8, opacity: 1 }, scripts: [] },
+                    { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Side Deck A', position: { x: -9, y: 2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 6, y: 0.3, z: 6 }, color: '#4a5a6a', anchored: true, collidable: true, mass: 1, material: { roughness: 0.3, metalness: 0.8, opacity: 1 }, scripts: [] },
+                    { type: 'box', name: 'Side Deck B', position: { x: 9, y: 2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 6, y: 0.3, z: 6 }, color: '#4a5a6a', anchored: true, collidable: true, mass: 1, material: { roughness: 0.3, metalness: 0.8, opacity: 1 }, scripts: [] },
+                    { type: 'box', name: 'Bridge A', position: { x: -5, y: 1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 0.2, z: 1.5 }, color: '#6a7a8a', anchored: true, collidable: true, mass: 1, material: { roughness: 0.3, metalness: 0.8, opacity: 1 }, scripts: [] },
+                    { type: 'box', name: 'Bridge B', position: { x: 5, y: 1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 0.2, z: 1.5 }, color: '#6a7a8a', anchored: true, collidable: true, mass: 1, material: { roughness: 0.3, metalness: 0.8, opacity: 1 }, scripts: [] },
+                    { type: 'cylinder', name: 'Tower A', position: { x: -9, y: 3.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.8, y: 3, z: 0.8 }, color: '#7a8a9a', anchored: true, collidable: true, mass: 1, material: { roughness: 0.2, metalness: 0.9, opacity: 1 }, scripts: [] },
+                    { type: 'cylinder', name: 'Tower B', position: { x: 9, y: 3.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.8, y: 3, z: 0.8 }, color: '#7a8a9a', anchored: true, collidable: true, mass: 1, material: { roughness: 0.2, metalness: 0.9, opacity: 1 }, scripts: [] },
+                    { type: 'sphere', name: 'Reactor Core', position: { x: 0, y: 3, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#00ccff', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'light-point', name: 'Core Light', position: { x: 0, y: 3, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#00ccff', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'light-point', name: 'Deck Light A', position: { x: -9, y: 4, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#ff6600', anchored: true, collidable: false, mass: 1, scripts: [] },
+                    { type: 'light-point', name: 'Deck Light B', position: { x: 9, y: 4, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#ff6600', anchored: true, collidable: false, mass: 1, scripts: [] }
+                ],
+                environment: { skybox: 'night' }
+            },
+            'coin-collector': {
+                name: 'Coin Collector',
+                desc: 'Open arena with coins & gems',
+                icon: 'monetization_on',
+                color: '#f1c40f',
+                scene: [
+                    { type: 'box', name: 'Arena Floor', position: { x: 0, y: -0.25, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 24, y: 0.5, z: 24 }, color: '#4a7c3f', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 1', position: { x: 3, y: 0.5, z: 3 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 2', position: { x: -3, y: 0.5, z: 3 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 3', position: { x: 3, y: 0.5, z: -3 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 4', position: { x: -3, y: 0.5, z: -3 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 5', position: { x: 7, y: 0.5, z: 0 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 6', position: { x: -7, y: 0.5, z: 0 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 7', position: { x: 0, y: 0.5, z: 7 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'coin', name: 'Coin 8', position: { x: 0, y: 0.5, z: -7 }, rotation: { x: 90, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'gem', name: 'Gem 1', position: { x: 8, y: 0.8, z: 8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#e74c3c', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'gem', name: 'Gem 2', position: { x: -8, y: 0.8, z: -8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#9b59b6', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'gem', name: 'Gem 3', position: { x: -8, y: 0.8, z: 8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#3498db', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'gem', name: 'Gem 4', position: { x: 8, y: 0.8, z: -8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#2ecc71', anchored: false, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Pedestal 1', position: { x: 8, y: 0.25, z: 8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 0.5, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Pedestal 2', position: { x: -8, y: 0.25, z: -8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 0.5, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Pedestal 3', position: { x: -8, y: 0.25, z: 8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 0.5, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] },
+                    { type: 'box', name: 'Pedestal 4', position: { x: 8, y: 0.25, z: -8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 0.5, z: 1 }, color: '#7f8c8d', anchored: true, collidable: true, mass: 1, scripts: [] }
+                ]
+            }
+        };
+
+        const modal = document.getElementById('templates-modal');
+        const grid = document.getElementById('template-grid');
+        const closeBtn = document.getElementById('templates-close');
+
+        // Populate template cards
+        Object.entries(this.templates).forEach(([key, tmpl]) => {
+            const card = document.createElement('div');
+            card.className = 'template-card';
+            card.dataset.template = key;
+            card.innerHTML = `
+                <div class="template-card-icon" style="background:${tmpl.color}">
+                    <span class="material-icons-round">${tmpl.icon}</span>
+                </div>
+                <div class="template-card-info">
+                    <div class="template-card-title">${tmpl.name}</div>
+                    <div class="template-card-desc">${tmpl.desc}</div>
+                </div>
+            `;
+            card.addEventListener('click', () => {
+                this.loadTemplate(key);
+                modal.classList.add('hidden');
+            });
+            grid.appendChild(card);
+        });
+
+        // Open/close
+        document.getElementById('btn-templates').addEventListener('click', () => {
+            modal.classList.remove('hidden');
+        });
+        closeBtn.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.add('hidden');
+        });
+    }
+
+    loadTemplate(key) {
+        const tmpl = this.templates[key];
+        if (!tmpl) return;
+
+        // Confirm if scene has objects
+        if (this.scene3d.objects.length > 0) {
+            if (!confirm('This will replace your current scene. Continue?')) return;
+        }
+
+        // Load template scene data
+        this.scene3d.deserialize(tmpl.scene);
+
+        // Apply environment settings if specified
+        if (tmpl.environment) {
+            if (tmpl.environment.skybox) {
+                this.scene3d.setSkybox(tmpl.environment.skybox);
+                document.getElementById('skybox-type').value = tmpl.environment.skybox;
+            }
+        }
+
+        // Reset undo stack
+        this.undoStack = [];
+        this.redoStack = [];
+
+        // Refresh explorer and deselect
+        this.scene3d.deselect();
+        this.refreshExplorer();
+        this.updateObjectCount();
+        this.toast(`Loaded "${tmpl.name}" template`, 'success');
     }
 
     // ===== Settings =====

@@ -22,6 +22,11 @@ class Runtime {
         this._fireRates = new Map();
         this._projectileConfig = new Map();
 
+        // Reusable temp objects to reduce allocations in hot loops
+        this._tempVec3 = new THREE.Vector3();
+        this._tempBox3 = new THREE.Box3();
+        this._closestPoint = new THREE.Vector3();
+
         // Audio context for sound effects
         this.audioCtx = null;
 
@@ -76,6 +81,11 @@ class Runtime {
                 color: obj.material ? obj.material.color.clone() : null,
                 opacity: obj.material ? obj.material.opacity : 1
             });
+        });
+
+        // Pre-cache bounding boxes for collision detection
+        this.scene3d.objects.forEach(obj => {
+            obj.userData._cachedBox = new THREE.Box3().setFromObject(obj);
         });
 
         // Save editor camera state
@@ -149,6 +159,9 @@ class Runtime {
         document.getElementById('status-mode').textContent = 'Play Mode';
         const viewcube = document.querySelector('.viewcube-wrapper');
         if (viewcube) viewcube.classList.add('hidden');
+
+        // Hide editor grid
+        this.scene3d.setGridVisible(false);
 
         // Update controls hint
         const hints = {
@@ -274,6 +287,9 @@ class Runtime {
         document.getElementById('status-mode').textContent = 'Edit Mode';
         const viewcube = document.querySelector('.viewcube-wrapper');
         if (viewcube) viewcube.classList.remove('hidden');
+
+        // Restore editor grid
+        this.scene3d.setGridVisible(true);
 
         // Clear timers
         if (this._timerIntervals) {
@@ -713,6 +729,11 @@ class Runtime {
 
             anim.elapsed += dt;
 
+            // Invalidate bounding box cache for animated objects
+            if (anim.object && anim.object.userData) {
+                anim.object.userData._cachedBox = null;
+            }
+
             switch (anim.type) {
                 case 'spin':
                     const axis = anim.axis.toLowerCase();
@@ -746,12 +767,11 @@ class Runtime {
                 case 'followPlayer': {
                     if (!this.playerController) break;
                     const playerPos = this.playerController.mesh.position;
-                    const dir = new THREE.Vector3().subVectors(playerPos, anim.object.position);
+                    const dir = this._tempVec3.subVectors(playerPos, anim.object.position);
                     dir.y = 0;
                     if (dir.length() > 1) {
                         dir.normalize().multiplyScalar(anim.speed * dt);
                         anim.object.position.add(dir);
-                        // Face player
                         anim.object.lookAt(playerPos.x, anim.object.position.y, playerPos.z);
                     }
                     break;
@@ -859,20 +879,28 @@ class Runtime {
         if (!this.playerController) return;
         const playerPos = this.playerController.mesh.position;
         const playerRadius = 0.8;
+        const box = this._tempBox3;
+        const cp = this._closestPoint;
 
         this.scene3d.objects.forEach(obj => {
             if (!obj.visible) return;
-            const box = new THREE.Box3().setFromObject(obj);
-            const closestPoint = new THREE.Vector3(
+
+            // Use cached bounding box if available, otherwise compute
+            if (obj.userData._cachedBox) {
+                box.copy(obj.userData._cachedBox);
+            } else {
+                box.setFromObject(obj);
+                if (!obj.userData._cachedBox) obj.userData._cachedBox = new THREE.Box3();
+                obj.userData._cachedBox.copy(box);
+            }
+
+            cp.set(
                 Math.max(box.min.x, Math.min(playerPos.x, box.max.x)),
                 Math.max(box.min.y, Math.min(playerPos.y, box.max.y)),
                 Math.max(box.min.z, Math.min(playerPos.z, box.max.z))
             );
 
-            const dist = playerPos.distanceTo(closestPoint);
-
-            if (dist < playerRadius) {
-                // Trigger collision scripts
+            if (playerPos.distanceTo(cp) < playerRadius) {
                 this.triggerEvent('onCollide', { object: 'player' }, obj);
             }
         });
@@ -891,8 +919,9 @@ class Runtime {
                 continue;
             }
 
-            // Move projectile
-            p.mesh.position.add(p.velocity.clone().multiplyScalar(dt));
+            // Move projectile (reuse temp vector to avoid allocation)
+            this._tempVec3.copy(p.velocity).multiplyScalar(dt);
+            p.mesh.position.add(this._tempVec3);
             if (p.light) p.light.position.copy(p.mesh.position);
 
             // Check collision with scene objects

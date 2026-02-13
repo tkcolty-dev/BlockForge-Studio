@@ -64,6 +64,9 @@
             </button>
         </div>
         <div class="toolbar-right">
+            <button class="tool-btn" id="btn-templates" title="Map Templates">
+                <span class="material-icons-round">dashboard</span>
+            </button>
             <button class="tool-btn" id="btn-save" title="Save Project">
                 <span class="material-icons-round">save</span>
             </button>
@@ -768,6 +771,25 @@
                 <button class="action-btn primary" id="tutorial-next">
                     Next <span class="material-icons-round">arrow_forward</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Templates Modal -->
+    <div id="templates-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:680px">
+            <div class="modal-header">
+                <span class="material-icons-round">dashboard</span>
+                <span>Map Templates</span>
+                <button class="modal-close" id="templates-close">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-dim);font-size:12px;margin-bottom:16px">Choose a template to start building from. This will replace your current scene.</p>
+                <div class="template-grid" id="template-grid">
+                    <!-- Populated dynamically -->
+                </div>
             </div>
         </div>
     </div>

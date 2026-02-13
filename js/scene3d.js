@@ -19,6 +19,7 @@ class Scene3D {
         this.initCamera();
         this.initLights();
         this.initGrid();
+        this.initSky();
         this.initControls();
         this.initRaycaster();
         this.initViewCube();
@@ -29,8 +30,11 @@ class Scene3D {
         this.onObjectChanged = null;
         this.onMultiSelect = null;
 
+        // Render-on-demand: dirty flag
+        this._needsRender = true;
+
         this.animate();
-        window.addEventListener('resize', () => this.onResize());
+        window.addEventListener('resize', () => { this.onResize(); this._needsRender = true; });
         this.onResize();
     }
 
@@ -72,8 +76,8 @@ class Scene3D {
         this.sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
         this.sunLight.position.set(15, 25, 15);
         this.sunLight.castShadow = true;
-        this.sunLight.shadow.mapSize.width = 2048;
-        this.sunLight.shadow.mapSize.height = 2048;
+        this.sunLight.shadow.mapSize.width = 1024;
+        this.sunLight.shadow.mapSize.height = 1024;
         this.sunLight.shadow.camera.near = 0.5;
         this.sunLight.shadow.camera.far = 100;
         this.sunLight.shadow.camera.left = -30;
@@ -100,8 +104,10 @@ class Scene3D {
         const xPoints = [new THREE.Vector3(-axisSize, 0.01, 0), new THREE.Vector3(axisSize, 0.01, 0)];
         const zPoints = [new THREE.Vector3(0, 0.01, -axisSize), new THREE.Vector3(0, 0.01, axisSize)];
 
-        this.scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(xPoints), axesMat.x));
-        this.scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(zPoints), axesMat.z));
+        this.axisLineX = new THREE.Line(new THREE.BufferGeometry().setFromPoints(xPoints), axesMat.x);
+        this.axisLineZ = new THREE.Line(new THREE.BufferGeometry().setFromPoints(zPoints), axesMat.z);
+        this.scene.add(this.axisLineX);
+        this.scene.add(this.axisLineZ);
 
         // Ground plane (for shadows and base)
         const groundGeo = new THREE.PlaneGeometry(100, 100);
@@ -111,7 +117,16 @@ class Scene3D {
         this.groundPlane.receiveShadow = true;
         this.groundPlane.userData.isGround = true;
         this.scene.add(this.groundPlane);
+    }
 
+    setGridVisible(visible) {
+        this.gridHelper.visible = visible;
+        this.axisLineX.visible = visible;
+        this.axisLineZ.visible = visible;
+        this._needsRender = true;
+    }
+
+    initSky() {
         // Sky gradient
         const skyGeo = new THREE.SphereGeometry(400, 32, 15);
         const skyMat = new THREE.ShaderMaterial({
@@ -153,14 +168,20 @@ class Scene3D {
         this.orbitControls.target.set(0, 0, 0);
         this.orbitControls.enableRotate = false;
 
+        // Mark dirty on any pointer interaction (covers orbit, pan, zoom)
+        this.canvas.addEventListener('pointerdown', () => { this._needsRender = true; });
+        this.canvas.addEventListener('wheel', () => { this._needsRender = true; });
+
         this.transformControls = new THREE.TransformControls(this.camera, this.canvas);
         this.scene.add(this.transformControls);
 
         this.transformControls.addEventListener('dragging-changed', (e) => {
             this.orbitControls.enabled = !e.value;
+            this._needsRender = true;
         });
 
         this.transformControls.addEventListener('objectChange', () => {
+            this._needsRender = true;
             if (this.onObjectChanged && this.selectedObject) {
                 this.onObjectChanged(this.selectedObject);
             }
@@ -285,6 +306,7 @@ class Scene3D {
         offset.setFromSpherical(sph);
         this.camera.position.copy(this.orbitControls.target).add(offset);
         this.camera.lookAt(this.orbitControls.target);
+        this._needsRender = true;
     }
 
     _snapToView(viewName) {
@@ -311,6 +333,7 @@ class Scene3D {
                 break;
         }
         this.camera.lookAt(t);
+        this._needsRender = true;
     }
 
     _updateViewCube() {
@@ -338,20 +361,20 @@ class Scene3D {
                 mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
                 break;
             case 'sphere':
-                mesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 16), material);
+                mesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 12), material);
                 break;
             case 'cylinder':
-                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 32), material);
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 16), material);
                 break;
             case 'cone':
-                mesh = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 32), material);
+                mesh = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 16), material);
                 break;
             case 'plane':
                 mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
                 mesh.rotation.x = -Math.PI / 2;
                 break;
             case 'torus':
-                mesh = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.15, 16, 32), material);
+                mesh = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.15, 12, 24), material);
                 break;
             case 'wedge': {
                 const shape = new THREE.Shape();
@@ -554,7 +577,7 @@ class Scene3D {
                     transparent: true,
                     opacity: 0.6
                 });
-                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.1, 32), spawnMat);
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.1, 16), spawnMat);
                 // Add arrow indicator
                 const arrow = new THREE.Mesh(
                     new THREE.ConeGeometry(0.15, 0.5, 12),
@@ -585,7 +608,7 @@ class Scene3D {
                     emissive: 0xf1c40f,
                     emissiveIntensity: 0.1
                 });
-                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 32), coinMat);
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16), coinMat);
                 mesh.rotation.x = Math.PI / 2;
                 break;
             }
@@ -675,12 +698,14 @@ class Scene3D {
 
         this.scene.add(mesh);
         this.objects.push(mesh);
+        this._needsRender = true;
 
         return mesh;
     }
 
     removeObject(obj) {
         if (!obj) return;
+        this._needsRender = true;
         const idx = this.objects.indexOf(obj);
         if (idx !== -1) {
             this.objects.splice(idx, 1);
@@ -758,6 +783,7 @@ class Scene3D {
 
         this.selectedObject = obj;
         this.transformControls.attach(obj);
+        this._needsRender = true;
 
         // Highlight
         this.addSelectionOutline(obj);
@@ -772,6 +798,7 @@ class Scene3D {
             this.removeSelectionOutline(this.selectedObject);
             this.selectedObject = null;
             this.transformControls.detach();
+            this._needsRender = true;
 
             if (this.onObjectDeselected) {
                 this.onObjectDeselected();
@@ -1041,6 +1068,7 @@ class Scene3D {
 
             this._dragObject.position.x = newX;
             this._dragObject.position.z = newZ;
+            this._needsRender = true;
 
             if (this.onObjectChanged) {
                 this.onObjectChanged(this._dragObject);
@@ -1094,6 +1122,7 @@ class Scene3D {
 
     setSkyColor(color) {
         this.sky.material.uniforms.topColor.value.set(color);
+        this._needsRender = true;
     }
 
     setSkybox(type) {
@@ -1117,6 +1146,7 @@ class Scene3D {
         // Hide or show the default sky sphere
         if (type === 'default') {
             this.sky.visible = true;
+            this._needsRender = true;
             return;
         }
 
@@ -1209,10 +1239,13 @@ class Scene3D {
             this._skyboxStars = new THREE.Points(starGeometry, starMaterial);
             this.scene.add(this._skyboxStars);
         }
+
+        this._needsRender = true;
     }
 
     setAmbientIntensity(value) {
         this.ambientLight.intensity = value;
+        this._needsRender = true;
     }
 
     setFog(density) {
@@ -1221,6 +1254,7 @@ class Scene3D {
         } else {
             this.scene.fog = null;
         }
+        this._needsRender = true;
     }
 
     setShadows(enabled) {
@@ -1234,6 +1268,7 @@ class Scene3D {
                 }
             });
         });
+        this._needsRender = true;
     }
 
     // ===== Rendering =====
@@ -1254,11 +1289,18 @@ class Scene3D {
         requestAnimationFrame(() => this.animate());
 
         if (!this.isPlaying) {
-            this.orbitControls.update();
+            // OrbitControls.update() returns true when damping causes movement
+            if (this.orbitControls.update()) {
+                this._needsRender = true;
+            }
             this._updateViewCube();
         }
 
-        this.renderer.render(this.scene, this.camera);
+        // Render-on-demand: skip render when nothing changed in editor mode
+        if (this.isPlaying || this._needsRender) {
+            this.renderer.render(this.scene, this.camera);
+            this._needsRender = false;
+        }
 
         // Update FPS counter
         if (this._fpsCallback) {
@@ -1312,6 +1354,7 @@ class Scene3D {
     deserialize(data) {
         // Clear existing objects
         [...this.objects].forEach(obj => this.removeObject(obj));
+        this._needsRender = true;
 
         data.forEach(item => {
             const obj = this.addObject(item.type, {
