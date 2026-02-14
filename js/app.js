@@ -904,6 +904,21 @@ class App {
         }
     }
 
+    _nudgeSelected(key, shift) {
+        const obj = this.scene3d.selectedObject;
+        if (!obj) return;
+        const step = shift ? (this.scene3d.snapEnabled ? this.scene3d.snapSize * 4 : 4)
+                          : (this.scene3d.snapEnabled ? this.scene3d.snapSize : 1);
+        switch (key) {
+            case 'ArrowUp':    obj.position.z -= step; break;
+            case 'ArrowDown':  obj.position.z += step; break;
+            case 'ArrowLeft':  obj.position.x -= step; break;
+            case 'ArrowRight': obj.position.x += step; break;
+        }
+        this.scene3d._needsRender = true;
+        this.updateProperties(obj);
+    }
+
     // ===== Keyboard Shortcuts =====
 
     initKeyboard() {
@@ -970,6 +985,13 @@ class App {
                     e.preventDefault();
                     if (this.runtime.isRunning) this.stopPlay();
                     else this.startPlay();
+                    break;
+                case 'ArrowUp':
+                case 'ArrowDown':
+                case 'ArrowLeft':
+                case 'ArrowRight':
+                    e.preventDefault();
+                    this._nudgeSelected(e.key, e.shiftKey);
                     break;
                 case 'Escape':
                     if (this.runtime.isRunning) {
