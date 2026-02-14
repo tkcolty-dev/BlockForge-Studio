@@ -1355,32 +1355,85 @@ class Scene3D {
 
     setGraphicsQuality(level) {
         this._graphicsQuality = level;
+        const dpr = window.devicePixelRatio || 1;
         const settings = {
-            ultra:  { shadows: true, shadowType: THREE.PCFSoftShadowMap, shadowSize: 4096, pixelRatio: Math.min(window.devicePixelRatio, 2), particleScale: 1.5, farPlane: 1000 },
-            high:   { shadows: true, shadowType: THREE.PCFSoftShadowMap, shadowSize: 2048, pixelRatio: Math.min(window.devicePixelRatio, 2), particleScale: 1.0, farPlane: 1000 },
-            medium: { shadows: true, shadowType: THREE.PCFShadowMap,     shadowSize: 1024, pixelRatio: 1, particleScale: 0.5, farPlane: 500 },
-            low:    { shadows: false, shadowType: THREE.PCFShadowMap,    shadowSize: 512,  pixelRatio: 1, particleScale: 0.25, farPlane: 300 }
+            ultra: {
+                shadows: true, shadowType: THREE.PCFSoftShadowMap, shadowSize: 4096,
+                shadowRadius: 4, shadowBias: -0.002,
+                pixelRatio: Math.min(dpr, 2), particleScale: 1.5, farPlane: 1000,
+                toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1,
+                ambientIntensity: 0.6, hemiIntensity: 0.5, sunIntensity: 1.0,
+                groundShadowOpacity: 0.25, gridVisible: true
+            },
+            high: {
+                shadows: true, shadowType: THREE.PCFSoftShadowMap, shadowSize: 2048,
+                shadowRadius: 2, shadowBias: -0.003,
+                pixelRatio: Math.min(dpr, 2), particleScale: 1.0, farPlane: 1000,
+                toneMapping: THREE.LinearToneMapping, toneMappingExposure: 1.0,
+                ambientIntensity: 0.5, hemiIntensity: 0.4, sunIntensity: 0.8,
+                groundShadowOpacity: 0.15, gridVisible: true
+            },
+            medium: {
+                shadows: true, shadowType: THREE.PCFShadowMap, shadowSize: 1024,
+                shadowRadius: 1, shadowBias: -0.004,
+                pixelRatio: Math.min(dpr, 1.5), particleScale: 0.5, farPlane: 500,
+                toneMapping: THREE.LinearToneMapping, toneMappingExposure: 1.0,
+                ambientIntensity: 0.5, hemiIntensity: 0.35, sunIntensity: 0.7,
+                groundShadowOpacity: 0.1, gridVisible: true
+            },
+            low: {
+                shadows: false, shadowType: THREE.BasicShadowMap, shadowSize: 512,
+                shadowRadius: 0, shadowBias: -0.005,
+                pixelRatio: 1, particleScale: 0.25, farPlane: 300,
+                toneMapping: THREE.LinearToneMapping, toneMappingExposure: 1.0,
+                ambientIntensity: 0.6, hemiIntensity: 0.3, sunIntensity: 0.6,
+                groundShadowOpacity: 0, gridVisible: true
+            }
         };
         const s = settings[level] || settings.high;
 
         // Pixel ratio
         this.renderer.setPixelRatio(s.pixelRatio);
 
+        // Tone mapping
+        this.renderer.toneMapping = s.toneMapping;
+        this.renderer.toneMappingExposure = s.toneMappingExposure;
+
         // Shadows
         this.renderer.shadowMap.enabled = s.shadows;
         this.renderer.shadowMap.type = s.shadowType;
+        this.renderer.shadowMap.needsUpdate = true;
         this.sunLight.castShadow = s.shadows;
+        this.sunLight.intensity = s.sunIntensity;
         this.sunLight.shadow.mapSize.width = s.shadowSize;
         this.sunLight.shadow.mapSize.height = s.shadowSize;
+        this.sunLight.shadow.radius = s.shadowRadius;
+        this.sunLight.shadow.bias = s.shadowBias;
         if (this.sunLight.shadow.map) {
             this.sunLight.shadow.map.dispose();
             this.sunLight.shadow.map = null;
         }
+
+        // Lighting
+        this.ambientLight.intensity = s.ambientIntensity;
+        this.hemisphereLight.intensity = s.hemiIntensity;
+
+        // Ground shadow plane
+        if (this.groundPlane && this.groundPlane.material) {
+            this.groundPlane.material.opacity = s.groundShadowOpacity;
+            this.groundPlane.receiveShadow = s.shadows;
+        }
+
+        // Update all objects
         this.objects.forEach(obj => {
             obj.traverse(child => {
                 if (child.isMesh) {
                     child.castShadow = s.shadows;
                     child.receiveShadow = s.shadows;
+                    // Force material update for tone mapping changes
+                    if (child.material) {
+                        child.material.needsUpdate = true;
+                    }
                 }
             });
         });
@@ -1389,11 +1442,16 @@ class Scene3D {
         this.camera.far = s.farPlane;
         this.camera.updateProjectionMatrix();
 
+        // Grid visibility
+        if (this.gridHelper) this.gridHelper.visible = s.gridVisible;
+
         // Re-create weather with new particle scale
         if (this._weatherType && this._weatherType !== 'none') {
             this.setWeather(this._weatherType);
         }
 
+        // Force resize to apply pixel ratio
+        this.onResize();
         this._needsRender = true;
     }
 

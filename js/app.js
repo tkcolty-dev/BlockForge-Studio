@@ -3574,11 +3574,20 @@ class App {
             const res = await fetch('/api/me');
             if (res.ok) {
                 this._cachedUser = await res.json();
+                this._offlineMode = false;
                 return true;
             }
         } catch (e) { /* not logged in */ }
-        this._cachedUser = null;
-        return false;
+        // Fallback: offline/local mode — skip auth, use guest user
+        const savedGuest = localStorage.getItem('blockforge_guest_user');
+        if (savedGuest) {
+            this._cachedUser = JSON.parse(savedGuest);
+        } else {
+            this._cachedUser = { displayName: 'Guest', avatar: 'default', id: 'local-guest' };
+            localStorage.setItem('blockforge_guest_user', JSON.stringify(this._cachedUser));
+        }
+        this._offlineMode = true;
+        return true;
     }
 
     initAuth() {
@@ -3905,6 +3914,8 @@ class App {
     async handleSignOut() {
         try { await fetch('/api/logout', { method: 'POST' }); } catch (e) { /* ok */ }
         this._cachedUser = null;
+        localStorage.removeItem('blockforge_guest_user');
+        this._offlineMode = false;
         this.showAuthScreen();
     }
 
