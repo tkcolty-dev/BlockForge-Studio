@@ -909,12 +909,33 @@ class App {
         if (!obj) return;
         const step = shift ? (this.scene3d.snapEnabled ? this.scene3d.snapSize * 4 : 4)
                           : (this.scene3d.snapEnabled ? this.scene3d.snapSize : 1);
+
+        // Get camera forward/right projected onto the XZ plane
+        const cam = this.scene3d.camera;
+        const forward = new THREE.Vector3();
+        cam.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+        const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+        let dx = 0, dz = 0;
         switch (key) {
-            case 'ArrowUp':    obj.position.z -= step; break;
-            case 'ArrowDown':  obj.position.z += step; break;
-            case 'ArrowLeft':  obj.position.x -= step; break;
-            case 'ArrowRight': obj.position.x += step; break;
+            case 'ArrowUp':    dx += forward.x; dz += forward.z; break;
+            case 'ArrowDown':  dx -= forward.x; dz -= forward.z; break;
+            case 'ArrowLeft':  dx -= right.x;   dz -= right.z;   break;
+            case 'ArrowRight': dx += right.x;   dz += right.z;   break;
         }
+
+        obj.position.x += dx * step;
+        obj.position.z += dz * step;
+
+        // Snap to grid if enabled
+        if (this.scene3d.snapEnabled) {
+            const ss = this.scene3d.snapSize;
+            obj.position.x = Math.round(obj.position.x / ss) * ss;
+            obj.position.z = Math.round(obj.position.z / ss) * ss;
+        }
+
         this.scene3d._needsRender = true;
         this.updateProperties(obj);
     }
