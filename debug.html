@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head><title>Debug</title></head>
+<body style="background:#1a1a2e;color:#0f0;font-family:monospace;padding:20px;white-space:pre-wrap">
+<div id="log">Loading scripts...\n</div>
+<script>
+const log = document.getElementById('log');
+function l(msg) { log.textContent += msg + '\n'; }
+window.onerror = function(msg, url, line, col, err) {
+    l('ERROR: ' + msg);
+    l('  File: ' + url + ' Line: ' + line);
+    if (err && err.stack) l('  Stack: ' + err.stack);
+};
+</script>
+<script>
+    l('Step 1: Loading Three.js...');
+</script>
+<script src="js/three.min.js"></script>
+<script>
+    if (typeof THREE !== 'undefined') l('Step 1 OK: THREE loaded, revision=' + THREE.REVISION);
+    else l('Step 1 FAIL: THREE is undefined');
+</script>
+<script>l('Step 2: Loading OrbitControls...');</script>
+<script src="js/OrbitControls.js"></script>
+<script>
+    if (THREE.OrbitControls) l('Step 2 OK: OrbitControls loaded');
+    else l('Step 2 FAIL: OrbitControls missing');
+</script>
+<script>l('Step 3: Loading TransformControls...');</script>
+<script src="js/TransformControls.js"></script>
+<script>
+    if (THREE.TransformControls) l('Step 3 OK: TransformControls loaded');
+    else l('Step 3 FAIL: TransformControls missing');
+</script>
+<script>l('Step 4: Loading scene3d.js...');</script>
+<script src="js/scene3d.js"></script>
+<script>
+    if (typeof Scene3D !== 'undefined') l('Step 4 OK: Scene3D loaded');
+    else l('Step 4 FAIL: Scene3D missing');
+</script>
+<script>l('Step 5: Loading blockcode.js...');</script>
+<script src="js/blockcode.js"></script>
+<script>
+    if (typeof BlockCode !== 'undefined') l('Step 5 OK: BlockCode loaded');
+    else l('Step 5 FAIL: BlockCode missing');
+</script>
+<script>l('Step 6: Loading runtime.js...');</script>
+<script src="js/runtime.js"></script>
+<script>
+    if (typeof Runtime !== 'undefined') l('Step 6 OK: Runtime loaded');
+    else l('Step 6 FAIL: Runtime missing');
+</script>
+<script>l('Step 7: Loading app.js...');</script>
+<script src="js/app.js"></script>
+<script>
+    if (typeof App !== 'undefined') l('Step 7 OK: App loaded');
+    else l('Step 7 FAIL: App missing');
+</script>
+<script>
+    l('\nStep 8: Creating App...');
+    try {
+        var canvas = document.createElement('canvas');
+        canvas.id = 'viewport';
+        canvas.style.width = '100px';
+        canvas.style.height = '100px';
+        l('  Canvas created');
+        var renderer = new THREE.WebGLRenderer({ canvas: canvas });
+        l('  WebGL renderer OK');
+        l('\nAll checks passed!');
+    } catch(e) {
+        l('Step 8 FAIL: ' + e.message);
+        l('  Stack: ' + e.stack);
+    }
+</script>
+</body>
+</html>
