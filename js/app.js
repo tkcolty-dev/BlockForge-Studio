@@ -2388,7 +2388,8 @@ class App {
             sensitivity: 5,
             mouseOrbit: false,
             keyBindings: { ...defaultBindings },
-            playerColors: { body: '#4c97ff', head: '#f5cba7', detail: '#e0b090' }
+            playerColors: { body: '#4c97ff', head: '#f5cba7', detail: '#e0b090' },
+            graphicsQuality: 'high'
         };
 
         this.customObjects = [];
@@ -2453,6 +2454,29 @@ class App {
         mouseOrbitCheckbox.addEventListener('change', (e) => {
             this.gameSettings.mouseOrbit = e.target.checked;
             this.scene3d.orbitControls.enableRotate = e.target.checked;
+        });
+
+        // Graphics quality
+        const qualityDescriptions = {
+            ultra: 'Maximum quality — best visuals, most demanding',
+            high: 'Balanced quality and performance',
+            medium: 'Reduced quality for smoother gameplay',
+            low: 'Minimum quality — best performance'
+        };
+        const graphicsSelect = document.getElementById('setting-graphics-quality');
+        const graphicsDesc = document.getElementById('graphics-quality-desc');
+        const savedQuality = localStorage.getItem('blockforge_graphics_quality') || 'high';
+        graphicsSelect.value = savedQuality;
+        graphicsDesc.textContent = qualityDescriptions[savedQuality];
+        this.gameSettings.graphicsQuality = savedQuality;
+        this.scene3d.setGraphicsQuality(savedQuality);
+        graphicsSelect.addEventListener('change', (e) => {
+            const level = e.target.value;
+            this.gameSettings.graphicsQuality = level;
+            this.scene3d.setGraphicsQuality(level);
+            graphicsDesc.textContent = qualityDescriptions[level];
+            localStorage.setItem('blockforge_graphics_quality', level);
+            this.toast('Graphics set to ' + level.charAt(0).toUpperCase() + level.slice(1), 'success');
         });
 
         // Character appearance color pickers

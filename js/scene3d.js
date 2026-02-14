@@ -44,6 +44,7 @@ class Scene3D {
             antialias: true,
             alpha: false
         });
+        this._graphicsQuality = 'high';
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1350,6 +1351,57 @@ class Scene3D {
         this._needsRender = true;
     }
 
+    // ===== Graphics Quality =====
+
+    setGraphicsQuality(level) {
+        this._graphicsQuality = level;
+        const settings = {
+            ultra:  { shadows: true, shadowType: THREE.PCFSoftShadowMap, shadowSize: 4096, pixelRatio: Math.min(window.devicePixelRatio, 2), particleScale: 1.5, farPlane: 1000 },
+            high:   { shadows: true, shadowType: THREE.PCFSoftShadowMap, shadowSize: 2048, pixelRatio: Math.min(window.devicePixelRatio, 2), particleScale: 1.0, farPlane: 1000 },
+            medium: { shadows: true, shadowType: THREE.PCFShadowMap,     shadowSize: 1024, pixelRatio: 1, particleScale: 0.5, farPlane: 500 },
+            low:    { shadows: false, shadowType: THREE.PCFShadowMap,    shadowSize: 512,  pixelRatio: 1, particleScale: 0.25, farPlane: 300 }
+        };
+        const s = settings[level] || settings.high;
+
+        // Pixel ratio
+        this.renderer.setPixelRatio(s.pixelRatio);
+
+        // Shadows
+        this.renderer.shadowMap.enabled = s.shadows;
+        this.renderer.shadowMap.type = s.shadowType;
+        this.sunLight.castShadow = s.shadows;
+        this.sunLight.shadow.mapSize.width = s.shadowSize;
+        this.sunLight.shadow.mapSize.height = s.shadowSize;
+        if (this.sunLight.shadow.map) {
+            this.sunLight.shadow.map.dispose();
+            this.sunLight.shadow.map = null;
+        }
+        this.objects.forEach(obj => {
+            obj.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = s.shadows;
+                    child.receiveShadow = s.shadows;
+                }
+            });
+        });
+
+        // Draw distance
+        this.camera.far = s.farPlane;
+        this.camera.updateProjectionMatrix();
+
+        // Re-create weather with new particle scale
+        if (this._weatherType && this._weatherType !== 'none') {
+            this.setWeather(this._weatherType);
+        }
+
+        this._needsRender = true;
+    }
+
+    getParticleScale() {
+        const scales = { ultra: 1.5, high: 1.0, medium: 0.5, low: 0.25 };
+        return scales[this._graphicsQuality] || 1.0;
+    }
+
     // ===== Rendering =====
 
     onResize() {
@@ -1422,9 +1474,10 @@ class Scene3D {
         }
 
         let count, geometry, material, positions, volX, volY, volZ;
+        const pScale = this.getParticleScale();
 
         if (type === 'rain') {
-            count = 3000;
+            count = Math.round(3000 * pScale);
             volX = 60; volY = 40; volZ = 60;
             geometry = new THREE.BufferGeometry();
             positions = new Float32Array(count * 3);
@@ -1442,7 +1495,7 @@ class Scene3D {
                 depthWrite: false
             });
         } else if (type === 'snow') {
-            count = 2000;
+            count = Math.round(2000 * pScale);
             volX = 60; volY = 40; volZ = 60;
             geometry = new THREE.BufferGeometry();
             positions = new Float32Array(count * 3);
@@ -1460,7 +1513,7 @@ class Scene3D {
                 depthWrite: false
             });
         } else if (type === 'fireflies') {
-            count = 200;
+            count = Math.round(200 * pScale);
             volX = 30; volY = 15; volZ = 30;
             geometry = new THREE.BufferGeometry();
             positions = new Float32Array(count * 3);
