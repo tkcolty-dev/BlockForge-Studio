@@ -568,21 +568,61 @@ class BlockCode {
         const overDeleteZone = this._isOverDeleteZone(e);
         this._ghost.classList.toggle('ghost-deleting', overDeleteZone);
 
-        // Snap detection - use ghost block's top edge position
-        if (!overDeleteZone) {
-            const ghostTopY = e.clientY - (this._ghostOffsetY || 0);
-            this._currentSnapTarget = this._findSnapTarget(e, ghostTopY);
+        // Check if dragging a hat block (can't go in c-blocks)
+        let isHat = false;
+        if (this._dragBlockDef) {
+            isHat = this._dragBlockDef.type === 'hat';
+        } else if (this._draggedBlocks?.length > 0) {
+            isHat = this.blocks[this._draggedBlocks[0].blockId]?.type === 'hat';
+        } else if (this._dragStackData?.blocks?.length > 0) {
+            isHat = this.blocks[this._dragStackData.blocks[0].blockId]?.type === 'hat';
+        }
 
-            // Visually snap ghost to target position when snapping
-            if (this._currentSnapTarget) {
-                this._ghost.style.top = this._currentSnapTarget.y + 'px';
-                const stackRect = this._currentSnapTarget.stackEl.getBoundingClientRect();
-                this._ghost.style.left = stackRect.left + 'px';
-            }
-        } else {
+        // Check c-block body hover (higher priority than snap)
+        const cBlockTarget = !overDeleteZone && !isHat ? this._findCBlockBodyAt(e) : null;
+
+        if (cBlockTarget) {
+            // Over a c-block body — highlight it and suppress snap
             this._currentSnapTarget = null;
+            this._currentCBlockTarget = cBlockTarget;
+            this._highlightCBlockBody(cBlockTarget, true);
+        } else {
+            this._currentCBlockTarget = null;
+            this._highlightCBlockBody(null, false);
+
+            // Snap detection - use ghost block's top edge position
+            if (!overDeleteZone) {
+                const ghostTopY = e.clientY - (this._ghostOffsetY || 0);
+                this._currentSnapTarget = this._findSnapTarget(e, ghostTopY);
+
+                // Visually snap ghost to target position when snapping
+                if (this._currentSnapTarget) {
+                    this._ghost.style.top = this._currentSnapTarget.y + 'px';
+                    const stackRect = this._currentSnapTarget.stackEl.getBoundingClientRect();
+                    this._ghost.style.left = stackRect.left + 'px';
+                }
+            } else {
+                this._currentSnapTarget = null;
+            }
         }
         this._updateSnapIndicator();
+    }
+
+    _highlightCBlockBody(target, active) {
+        // Remove all existing highlights
+        this.workspace.querySelectorAll('.c-block-body.c-block-active').forEach(el => {
+            el.classList.remove('c-block-active');
+        });
+        if (active && target) {
+            const bodies = this.workspace.querySelectorAll('.c-block-body');
+            for (const body of bodies) {
+                if (parseInt(body.dataset.stackIdx) === target.stackIdx &&
+                    parseInt(body.dataset.blockIdx) === target.blockIdx) {
+                    body.classList.add('c-block-active');
+                    break;
+                }
+            }
+        }
     }
 
     _isOverDeleteZone(e) {
@@ -696,6 +736,8 @@ class BlockCode {
 
         // Hide indicator but preserve snap target for drop logic
         if (this._snapIndicator) this._snapIndicator.style.display = 'none';
+        // Clear c-block highlight
+        this._highlightCBlockBody(null, false);
 
         // Restore dimmed source
         if (this._dragSourceEl) {
@@ -707,6 +749,7 @@ class BlockCode {
 
         if (!this.targetObject) {
             this._currentSnapTarget = null;
+            this._currentCBlockTarget = null;
             return;
         }
 
@@ -721,6 +764,7 @@ class BlockCode {
         }
 
         this._currentSnapTarget = null;
+        this._currentCBlockTarget = null;
         this._dragSource = null;
         this._dragBlockId = null;
         this._dragBlockDef = null;
@@ -737,7 +781,7 @@ class BlockCode {
         };
 
         // 1. Check if dropping into a c-block body (highest priority)
-        const cBlockTarget = this._findCBlockBodyAt(e);
+        const cBlockTarget = this._currentCBlockTarget || this._findCBlockBodyAt(e);
         if (cBlockTarget && blockDef.type !== 'hat') {
             const parent = this.workspaceScripts[cBlockTarget.stackIdx]?.blocks[cBlockTarget.blockIdx];
             if (parent) {
@@ -873,9 +917,12 @@ class BlockCode {
         }
         // Hide indicator but preserve snap target for drop logic
         if (this._snapIndicator) this._snapIndicator.style.display = 'none';
+        // Clear c-block highlight
+        this._highlightCBlockBody(null, false);
 
         const blocks = this._draggedBlocks;
         const snapTarget = this._currentSnapTarget;
+        const cBlockTarget = this._currentCBlockTarget || this._findCBlockBodyAt(e);
         this._draggedBlocks = null;
 
         if (!blocks || blocks.length === 0) return;
@@ -887,15 +934,16 @@ class BlockCode {
             return;
         }
 
-        // Check c-block body target (for single blocks)
-        if (blocks.length === 1) {
-            const cBlockTarget = this._findCBlockBodyAt(e);
-            const blockDef = this.blocks[blocks[0].blockId];
-            if (cBlockTarget && blockDef?.type !== 'hat') {
+        // Check c-block body target
+        if (cBlockTarget) {
+            const firstDef = this.blocks[blocks[0].blockId];
+            if (firstDef?.type !== 'hat') {
                 const parent = this.workspaceScripts[cBlockTarget.stackIdx]?.blocks[cBlockTarget.blockIdx];
                 if (parent) {
                     if (!parent.children) parent.children = [];
-                    parent.children.push(blocks[0]);
+                    parent.children.push(...blocks);
+                    this._currentSnapTarget = null;
+                    this._currentCBlockTarget = null;
                     this.renderWorkspace();
                     this.saveScriptsToObject();
                     return;
@@ -914,6 +962,7 @@ class BlockCode {
         }
 
         this._currentSnapTarget = null;
+        this._currentCBlockTarget = null;
 
         // Create new stack at drop position
         const wsRect = this.workspace.getBoundingClientRect();
@@ -1052,11 +1101,29 @@ class BlockCode {
                 stackEl.style.left = stackData.x + 'px';
                 stackEl.style.top = stackData.y + 'px';
 
-                if (this._isOverDeleteZone(ev)) {
+                // Check if first block is a hat
+                let isHat = false;
+                if (stackData.blocks?.length > 0) {
+                    isHat = this.blocks[stackData.blocks[0].blockId]?.type === 'hat';
+                }
+
+                const overDelete = this._isOverDeleteZone(ev);
+                const cBlockTarget = !overDelete && !isHat ? this._findCBlockBodyAt(ev) : null;
+
+                if (overDelete) {
                     stackEl.style.opacity = '0.4';
                     this._currentSnapTarget = null;
+                    this._currentCBlockTarget = null;
+                    this._highlightCBlockBody(null, false);
+                } else if (cBlockTarget) {
+                    stackEl.style.opacity = '';
+                    this._currentSnapTarget = null;
+                    this._currentCBlockTarget = cBlockTarget;
+                    this._highlightCBlockBody(cBlockTarget, true);
                 } else {
                     stackEl.style.opacity = '';
+                    this._currentCBlockTarget = null;
+                    this._highlightCBlockBody(null, false);
                     // Use stack's top edge for snap detection
                     const stackTop = stackEl.getBoundingClientRect().top;
                     this._currentSnapTarget = this._findSnapTarget(ev, stackTop);
@@ -1074,6 +1141,7 @@ class BlockCode {
                 document.removeEventListener('pointerup', onUp);
                 // Hide indicator but preserve snap target for drop logic
                 if (this._snapIndicator) this._snapIndicator.style.display = 'none';
+                this._highlightCBlockBody(null, false);
 
                 // Delete stack
                 if (this._isOverDeleteZone(ev)) {
@@ -1084,6 +1152,28 @@ class BlockCode {
                         this.saveScriptsToObject();
                     }
                     return;
+                }
+
+                // Drop into c-block body
+                const cTarget = this._currentCBlockTarget;
+                if (cTarget) {
+                    const firstDef = this.blocks[stackData.blocks[0]?.blockId];
+                    if (firstDef?.type !== 'hat') {
+                        const parent = this.workspaceScripts[cTarget.stackIdx]?.blocks[cTarget.blockIdx];
+                        if (parent) {
+                            if (!parent.children) parent.children = [];
+                            parent.children.push(...stackData.blocks);
+                            const draggedIdx = this.workspaceScripts.indexOf(stackData);
+                            if (draggedIdx !== -1) {
+                                this.workspaceScripts.splice(draggedIdx, 1);
+                            }
+                            this._currentSnapTarget = null;
+                            this._currentCBlockTarget = null;
+                            this.renderWorkspace();
+                            this.saveScriptsToObject();
+                            return;
+                        }
+                    }
                 }
 
                 // Merge into another stack at snap point
@@ -1100,6 +1190,7 @@ class BlockCode {
                 }
 
                 this._currentSnapTarget = null;
+                this._currentCBlockTarget = null;
             };
 
             document.addEventListener('pointermove', onMove);

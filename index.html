@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BlockForge Studio</title>
+    <title>Cobalt Studio</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
@@ -12,14 +12,64 @@
     <!-- Splash Screen (first load only) -->
     <div id="splash-screen" class="hidden">
         <div class="splash-content">
-            <span class="splash-logo-icon">&#9670;</span>
-            <span class="splash-logo-text">BlockForge Studio</span>
+            <span class="splash-logo-icon"><svg viewBox="0 0 64 64" fill="none"><path d="M33 30L21 9L32 2L58 17L58 30Z" fill="#93c5fd"/><path d="M33 30L58 17L58 30Z" fill="#4338ca"/><path d="M34 34L58 34L58 47L32 62Z" fill="#4338ca"/><path d="M34 34L20 56L32 62Z" fill="#6366f1"/><path d="M30 32L17 11L6 17Z" fill="#93c5fd"/><path d="M30 32L6 17L6 47L17 55Z" fill="#6366f1"/></svg></span>
+            <span class="splash-logo-text">Cobalt Studio</span>
             <span class="splash-tagline">Build 3D games with blocks</span>
             <span class="splash-version" id="splash-version"></span>
             <button class="splash-start-btn" id="splash-start">
                 <span class="material-icons-round">arrow_forward</span>
                 Get Started
             </button>
+        </div>
+    </div>
+
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="hidden">
+        <div class="auth-container">
+            <div class="auth-brand">
+                <span class="auth-logo-icon"><svg viewBox="0 0 64 64" fill="none"><path d="M33 30L21 9L32 2L58 17L58 30Z" fill="#93c5fd"/><path d="M33 30L58 17L58 30Z" fill="#4338ca"/><path d="M34 34L58 34L58 47L32 62Z" fill="#4338ca"/><path d="M34 34L20 56L32 62Z" fill="#6366f1"/><path d="M30 32L17 11L6 17Z" fill="#93c5fd"/><path d="M30 32L6 17L6 47L17 55Z" fill="#6366f1"/></svg></span>
+                <span class="auth-logo-text">Cobalt Studio</span>
+            </div>
+            <div class="auth-card">
+                <div class="auth-tabs">
+                    <button class="auth-tab-btn active" data-auth-tab="signup">Sign Up</button>
+                    <button class="auth-tab-btn" data-auth-tab="login">Log In</button>
+                </div>
+                <form class="auth-form active" id="auth-signup-form" autocomplete="off">
+                    <div class="auth-field">
+                        <label for="auth-signup-username">Username</label>
+                        <input type="text" id="auth-signup-username" placeholder="Choose a username" maxlength="20" spellcheck="false" autocomplete="off">
+                        <div class="auth-field-hint" id="auth-username-hint"></div>
+                    </div>
+                    <div class="auth-field">
+                        <label for="auth-signup-password">Password</label>
+                        <input type="password" id="auth-signup-password" placeholder="Choose a password (4+ characters)" autocomplete="new-password">
+                    </div>
+                    <div class="auth-field">
+                        <label for="auth-signup-confirm">Confirm Password</label>
+                        <input type="password" id="auth-signup-confirm" placeholder="Confirm your password" autocomplete="new-password">
+                    </div>
+                    <div class="auth-field auth-captcha-field">
+                        <label id="auth-captcha-label">Loading...</label>
+                        <input type="text" id="auth-captcha-answer" placeholder="Type your answer" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="auth-error" id="auth-signup-error"></div>
+                    <button type="submit" class="auth-submit-btn" id="auth-signup-btn" disabled>Create Account</button>
+                </form>
+                <form class="auth-form" id="auth-login-form" autocomplete="off">
+                    <div class="auth-field">
+                        <label for="auth-login-username">Username</label>
+                        <input type="text" id="auth-login-username" placeholder="Your username" spellcheck="false" autocomplete="off">
+                    </div>
+                    <div class="auth-field">
+                        <label for="auth-login-password">Password</label>
+                        <input type="password" id="auth-login-password" placeholder="Your password" autocomplete="current-password">
+                    </div>
+                    <div class="auth-error" id="auth-login-error"></div>
+                    <button type="submit" class="auth-submit-btn">Log In</button>
+                </form>
+                <div class="auth-footer">Free to use — no email required</div>
+            </div>
         </div>
     </div>
 
@@ -33,11 +83,16 @@
 
     <!-- Title Screen / Project Browser -->
     <div id="title-screen" class="hidden">
-        <div class="title-header">
+        <div class="title-header" style="justify-content:space-between">
             <div class="title-brand">
-                <span class="title-logo-icon">&#9670;</span>
-                <span class="title-logo-text">BlockForge Studio</span>
+                <span class="title-logo-icon"><svg viewBox="0 0 64 64" fill="none"><path d="M33 30L21 9L32 2L58 17L58 30Z" fill="#93c5fd"/><path d="M33 30L58 17L58 30Z" fill="#4338ca"/><path d="M34 34L58 34L58 47L32 62Z" fill="#4338ca"/><path d="M34 34L20 56L32 62Z" fill="#6366f1"/><path d="M30 32L17 11L6 17Z" fill="#93c5fd"/><path d="M30 32L6 17L6 47L17 55Z" fill="#6366f1"/></svg></span>
+                <span class="title-logo-text">Cobalt Studio</span>
                 <span class="title-tagline">Build 3D games with blocks</span>
+            </div>
+            <div class="title-user-info" id="title-user-info">
+                <div class="title-user-avatar" id="title-user-avatar" title="Change avatar" style="cursor:pointer"></div>
+                <span class="title-user-name" id="title-user-name"></span>
+                <button class="title-signout-btn" id="btn-sign-out">Sign Out</button>
             </div>
         </div>
         <div class="title-content">
@@ -51,29 +106,74 @@
                     Import JSON
                 </button>
             </div>
-            <div class="title-search-bar">
-                <span class="material-icons-round">search</span>
-                <input type="text" id="project-search" placeholder="Search projects..." autocomplete="off" spellcheck="false">
+            <div class="title-tabs">
+                <button class="title-tab-btn active" data-title-tab="my-projects">
+                    <span class="material-icons-round">folder</span>
+                    My Projects
+                </button>
+                <button class="title-tab-btn" data-title-tab="explore">
+                    <span class="material-icons-round">explore</span>
+                    Explore
+                </button>
             </div>
-            <div class="title-section-header">
-                <span>My Projects</span>
-                <span class="project-count" id="project-count">0</span>
-                <div style="margin-left:auto;display:flex;gap:4px">
-                    <button class="title-sort-btn active" id="sort-date" title="Sort by Date">
-                        <span class="material-icons-round">schedule</span>
-                    </button>
-                    <button class="title-sort-btn" id="sort-name" title="Sort by Name">
-                        <span class="material-icons-round">sort_by_alpha</span>
-                    </button>
+            <!-- My Projects Tab -->
+            <div id="tab-my-projects" class="title-tab-content active">
+                <div class="title-search-bar">
+                    <span class="material-icons-round">search</span>
+                    <input type="text" id="project-search" placeholder="Search projects..." autocomplete="off" spellcheck="false">
+                </div>
+                <div class="title-section-header">
+                    <span>My Projects</span>
+                    <span class="project-count" id="project-count">0</span>
+                    <div style="margin-left:auto;display:flex;gap:4px">
+                        <button class="title-sort-btn active" id="sort-date" title="Sort by Date">
+                            <span class="material-icons-round">schedule</span>
+                        </button>
+                        <button class="title-sort-btn" id="sort-name" title="Sort by Name">
+                            <span class="material-icons-round">sort_by_alpha</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="project-grid" id="project-grid">
+                    <!-- Populated dynamically -->
+                </div>
+                <div class="title-empty-state" id="title-empty">
+                    <span class="material-icons-round">videogame_asset</span>
+                    <p>No projects yet</p>
+                    <span class="empty-hint">Click "New Project" to get started</span>
                 </div>
             </div>
-            <div class="project-grid" id="project-grid">
-                <!-- Populated dynamically -->
-            </div>
-            <div class="title-empty-state" id="title-empty">
-                <span class="material-icons-round">videogame_asset</span>
-                <p>No projects yet</p>
-                <span class="empty-hint">Click "New Project" to get started</span>
+            <!-- Explore Tab -->
+            <div id="tab-explore" class="title-tab-content">
+                <div class="explore-search-bar">
+                    <span class="material-icons-round">search</span>
+                    <input type="text" id="explore-search" placeholder="Search community projects..." autocomplete="off" spellcheck="false">
+                </div>
+                <div class="explore-categories">
+                    <button class="explore-cat-btn active" data-explore-cat="all">All</button>
+                    <button class="explore-cat-btn" data-explore-cat="featured">Featured</button>
+                    <button class="explore-cat-btn" data-explore-cat="games">Games</button>
+                    <button class="explore-cat-btn" data-explore-cat="art">Art</button>
+                    <button class="explore-cat-btn" data-explore-cat="my-shared">My Shared</button>
+                </div>
+                <div id="explore-featured-section">
+                    <div class="explore-section-header">
+                        <span class="material-icons-round">star</span>
+                        <span>Featured Projects</span>
+                    </div>
+                    <div class="explore-grid" id="explore-featured-grid"></div>
+                </div>
+                <div id="explore-community-section">
+                    <div class="explore-section-header">
+                        <span class="material-icons-round">people</span>
+                        <span>Community Projects</span>
+                    </div>
+                    <div class="explore-grid" id="explore-community-grid"></div>
+                </div>
+                <div class="explore-empty" id="explore-empty" style="display:none">
+                    <span class="material-icons-round">explore_off</span>
+                    <p>No projects found</p>
+                </div>
             </div>
         </div>
     </div>
@@ -120,8 +220,8 @@
     <div id="toolbar">
         <div class="toolbar-left">
             <div class="logo">
-                <span class="logo-icon">&#9670;</span>
-                <span class="logo-text">BlockForge Studio</span>
+                <span class="logo-icon"><svg viewBox="0 0 64 64" fill="none"><path d="M33 30L21 9L32 2L58 17L58 30Z" fill="#93c5fd"/><path d="M33 30L58 17L58 30Z" fill="#4338ca"/><path d="M34 34L58 34L58 47L32 62Z" fill="#4338ca"/><path d="M34 34L20 56L32 62Z" fill="#6366f1"/><path d="M30 32L17 11L6 17Z" fill="#93c5fd"/><path d="M30 32L6 17L6 47L17 55Z" fill="#6366f1"/></svg></span>
+                <span class="logo-text">Cobalt Studio</span>
             </div>
             <div class="toolbar-project-name hidden" id="toolbar-project-name">
                 <span class="project-name-text" id="toolbar-project-text"></span>
@@ -178,6 +278,9 @@
             </button>
         </div>
         <div class="toolbar-right">
+            <div class="toolbar-user" id="toolbar-user">
+                <div class="toolbar-user-avatar" id="toolbar-user-avatar"></div>
+            </div>
             <button class="tool-btn" id="btn-templates" title="Map Templates">
                 <span class="material-icons-round">dashboard</span>
             </button>
@@ -1134,8 +1237,8 @@
                 </button>
             </div>
             <div class="modal-body" style="text-align:center;padding:32px 24px">
-                <span style="font-size:48px;color:var(--accent)">&#9670;</span>
-                <div style="font-weight:700;font-size:18px;margin:12px 0 4px;background:linear-gradient(135deg,#4c97ff,#9966ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent">BlockForge Studio</div>
+                <span class="about-logo-icon"><svg viewBox="0 0 64 64" fill="none"><path d="M33 30L21 9L32 2L58 17L58 30Z" fill="#93c5fd"/><path d="M33 30L58 17L58 30Z" fill="#4338ca"/><path d="M34 34L58 34L58 47L32 62Z" fill="#4338ca"/><path d="M34 34L20 56L32 62Z" fill="#6366f1"/><path d="M30 32L17 11L6 17Z" fill="#93c5fd"/><path d="M30 32L6 17L6 47L17 55Z" fill="#6366f1"/></svg></span>
+                <div style="font-weight:700;font-size:18px;margin:12px 0 4px;background:linear-gradient(135deg,#4c97ff,#9966ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Cobalt Studio</div>
                 <div id="about-version" style="font-size:12px;color:var(--text-dim);margin-bottom:16px"></div>
                 <p style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:12px">
                     Build 3D games with blocks. Drag and drop objects, write visual block code, and share your creations.
@@ -1143,6 +1246,66 @@
                 <p style="font-size:11px;color:var(--text-dim)">
                     Press <kbd>?</kbd> for keyboard shortcuts
                 </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Publish Modal -->
+    <div id="publish-modal" class="hidden">
+        <div class="publish-dialog">
+            <div class="publish-dialog-header">
+                <span class="material-icons-round">publish</span>
+                <h3>Publish Project</h3>
+            </div>
+            <div class="publish-dialog-body">
+                <div class="publish-field">
+                    <label for="publish-title">Title</label>
+                    <input type="text" id="publish-title" placeholder="Project title" maxlength="60" spellcheck="false">
+                </div>
+                <div class="publish-field">
+                    <label for="publish-description">Description</label>
+                    <textarea id="publish-description" placeholder="Describe your project..." maxlength="200" rows="3"></textarea>
+                </div>
+                <div class="publish-field">
+                    <label>Tags</label>
+                    <div class="publish-tags">
+                        <label class="publish-tag-checkbox"><input type="checkbox" value="Games"> Games</label>
+                        <label class="publish-tag-checkbox"><input type="checkbox" value="Art"> Art</label>
+                        <label class="publish-tag-checkbox"><input type="checkbox" value="Platformer"> Platformer</label>
+                        <label class="publish-tag-checkbox"><input type="checkbox" value="Adventure"> Adventure</label>
+                        <label class="publish-tag-checkbox"><input type="checkbox" value="Puzzle"> Puzzle</label>
+                    </div>
+                </div>
+                <div class="publish-share-link" id="publish-share-link">
+                    <label>Share Link</label>
+                    <div class="publish-link-row">
+                        <input type="text" id="publish-link-input" readonly>
+                        <button type="button" id="publish-copy-link">Copy</button>
+                    </div>
+                </div>
+            </div>
+            <div class="publish-dialog-footer">
+                <button class="publish-cancel-btn" id="publish-cancel">Cancel</button>
+                <button class="publish-unpublish-btn hidden" id="publish-unpublish">Unpublish</button>
+                <button class="publish-submit-btn" id="publish-submit">Publish</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Avatar Upload Modal -->
+    <div id="avatar-modal" class="modal-overlay hidden">
+        <div class="modal-dialog" style="max-width:400px">
+            <div class="modal-header">
+                <span class="material-icons-round">account_circle</span>
+                <span>Profile Picture</span>
+                <button class="modal-close" id="avatar-modal-close"><span class="material-icons-round">close</span></button>
+            </div>
+            <div class="modal-body" style="padding:24px;display:flex;flex-direction:column;align-items:center;gap:16px">
+                <div id="avatar-preview" class="avatar-upload-preview"></div>
+                <input type="file" id="avatar-file-input" accept="image/*" style="display:none">
+                <button class="action-btn primary" id="avatar-upload-btn" style="gap:6px"><span class="material-icons-round" style="font-size:18px">upload</span> Upload Image</button>
+                <button class="action-btn" id="avatar-remove-btn" style="font-size:12px;display:none">Remove &amp; use default</button>
+                <div id="avatar-upload-hint" style="font-size:11px;color:var(--text-dim);text-align:center">Square images work best. Max 500KB.</div>
             </div>
         </div>
     </div>

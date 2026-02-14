@@ -806,12 +806,13 @@ class Runtime {
                     pc.velocity.y = 0;
                     pc.isGrounded = true;
                 }
-                // Hitting from below
-                else if (newPos.y + 0.2 >= box.min.y && newPos.y + 0.2 <= box.min.y + 0.3 && pc.velocity.y > 0) {
+                // Hitting from below (head hits ceiling/roof)
+                else if (newPos.y + pc.height / 2 >= box.min.y && playerBottom < box.min.y && pc.velocity.y > 0) {
+                    newPos.y = box.min.y - pc.height / 2;
                     pc.velocity.y = 0;
                 }
-                // Side collision
-                else if (playerBottom < box.max.y - 0.3) {
+                // Side collision (only if player vertically overlaps the object — not just underneath it)
+                else if (playerBottom < box.max.y - 0.3 && newPos.y + pc.height / 2 > box.min.y) {
                     // Push out
                     const centerX = (box.min.x + box.max.x) / 2;
                     const centerZ = (box.min.z + box.max.z) / 2;

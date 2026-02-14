@@ -1,5 +1,5 @@
 /**
- * App - Main application controller for BlockForge Studio
+ * App - Main application controller for Cobalt Studio
  * Wires together Scene3D, BlockCode, Runtime, and UI
  */
 class App {
@@ -29,6 +29,9 @@ class App {
         this.initSettings();
         this.initCustomObjects();
         this.initUIScreens();
+        this.initAuth();
+        this.initExplore();
+        this.initPublish();
 
         this.VERSION = '1.0.0';
         this.currentProjectId = null;
@@ -74,20 +77,36 @@ class App {
         this.initTutorial();
         this.initTooltips();
 
-        // Show splash, title screen, or go to editor
+        // Show splash, auth screen, title screen, or go to editor
         const splashSeen = localStorage.getItem('blockforge_splash_seen');
         if (loadedFromHash) {
-            this.updateToolbarProjectName();
-            this.toast('BlockForge Studio loaded! Start building your game.');
+            this.checkAuth().then(() => {
+                this.updateUserDisplay();
+                this.updateToolbarProjectName();
+                this.toast('Cobalt Studio loaded! Start building your game.');
+            });
         } else if (!splashSeen) {
             document.getElementById('splash-screen').classList.remove('hidden');
-            document.getElementById('splash-start').addEventListener('click', () => {
+            document.getElementById('splash-start').addEventListener('click', async () => {
                 localStorage.setItem('blockforge_splash_seen', 'true');
                 document.getElementById('splash-screen').classList.add('hidden');
-                this.showTitleScreen();
+                const loggedIn = await this.checkAuth();
+                if (loggedIn) {
+                    this.updateUserDisplay();
+                    this.showTitleScreen();
+                } else {
+                    this.showAuthScreen();
+                }
             });
         } else {
-            this.showTitleScreen();
+            this.checkAuth().then(loggedIn => {
+                if (loggedIn) {
+                    this.updateUserDisplay();
+                    this.showTitleScreen();
+                } else {
+                    this.showAuthScreen();
+                }
+            });
         }
 
         // Auto-save every 60 seconds
@@ -1438,6 +1457,7 @@ class App {
         this.projectName = null;
         this.hasUnsavedChanges = false;
         this.updateToolbarProjectName();
+        this.updateUserDisplay();
 
         document.getElementById('title-screen').classList.remove('hidden');
         document.getElementById('project-search').value = '';
@@ -1663,6 +1683,14 @@ class App {
             });
             thumb.appendChild(starBtn);
 
+            // Shared badge
+            if (meta.shared) {
+                const sharedBadge = document.createElement('span');
+                sharedBadge.className = 'project-card-shared-badge';
+                sharedBadge.textContent = 'Shared';
+                thumb.appendChild(sharedBadge);
+            }
+
             const info = document.createElement('div');
             info.className = 'project-card-info';
             const nameEl = document.createElement('div');
@@ -1768,7 +1796,7 @@ class App {
         if (!data) return;
         const index = this.getProjectIndex();
         const meta = index[id] || {};
-        const filename = (meta.name || 'blockforge-game').replace(/[^a-z0-9_-]/gi, '_') + '.json';
+        const filename = (meta.name || 'cobalt-game').replace(/[^a-z0-9_-]/gi, '_') + '.json';
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -2341,7 +2369,7 @@ class App {
 
     exportGame() {
         const data = this._gatherProjectData();
-        const filename = (this.projectName || 'blockforge-game').replace(/[^a-z0-9_-]/gi, '_') + '.json';
+        const filename = (this.projectName || 'cobalt-game').replace(/[^a-z0-9_-]/gi, '_') + '.json';
 
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -2427,26 +2455,7 @@ class App {
     // ===== Share Link =====
 
     shareProject() {
-        const data = this._gatherProjectData();
-        try {
-            const json = JSON.stringify(data);
-            const encoded = btoa(unescape(encodeURIComponent(json)));
-            const url = window.location.origin + window.location.pathname + '#project=' + encoded;
-            navigator.clipboard.writeText(url).then(() => {
-                this.toast('Share link copied to clipboard!', 'success');
-            }).catch(() => {
-                // Fallback
-                const input = document.createElement('input');
-                input.value = url;
-                document.body.appendChild(input);
-                input.select();
-                document.execCommand('copy');
-                input.remove();
-                this.toast('Share link copied to clipboard!', 'success');
-            });
-        } catch (e) {
-            this.toast('Project too large to share via link', 'error');
-        }
+        this.showPublishModal();
     }
 
     loadFromHash() {
@@ -2497,7 +2506,7 @@ class App {
                 icon: 'view_in_ar',
                 desc: 'Learn the basics — hands on!',
                 steps: [
-                    { icon: 'view_in_ar', title: 'Welcome to BlockForge Studio!', text: 'Build 3D games with blocks — no coding required! Let\'s walk through the basics together.' },
+                    { icon: 'view_in_ar', title: 'Welcome to Cobalt Studio!', text: 'Build 3D games with blocks — no coding required! Let\'s walk through the basics together.' },
                     {
                         icon: 'add_box', title: 'Open the Toolbox',
                         text: 'Click the Toolbox tab on the left panel to see available objects.',
@@ -3366,6 +3375,946 @@ class App {
         });
     }
 
+    // ===== Avatar Definitions =====
+
+    static AVATARS = {
+        default: `<svg viewBox="0 0 64 64"><defs><linearGradient id="dg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4a9eff"/><stop offset="100%" stop-color="#2d6bcc"/></linearGradient><clipPath id="dc"><circle cx="32" cy="32" r="31"/></clipPath></defs><circle cx="32" cy="32" r="31" fill="url(#dg1)"/><g clip-path="url(#dc)"><circle cx="32" cy="23" r="12" fill="#e0e8f0"/><path d="M8 64 Q8 40 32 40 Q56 40 56 64 Z" fill="#e0e8f0"/></g></svg>`,
+        fox: `<svg viewBox="0 0 64 64"><defs><linearGradient id="fg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f0734a"/><stop offset="100%" stop-color="#c0502e"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#fg1)"/><polygon points="16,12 23,27 11,25" fill="#d45a30"/><polygon points="48,12 41,27 53,25" fill="#d45a30"/><polygon points="16,12 23,27 11,25" fill="#fabb9e" opacity=".4"/><polygon points="48,12 41,27 53,25" fill="#fabb9e" opacity=".4"/><ellipse cx="32" cy="32" rx="16" ry="17" fill="#fab1a0"/><ellipse cx="32" cy="40" rx="8" ry="5" fill="#fff"/><circle cx="25" cy="28" r="3" fill="#3b3f4a"/><circle cx="39" cy="28" r="3" fill="#3b3f4a"/><circle cx="25.8" cy="27.2" r="1" fill="#fff"/><circle cx="39.8" cy="27.2" r="1" fill="#fff"/><ellipse cx="32" cy="35" rx="3.5" ry="2.5" fill="#3b3f4a"/><circle cx="32" cy="34.2" r="1" fill="#d45a30"/></svg>`,
+        cat: `<svg viewBox="0 0 64 64"><defs><linearGradient id="cg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7a858a"/><stop offset="100%" stop-color="#4a5459"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#cg1)"/><polygon points="15,10 21,27 10,23" fill="#5e686e"/><polygon points="49,10 43,27 54,23" fill="#5e686e"/><polygon points="16,11 21,26 12,23" fill="#fbb" opacity=".25"/><polygon points="48,11 43,26 52,23" fill="#fbb" opacity=".25"/><ellipse cx="32" cy="33" rx="16" ry="16" fill="#b8c4c9"/><circle cx="25" cy="28" r="3.5" fill="#fddf6e"/><circle cx="39" cy="28" r="3.5" fill="#fddf6e"/><ellipse cx="25" cy="28.5" rx="1.3" ry="2.8" fill="#2d3436"/><ellipse cx="39" cy="28.5" rx="1.3" ry="2.8" fill="#2d3436"/><ellipse cx="32" cy="35" rx="2.5" ry="1.8" fill="#ff8fab"/><path d="M32 36.5 L30.5 39" stroke="#b8c4c9" stroke-width=".8" stroke-linecap="round"/><path d="M32 36.5 L33.5 39" stroke="#b8c4c9" stroke-width=".8" stroke-linecap="round"/><line x1="19" y1="31" x2="9" y2="29" stroke="#c4cdd1" stroke-width=".8" stroke-linecap="round"/><line x1="19" y1="33.5" x2="9" y2="34.5" stroke="#c4cdd1" stroke-width=".8" stroke-linecap="round"/><line x1="45" y1="31" x2="55" y2="29" stroke="#c4cdd1" stroke-width=".8" stroke-linecap="round"/><line x1="45" y1="33.5" x2="55" y2="34.5" stroke="#c4cdd1" stroke-width=".8" stroke-linecap="round"/></svg>`,
+        robot: `<svg viewBox="0 0 64 64"><defs><linearGradient id="rg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3d4550"/><stop offset="100%" stop-color="#1e2329"/></linearGradient><linearGradient id="rg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7a8a9a"/><stop offset="100%" stop-color="#556270"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#rg1)"/><rect x="26" y="8" width="12" height="10" rx="6" fill="url(#rg2)"/><circle cx="32" cy="13" r="2.5" fill="#ff6b6b"/><circle cx="32" cy="13" r="1.5" fill="#ff8787" opacity=".6"/><rect x="16" y="20" width="32" height="26" rx="5" fill="url(#rg2)"/><rect x="11" y="26" width="5" height="12" rx="2.5" fill="#667788"/><rect x="48" y="26" width="5" height="12" rx="2.5" fill="#667788"/><rect x="21" y="26" width="9" height="7" rx="2.5" fill="#74c0ff"/><rect x="34" y="26" width="9" height="7" rx="2.5" fill="#74c0ff"/><rect x="21" y="26" width="9" height="3" rx="1.5" fill="#a8daff" opacity=".5"/><rect x="34" y="26" width="9" height="3" rx="1.5" fill="#a8daff" opacity=".5"/><rect x="25" y="39" width="14" height="3.5" rx="1.75" fill="#74c0ff"/><circle cx="27" cy="40.5" r="1" fill="#a8daff" opacity=".5"/><circle cx="32" cy="40.5" r="1" fill="#a8daff" opacity=".5"/><circle cx="37" cy="40.5" r="1" fill="#a8daff" opacity=".5"/></svg>`,
+        bear: `<svg viewBox="0 0 64 64"><defs><linearGradient id="bg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b5623a"/><stop offset="100%" stop-color="#8b4420"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#bg1)"/><circle cx="18" cy="14" r="8" fill="#9a5530"/><circle cx="46" cy="14" r="8" fill="#9a5530"/><circle cx="18" cy="14" r="4.5" fill="#daa87a"/><circle cx="46" cy="14" r="4.5" fill="#daa87a"/><circle cx="32" cy="34" r="18" fill="#daa87a"/><circle cx="25" cy="28" r="2.8" fill="#3b3040"/><circle cx="39" cy="28" r="2.8" fill="#3b3040"/><circle cx="25.8" cy="27.2" r=".9" fill="#fff"/><circle cx="39.8" cy="27.2" r=".9" fill="#fff"/><ellipse cx="32" cy="35" rx="6" ry="4.5" fill="#b5623a"/><ellipse cx="32" cy="33.5" rx="3" ry="2" fill="#3b3040"/><path d="M29 37 Q32 40 35 37" stroke="#3b3040" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>`,
+        panda: `<svg viewBox="0 0 64 64"><defs><linearGradient id="pg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#eef1f3"/><stop offset="100%" stop-color="#cdd4d9"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#pg1)"/><circle cx="18" cy="14" r="8.5" fill="#2d3436"/><circle cx="46" cy="14" r="8.5" fill="#2d3436"/><circle cx="32" cy="34" r="18" fill="#fff"/><ellipse cx="24" cy="28" rx="6.5" ry="5.5" fill="#2d3436"/><ellipse cx="40" cy="28" rx="6.5" ry="5.5" fill="#2d3436"/><circle cx="24" cy="27.5" r="2.5" fill="#fff"/><circle cx="40" cy="27.5" r="2.5" fill="#fff"/><circle cx="24.5" cy="27" r="1.2" fill="#2d3436"/><circle cx="40.5" cy="27" r="1.2" fill="#2d3436"/><ellipse cx="32" cy="36" rx="4" ry="2.5" fill="#2d3436"/><path d="M28.5 38.5 Q32 41 35.5 38.5" stroke="#2d3436" stroke-width="1" fill="none" stroke-linecap="round"/></svg>`,
+        owl: `<svg viewBox="0 0 64 64"><defs><linearGradient id="og1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7e6ee7"/><stop offset="100%" stop-color="#5240b8"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#og1)"/><polygon points="16,15 23,22 18,11" fill="#6a5acd"/><polygon points="48,15 41,22 46,11" fill="#6a5acd"/><ellipse cx="32" cy="34" rx="18" ry="17" fill="#a898f0"/><circle cx="23" cy="27" r="9" fill="#eee8ff"/><circle cx="41" cy="27" r="9" fill="#eee8ff"/><circle cx="23" cy="27" r="4.5" fill="#3b2f7a"/><circle cx="41" cy="27" r="4.5" fill="#3b2f7a"/><circle cx="24.2" cy="25.8" r="1.5" fill="#fff"/><circle cx="42.2" cy="25.8" r="1.5" fill="#fff"/><polygon points="32,32 28.5,38 35.5,38" fill="#ffc857"/><ellipse cx="32" cy="50" rx="7" ry="3" fill="#8b7acc"/><ellipse cx="23" cy="40" rx="5" ry="3" fill="#8b7acc" opacity=".3"/><ellipse cx="41" cy="40" rx="5" ry="3" fill="#8b7acc" opacity=".3"/></svg>`,
+        penguin: `<svg viewBox="0 0 64 64"><defs><linearGradient id="png1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3d4550"/><stop offset="100%" stop-color="#1a1e24"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#png1)"/><ellipse cx="14" cy="36" rx="5" ry="10" fill="#2a3038" transform="rotate(-10 14 36)"/><ellipse cx="50" cy="36" rx="5" ry="10" fill="#2a3038" transform="rotate(10 50 36)"/><ellipse cx="32" cy="38" rx="14" ry="16" fill="#f0ece8"/><circle cx="25" cy="24" r="3.5" fill="#fff"/><circle cx="39" cy="24" r="3.5" fill="#fff"/><circle cx="25.5" cy="23.8" r="2" fill="#1a1e24"/><circle cx="39.5" cy="23.8" r="2" fill="#1a1e24"/><circle cx="26" cy="23" r=".7" fill="#fff"/><circle cx="40" cy="23" r=".7" fill="#fff"/><polygon points="32,28 28,34 36,34" fill="#f5a623"/><ellipse cx="27" cy="54" rx="5" ry="2.5" fill="#f5a623"/><ellipse cx="37" cy="54" rx="5" ry="2.5" fill="#f5a623"/></svg>`,
+        astronaut: `<svg viewBox="0 0 64 64"><defs><linearGradient id="ag1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a8de8"/><stop offset="100%" stop-color="#0660a9"/></linearGradient><linearGradient id="ag2" x1=".2" y1="0" x2=".8" y2="1"><stop offset="0%" stop-color="#e8edf2"/><stop offset="100%" stop-color="#b8c4d0"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#ag1)"/><ellipse cx="32" cy="28" rx="17" ry="18" fill="url(#ag2)"/><ellipse cx="32" cy="27" rx="12.5" ry="13" fill="#5ba8e8"/><ellipse cx="32" cy="27" rx="12.5" ry="13" fill="rgba(255,255,255,.12)"/><circle cx="25" cy="25.5" r="2.2" fill="#253040"/><circle cx="39" cy="25.5" r="2.2" fill="#253040"/><path d="M28 31.5 Q32 35 36 31.5" stroke="#253040" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="39" cy="20" r="2.8" fill="rgba(255,255,255,.3)"/><circle cx="37" cy="18" r="1.2" fill="rgba(255,255,255,.2)"/><rect x="20" y="44" width="24" height="12" rx="5" fill="url(#ag2)"/><circle cx="28" cy="49" r="1.5" fill="#e74c3c"/><circle cx="36" cy="49" r="1.5" fill="#3498db"/></svg>`,
+        ninja: `<svg viewBox="0 0 64 64"><defs><linearGradient id="ng1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#383e48"/><stop offset="100%" stop-color="#1a1d22"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#ng1)"/><circle cx="32" cy="30" r="15" fill="#ffeaa7"/><rect x="14" y="23" width="36" height="10" rx="3" fill="#2d3136"/><circle cx="25" cy="28" r="3" fill="#fff"/><circle cx="39" cy="28" r="3" fill="#fff"/><circle cx="25.5" cy="27.5" r="1.8" fill="#1a1d22"/><circle cx="39.5" cy="27.5" r="1.8" fill="#1a1d22"/><circle cx="26" cy="27" r=".6" fill="#fff"/><circle cx="40" cy="27" r=".6" fill="#fff"/><path d="M46 24 L54 20 L52 26" fill="#2d3136"/><rect x="14" y="44" width="36" height="12" rx="5" fill="#2d3136"/></svg>`,
+        wizard: `<svg viewBox="0 0 64 64"><defs><linearGradient id="wg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7e6ee7"/><stop offset="100%" stop-color="#4a38a0"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#wg1)"/><polygon points="32,0 20,30 44,30" fill="#5a48b0"/><polygon points="32,0 26,30 38,30" fill="rgba(255,255,255,.08)"/><circle cx="32" cy="7" r="3.5" fill="#ffd700"/><circle cx="32" cy="7" r="2" fill="#ffe566" opacity=".6"/><circle cx="28" cy="18" r="1.2" fill="#ffd700" opacity=".5"/><circle cx="36" cy="14" r="1" fill="#ffd700" opacity=".4"/><circle cx="32" cy="36" r="13" fill="#ffeaa7"/><circle cx="26" cy="34" r="2.3" fill="#3b2f7a"/><circle cx="38" cy="34" r="2.3" fill="#3b2f7a"/><circle cx="26.7" cy="33.4" r=".7" fill="#fff"/><circle cx="38.7" cy="33.4" r=".7" fill="#fff"/><path d="M28 40 Q32 43.5 36 40" stroke="#3b2f7a" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M18 48 Q32 56 46 48" fill="#c0b0e0"/><ellipse cx="24" cy="38" rx="2.5" ry="1.2" fill="#e8b4b8" opacity=".3"/><ellipse cx="40" cy="38" rx="2.5" ry="1.2" fill="#e8b4b8" opacity=".3"/></svg>`,
+        dragon: `<svg viewBox="0 0 64 64"><defs><linearGradient id="drg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10c9a0"/><stop offset="100%" stop-color="#088a6e"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#drg1)"/><polygon points="20,10 25,24 15,20" fill="#0aa87e"/><polygon points="44,10 39,24 49,20" fill="#0aa87e"/><polygon points="20,10 25,24 15,20" fill="#55efc4" opacity=".3"/><polygon points="44,10 39,24 49,20" fill="#55efc4" opacity=".3"/><ellipse cx="32" cy="33" rx="17" ry="17" fill="#55efc4"/><circle cx="24" cy="27" r="4" fill="#ffd700"/><circle cx="40" cy="27" r="4" fill="#ffd700"/><ellipse cx="24" cy="27.5" rx="1.5" ry="3" fill="#2d3436"/><ellipse cx="40" cy="27.5" rx="1.5" ry="3" fill="#2d3436"/><ellipse cx="29" cy="38" rx="2" ry="1.2" fill="#0aa87e"/><ellipse cx="35" cy="38" rx="2" ry="1.2" fill="#0aa87e"/><path d="M28 41 Q32 44 36 41" stroke="#2d3436" stroke-width="1.3" fill="none" stroke-linecap="round"/><ellipse cx="32" cy="50" rx="10" ry="5" fill="#3dd9a4"/></svg>`,
+        bunny: `<svg viewBox="0 0 64 64"><defs><linearGradient id="bng1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff85b0"/><stop offset="100%" stop-color="#d45a80"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#bng1)"/><ellipse cx="22" cy="12" rx="5" ry="14" fill="#e8709a"/><ellipse cx="42" cy="12" rx="5" ry="14" fill="#e8709a"/><ellipse cx="22" cy="12" rx="3" ry="11.5" fill="#ffb0c8"/><ellipse cx="42" cy="12" rx="3" ry="11.5" fill="#ffb0c8"/><circle cx="32" cy="35" r="17" fill="#fff"/><circle cx="25" cy="31" r="2.5" fill="#3b3040"/><circle cx="39" cy="31" r="2.5" fill="#3b3040"/><circle cx="25.8" cy="30.2" r=".8" fill="#fff"/><circle cx="39.8" cy="30.2" r=".8" fill="#fff"/><ellipse cx="32" cy="37" rx="2.5" ry="1.8" fill="#ff85b0"/><path d="M29.5 38.5 L32 37 L34.5 38.5" stroke="#ff85b0" stroke-width=".8" fill="none" stroke-linecap="round"/><ellipse cx="23" cy="37" rx="3.5" ry="2" fill="#ffb0c8" opacity=".4"/><ellipse cx="41" cy="37" rx="3.5" ry="2" fill="#ffb0c8" opacity=".4"/></svg>`,
+        alien: `<svg viewBox="0 0 64 64"><defs><linearGradient id="alg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10dcd0"/><stop offset="100%" stop-color="#088a82"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#alg1)"/><ellipse cx="32" cy="30" rx="18" ry="20" fill="#81ecec"/><ellipse cx="23" cy="25" rx="7.5" ry="5.5" fill="#1a3a38"/><ellipse cx="41" cy="25" rx="7.5" ry="5.5" fill="#1a3a38"/><ellipse cx="23" cy="25" rx="4.5" ry="3.5" fill="#55efc4"/><ellipse cx="41" cy="25" rx="4.5" ry="3.5" fill="#55efc4"/><circle cx="22" cy="24" r="1.5" fill="#c8fff0" opacity=".5"/><circle cx="40" cy="24" r="1.5" fill="#c8fff0" opacity=".5"/><ellipse cx="32" cy="38" rx="3.5" ry="2" fill="#1a3a38"/><path d="M28.5 38 Q32 40.5 35.5 38" stroke="#1a3a38" stroke-width=".8" fill="none"/></svg>`,
+        pirate: `<svg viewBox="0 0 64 64"><defs><linearGradient id="prg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e83838"/><stop offset="100%" stop-color="#a82020"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#prg1)"/><circle cx="32" cy="33" r="15" fill="#ffeaa7"/><circle cx="25" cy="30" r="2.8" fill="#3b3040"/><circle cx="25.8" cy="29.2" r=".9" fill="#fff"/><ellipse cx="39" cy="30" rx="6" ry="5" fill="#2d3136"/><ellipse cx="39" cy="30" rx="4.5" ry="3.5" fill="#1a1d22"/><circle cx="40" cy="29.5" r="1" fill="#888" opacity=".4"/><path d="M27 39 Q32 42.5 37 39" stroke="#3b3040" stroke-width="1.6" fill="none" stroke-linecap="round"/><rect x="14" y="17" width="36" height="8" rx="3" fill="#2d3136"/><rect x="14" y="17" width="36" height="4" rx="2" fill="#4a4f58"/><circle cx="32" cy="21" r="2" fill="#ffd700"/></svg>`,
+        ghost: `<svg viewBox="0 0 64 64"><defs><linearGradient id="gg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b8a8ff"/><stop offset="100%" stop-color="#7c6cbf"/></linearGradient></defs><circle cx="32" cy="32" r="31" fill="url(#gg1)"/><ellipse cx="32" cy="26" rx="15" ry="17" fill="#eee8ff"/><ellipse cx="32" cy="26" rx="15" ry="17" fill="rgba(255,255,255,.15)"/><path d="M17 38 L17 54 L23 47 L29 54 L32 49 L35 54 L41 47 L47 54 L47 38" fill="#eee8ff"/><circle cx="25" cy="25" r="4" fill="#3b2f7a"/><circle cx="39" cy="25" r="4" fill="#3b2f7a"/><circle cx="25.8" cy="24" r="1.3" fill="#fff"/><circle cx="39.8" cy="24" r="1.3" fill="#fff"/><ellipse cx="32" cy="34" rx="4" ry="3.5" fill="#3b2f7a"/><ellipse cx="24" cy="30" rx="3" ry="1.5" fill="#d8c8ff" opacity=".3"/><ellipse cx="40" cy="30" rx="3" ry="1.5" fill="#d8c8ff" opacity=".3"/></svg>`,
+    };
+
+    // ===== Auth System =====
+
+    _cachedUser = null;
+    _captchaToken = null;
+    _usernameCheckTimer = null;
+
+    getCurrentUser() {
+        return this._cachedUser?.username || null;
+    }
+
+    isLoggedIn() {
+        return !!this._cachedUser;
+    }
+
+    getAvatarSvg(avatarId) {
+        return this.constructor.AVATARS[avatarId] || this.constructor.AVATARS.default;
+    }
+
+    async checkAuth() {
+        try {
+            const res = await fetch('/api/me');
+            if (res.ok) {
+                this._cachedUser = await res.json();
+                return true;
+            }
+        } catch (e) { /* not logged in */ }
+        this._cachedUser = null;
+        return false;
+    }
+
+    initAuth() {
+        // Tab switching
+        document.querySelectorAll('.auth-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.auth-tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('#auth-screen .auth-form').forEach(f => f.classList.remove('active'));
+                btn.classList.add('active');
+                const tab = btn.dataset.authTab;
+                document.getElementById(tab === 'signup' ? 'auth-signup-form' : 'auth-login-form').classList.add('active');
+                if (tab === 'signup') this.loadCaptcha();
+            });
+        });
+
+        // Sign up
+        document.getElementById('auth-signup-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleSignUp();
+        });
+
+        // Log in
+        document.getElementById('auth-login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleLogIn();
+        });
+
+        // Real-time validation
+        const usernameInput = document.getElementById('auth-signup-username');
+        const passwordInput = document.getElementById('auth-signup-password');
+        const confirmInput = document.getElementById('auth-signup-confirm');
+        const captchaInput = document.getElementById('auth-captcha-answer');
+
+        usernameInput.addEventListener('input', () => {
+            this._checkUsernameAvailability();
+            this._validateSignupForm();
+        });
+        passwordInput.addEventListener('input', () => this._validateSignupForm());
+        confirmInput.addEventListener('input', () => this._validateSignupForm());
+        captchaInput.addEventListener('input', () => this._validateSignupForm());
+
+        // Stop keyboard events from propagating
+        document.querySelectorAll('#auth-screen input').forEach(input => {
+            input.addEventListener('keydown', (e) => e.stopPropagation());
+        });
+
+        // Avatar picker modal
+        this._initAvatarModal();
+
+        // Title screen avatar click opens picker
+        document.getElementById('title-user-avatar').addEventListener('click', () => this.showAvatarPicker());
+    }
+
+    _initAvatarModal() {
+        const modal = document.getElementById('avatar-modal');
+        const closeBtn = document.getElementById('avatar-modal-close');
+        const fileInput = document.getElementById('avatar-file-input');
+        const uploadBtn = document.getElementById('avatar-upload-btn');
+        const removeBtn = document.getElementById('avatar-remove-btn');
+
+        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+        uploadBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                this.toast('Please select an image file', 'error');
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                this.toast('Image too large', 'error');
+                return;
+            }
+
+            try {
+                const dataUrl = await this._resizeImage(file, 256);
+                const res = await fetch('/api/me/avatar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: dataUrl })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    this._cachedUser.avatar = 'custom';
+                    this._cachedUser.avatarUrl = data.avatarUrl + '?t=' + Date.now();
+                    this.updateUserDisplay();
+                    this._updateAvatarPreview();
+                    this.toast('Profile picture updated!', 'success');
+                } else {
+                    const err = await res.json();
+                    this.toast(err.error || 'Upload failed', 'error');
+                }
+            } catch (e) {
+                this.toast('Failed to upload image', 'error');
+            }
+            fileInput.value = '';
+        });
+
+        removeBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/me/avatar', { method: 'DELETE' });
+                if (res.ok) {
+                    this._cachedUser.avatar = 'default';
+                    delete this._cachedUser.avatarUrl;
+                    this.updateUserDisplay();
+                    this._updateAvatarPreview();
+                    this.toast('Profile picture removed', 'success');
+                }
+            } catch (e) {
+                this.toast('Failed to remove picture', 'error');
+            }
+        });
+    }
+
+    _resizeImage(file, maxSize) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    // Crop to square from center
+                    const size = Math.min(img.width, img.height);
+                    const sx = (img.width - size) / 2;
+                    const sy = (img.height - size) / 2;
+                    canvas.width = maxSize;
+                    canvas.height = maxSize;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, sx, sy, size, size, 0, 0, maxSize, maxSize);
+                    resolve(canvas.toDataURL('image/png'));
+                };
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    _updateAvatarPreview() {
+        const preview = document.getElementById('avatar-preview');
+        const removeBtn = document.getElementById('avatar-remove-btn');
+        if (!preview) return;
+        const user = this._cachedUser;
+        if (user && user.avatar === 'custom' && user.avatarUrl) {
+            preview.innerHTML = `<img src="${user.avatarUrl}">`;
+            removeBtn.style.display = '';
+        } else {
+            preview.innerHTML = this.getAvatarSvg(user?.avatar || 'default');
+            removeBtn.style.display = 'none';
+        }
+    }
+
+    showAvatarPicker() {
+        this._updateAvatarPreview();
+        document.getElementById('avatar-modal').classList.remove('hidden');
+    }
+
+    async loadCaptcha() {
+        try {
+            const res = await fetch('/api/captcha');
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('auth-captcha-label').textContent = data.question;
+                document.getElementById('auth-captcha-answer').value = '';
+                this._captchaToken = data.token;
+            }
+        } catch (e) {
+            document.getElementById('auth-captcha-label').textContent = 'Could not load bot check';
+        }
+        this._validateSignupForm();
+    }
+
+    _checkUsernameAvailability() {
+        clearTimeout(this._usernameCheckTimer);
+        const username = document.getElementById('auth-signup-username').value.trim();
+        const hint = document.getElementById('auth-username-hint');
+
+        if (!username || username.length < 3) {
+            hint.textContent = username.length > 0 ? 'Must be at least 3 characters' : '';
+            hint.className = 'auth-field-hint' + (username.length > 0 ? ' hint-error' : '');
+            return;
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            hint.textContent = 'Only letters, numbers, and underscores';
+            hint.className = 'auth-field-hint hint-error';
+            return;
+        }
+
+        hint.textContent = 'Checking...';
+        hint.className = 'auth-field-hint hint-checking';
+
+        this._usernameCheckTimer = setTimeout(async () => {
+            try {
+                const res = await fetch('/api/check-username/' + encodeURIComponent(username));
+                if (res.ok) {
+                    const data = await res.json();
+                    if (document.getElementById('auth-signup-username').value.trim() === username) {
+                        hint.textContent = data.available ? 'Available' : 'Already taken';
+                        hint.className = 'auth-field-hint ' + (data.available ? 'hint-success' : 'hint-error');
+                        this._validateSignupForm();
+                    }
+                }
+            } catch (e) { /* offline */ }
+        }, 400);
+    }
+
+    _validateSignupForm() {
+        const username = document.getElementById('auth-signup-username').value.trim();
+        const password = document.getElementById('auth-signup-password').value;
+        const confirm = document.getElementById('auth-signup-confirm').value;
+        const captcha = document.getElementById('auth-captcha-answer').value.trim();
+        const hint = document.getElementById('auth-username-hint');
+        const btn = document.getElementById('auth-signup-btn');
+
+        const usernameOk = username.length >= 3 && username.length <= 20 && /^[a-zA-Z0-9_]+$/.test(username) && hint.classList.contains('hint-success');
+        const passwordOk = password.length >= 4;
+        const confirmOk = confirm.length > 0 && password === confirm;
+        const captchaOk = captcha.length > 0;
+
+        btn.disabled = !(usernameOk && passwordOk && confirmOk && captchaOk);
+    }
+
+    async handleSignUp() {
+        const username = document.getElementById('auth-signup-username').value.trim();
+        const password = document.getElementById('auth-signup-password').value;
+        const confirm = document.getElementById('auth-signup-confirm').value;
+        const captchaAnswer = document.getElementById('auth-captcha-answer').value.trim();
+        const errorEl = document.getElementById('auth-signup-error');
+
+        errorEl.classList.remove('visible');
+
+        if (!username || username.length < 3 || username.length > 20) {
+            errorEl.textContent = 'Username must be 3-20 characters';
+            errorEl.classList.add('visible');
+            return;
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            errorEl.textContent = 'Username can only contain letters, numbers, and underscores';
+            errorEl.classList.add('visible');
+            return;
+        }
+        if (password.length < 4) {
+            errorEl.textContent = 'Password must be at least 4 characters';
+            errorEl.classList.add('visible');
+            return;
+        }
+        if (password !== confirm) {
+            errorEl.textContent = 'Passwords do not match';
+            errorEl.classList.add('visible');
+            return;
+        }
+        if (!captchaAnswer) {
+            errorEl.textContent = 'Please solve the bot check';
+            errorEl.classList.add('visible');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, captchaToken: this._captchaToken, captchaAnswer })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                errorEl.textContent = data.error;
+                errorEl.classList.add('visible');
+                if (data.refreshCaptcha) this.loadCaptcha();
+                return;
+            }
+            this._cachedUser = data;
+            this.hideAuthScreen();
+            this.updateUserDisplay();
+            this.showTitleScreen();
+            this.toast('Welcome to Cobalt Studio, ' + data.displayName + '!', 'success');
+            // Prompt to choose avatar after signup
+            setTimeout(() => this.showAvatarPicker(), 600);
+        } catch (e) {
+            errorEl.textContent = 'Connection error. Is the server running?';
+            errorEl.classList.add('visible');
+        }
+    }
+
+    async handleLogIn() {
+        const username = document.getElementById('auth-login-username').value.trim();
+        const password = document.getElementById('auth-login-password').value;
+        const errorEl = document.getElementById('auth-login-error');
+
+        errorEl.classList.remove('visible');
+
+        if (!username || !password) {
+            errorEl.textContent = 'Please enter username and password';
+            errorEl.classList.add('visible');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                errorEl.textContent = data.error;
+                errorEl.classList.add('visible');
+                return;
+            }
+            this._cachedUser = data;
+            this.hideAuthScreen();
+            this.updateUserDisplay();
+            this.showTitleScreen();
+            this.toast('Welcome back, ' + data.displayName + '!', 'success');
+        } catch (e) {
+            errorEl.textContent = 'Connection error. Is the server running?';
+            errorEl.classList.add('visible');
+        }
+    }
+
+    async handleSignOut() {
+        try { await fetch('/api/logout', { method: 'POST' }); } catch (e) { /* ok */ }
+        this._cachedUser = null;
+        this.showAuthScreen();
+    }
+
+    showAuthScreen() {
+        document.getElementById('auth-screen').classList.remove('hidden');
+        document.getElementById('title-screen').classList.add('hidden');
+        // Clear fields
+        document.getElementById('auth-signup-username').value = '';
+        document.getElementById('auth-signup-password').value = '';
+        document.getElementById('auth-signup-confirm').value = '';
+        document.getElementById('auth-captcha-answer').value = '';
+        document.getElementById('auth-login-username').value = '';
+        document.getElementById('auth-login-password').value = '';
+        document.getElementById('auth-username-hint').textContent = '';
+        document.getElementById('auth-username-hint').className = 'auth-field-hint';
+        document.getElementById('auth-signup-btn').disabled = true;
+        document.querySelectorAll('.auth-error').forEach(e => e.classList.remove('visible'));
+        // Load captcha
+        this.loadCaptcha();
+    }
+
+    hideAuthScreen() {
+        document.getElementById('auth-screen').classList.add('hidden');
+    }
+
+    // ===== User Display =====
+
+    updateUserDisplay() {
+        const user = this._cachedUser;
+        if (!user) return;
+
+        const isCustom = user.avatar === 'custom' && user.avatarUrl;
+        const avatarHtml = isCustom
+            ? `<img src="${user.avatarUrl}" alt="${user.displayName}">`
+            : this.getAvatarSvg(user.avatar || 'default');
+
+        // Title screen avatar
+        const titleAvatar = document.getElementById('title-user-avatar');
+        if (titleAvatar) {
+            titleAvatar.innerHTML = avatarHtml;
+            titleAvatar.style.background = '';
+        }
+        const titleName = document.getElementById('title-user-name');
+        if (titleName) titleName.textContent = user.displayName;
+
+        // Toolbar avatar
+        const toolbarAvatar = document.getElementById('toolbar-user-avatar');
+        if (toolbarAvatar) {
+            toolbarAvatar.innerHTML = avatarHtml;
+            toolbarAvatar.style.background = '';
+            toolbarAvatar.title = user.displayName;
+        }
+    }
+
+    // ===== Explore =====
+
+    initExplore() {
+        this.exploreCategoryFilter = 'all';
+        this.initFeaturedProjects();
+
+        // Tab switching
+        document.querySelectorAll('.title-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.title-tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.title-tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                const tab = btn.dataset.titleTab;
+                document.getElementById('tab-' + tab).classList.add('active');
+                if (tab === 'explore') this.renderExploreGrid();
+            });
+        });
+
+        // Category filters
+        document.querySelectorAll('.explore-cat-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.explore-cat-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.exploreCategoryFilter = btn.dataset.exploreCat;
+                this.renderExploreGrid();
+            });
+        });
+
+        // Explore search
+        const exploreSearch = document.getElementById('explore-search');
+        if (exploreSearch) {
+            exploreSearch.addEventListener('input', () => this.renderExploreGrid());
+            exploreSearch.addEventListener('keydown', (e) => e.stopPropagation());
+        }
+
+        // Sign out button
+        document.getElementById('btn-sign-out').addEventListener('click', () => this.handleSignOut());
+    }
+
+    initFeaturedProjects() {
+        this.featuredProjects = [
+            {
+                id: 'featured_coin_collector',
+                name: 'Coin Collector Arena',
+                creator: 'CobaltTeam',
+                description: 'Collect all the coins in the arena! Watch out for NPCs.',
+                category: 'games',
+                tags: ['Games', 'Adventure'],
+                publishedAt: Date.now() - 86400000,
+                projectData: {
+                    version: 1,
+                    name: 'Coin Collector Arena',
+                    scene: [
+                        { type: 'box', name: 'Arena Floor', position: { x: 0, y: -0.125, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 20, y: 0.25, z: 20 }, color: '#4a7c3f', anchored: true, collidable: true },
+                        { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71' },
+                        { type: 'coin', name: 'Coin1', position: { x: 3, y: 1, z: 3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f' },
+                        { type: 'coin', name: 'Coin2', position: { x: -4, y: 1, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f' },
+                        { type: 'coin', name: 'Coin3', position: { x: 5, y: 1, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f' },
+                        { type: 'coin', name: 'Coin4', position: { x: -6, y: 1, z: 4 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f' },
+                        { type: 'npc', name: 'Guard', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#e74c3c' },
+                        { type: 'crate', name: 'Cover', position: { x: -3, y: 0.5, z: -4 }, rotation: { x: 0, y: 30, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#d4a24e', anchored: true, collidable: true }
+                    ],
+                    environment: { skybox: 'default' }
+                }
+            },
+            {
+                id: 'featured_sunset_village',
+                name: 'Sunset Village',
+                creator: 'CobaltTeam',
+                description: 'A peaceful village scene bathed in warm sunset light.',
+                category: 'art',
+                tags: ['Art'],
+                publishedAt: Date.now() - 172800000,
+                projectData: {
+                    version: 1,
+                    name: 'Sunset Village',
+                    scene: [
+                        { type: 'box', name: 'Ground', position: { x: 0, y: -0.125, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 30, y: 0.25, z: 30 }, color: '#4a7c3f', anchored: true, collidable: true },
+                        { type: 'house', name: 'House1', position: { x: -4, y: 0.5, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#e67e22' },
+                        { type: 'house', name: 'House2', position: { x: 4, y: 0.5, z: -2 }, rotation: { x: 0, y: 45, z: 0 }, scale: { x: 1.2, y: 1.2, z: 1.2 }, color: '#3498db' },
+                        { type: 'tree', name: 'Tree1', position: { x: -7, y: 0.5, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#27ae60' },
+                        { type: 'tree', name: 'Tree2', position: { x: 6, y: 0.5, z: 5 }, rotation: { x: 0, y: 30, z: 0 }, scale: { x: 1, y: 1.3, z: 1 }, color: '#27ae60' },
+                        { type: 'tree', name: 'Tree3', position: { x: 0, y: 0.5, z: 6 }, rotation: { x: 0, y: 60, z: 0 }, scale: { x: 1.2, y: 1.4, z: 1.2 }, color: '#27ae60' },
+                        { type: 'spawn', name: 'Spawn', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71' }
+                    ],
+                    environment: { skybox: 'sunset' }
+                }
+            },
+            {
+                id: 'featured_platformer',
+                name: 'Platformer Challenge',
+                creator: 'CobaltTeam',
+                description: 'Jump across floating platforms and collect gems to win!',
+                category: 'games',
+                tags: ['Games', 'Platformer'],
+                publishedAt: Date.now() - 259200000,
+                projectData: {
+                    version: 1,
+                    name: 'Platformer Challenge',
+                    scene: [
+                        { type: 'platform', name: 'Start', position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 3, y: 1, z: 3 }, color: '#1abc9c', anchored: true, collidable: true },
+                        { type: 'spawn', name: 'Spawn', position: { x: 0, y: 1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71' },
+                        { type: 'platform', name: 'Plat2', position: { x: 4, y: 1.5, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1, z: 2 }, color: '#1abc9c', anchored: true, collidable: true },
+                        { type: 'platform', name: 'Plat3', position: { x: 8, y: 3, z: -1 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1, z: 2 }, color: '#1abc9c', anchored: true, collidable: true },
+                        { type: 'gem', name: 'Gem1', position: { x: 4, y: 3, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#e74c3c' },
+                        { type: 'platform', name: 'Plat4', position: { x: 12, y: 4.5, z: -4 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1, z: 2 }, color: '#1abc9c', anchored: true, collidable: true },
+                        { type: 'gem', name: 'Gem2', position: { x: 8, y: 4.5, z: -1 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#3498db' },
+                        { type: 'platform', name: 'Finish', position: { x: 16, y: 6, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 3, y: 1, z: 3 }, color: '#f1c40f', anchored: true, collidable: true },
+                        { type: 'gem', name: 'Gem3', position: { x: 16, y: 7.5, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#f1c40f' }
+                    ],
+                    environment: { skybox: 'gradient' }
+                }
+            },
+            {
+                id: 'featured_neon_gallery',
+                name: 'Neon Gallery',
+                creator: 'CobaltTeam',
+                description: 'A glowing art gallery with emissive neon objects in the dark.',
+                category: 'art',
+                tags: ['Art'],
+                publishedAt: Date.now() - 345600000,
+                projectData: {
+                    version: 1,
+                    name: 'Neon Gallery',
+                    scene: [
+                        { type: 'box', name: 'Floor', position: { x: 0, y: -0.125, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 16, y: 0.25, z: 16 }, color: '#1a1a2e', anchored: true, collidable: true },
+                        { type: 'sphere', name: 'GlowSphere', position: { x: 0, y: 2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#e91e63', materialType: 'emissive' },
+                        { type: 'torus', name: 'GlowRing', position: { x: -4, y: 2, z: -3 }, rotation: { x: 45, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#00bcd4', materialType: 'emissive' },
+                        { type: 'cylinder', name: 'Pillar1', position: { x: 5, y: 1.5, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.5, y: 3, z: 0.5 }, color: '#9b59b6', materialType: 'emissive' },
+                        { type: 'cylinder', name: 'Pillar2', position: { x: -5, y: 1.5, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.5, y: 3, z: 0.5 }, color: '#2ecc71', materialType: 'emissive' },
+                        { type: 'cone', name: 'GlowCone', position: { x: 4, y: 1, z: 3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 2, z: 1 }, color: '#f1c40f', materialType: 'emissive' },
+                        { type: 'spawn', name: 'Spawn', position: { x: 0, y: 0.5, z: 7 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71' }
+                    ],
+                    environment: { skybox: 'night' }
+                }
+            },
+            {
+                id: 'featured_castle_defense',
+                name: 'Castle Defense',
+                creator: 'CobaltTeam',
+                description: 'Defend your castle from approaching enemies! Build walls and fight back.',
+                category: 'games',
+                tags: ['Games', 'Adventure'],
+                publishedAt: Date.now() - 432000000,
+                projectData: {
+                    version: 1,
+                    name: 'Castle Defense',
+                    scene: [
+                        { type: 'box', name: 'Ground', position: { x: 0, y: -0.125, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 30, y: 0.25, z: 30 }, color: '#5a8c4f', anchored: true, collidable: true },
+                        { type: 'wall', name: 'FrontWall', position: { x: 0, y: 1, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true },
+                        { type: 'wall', name: 'LeftWall', position: { x: -6, y: 1, z: -1 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 3, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true },
+                        { type: 'wall', name: 'RightWall', position: { x: 6, y: 1, z: -1 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 3, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true },
+                        { type: 'arch', name: 'Gate', position: { x: 0, y: 0.5, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#7f8c8d', anchored: true, collidable: true },
+                        { type: 'spawn', name: 'Spawn', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71' },
+                        { type: 'npc', name: 'Enemy1', position: { x: -5, y: 0.5, z: -12 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#c0392b' },
+                        { type: 'npc', name: 'Enemy2', position: { x: 3, y: 0.5, z: -14 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#c0392b' }
+                    ],
+                    environment: { skybox: 'cloudy' }
+                }
+            }
+        ];
+    }
+
+    async renderExploreGrid() {
+        const featuredGrid = document.getElementById('explore-featured-grid');
+        const communityGrid = document.getElementById('explore-community-grid');
+        const featuredSection = document.getElementById('explore-featured-section');
+        const communitySection = document.getElementById('explore-community-section');
+        const emptyEl = document.getElementById('explore-empty');
+        const query = (document.getElementById('explore-search').value || '').trim().toLowerCase();
+        const filter = this.exploreCategoryFilter;
+        const currentUser = this._cachedUser?.displayName || '';
+
+        featuredGrid.innerHTML = '';
+        communityGrid.innerHTML = '';
+
+        // Filter featured projects
+        let featured = this.featuredProjects || [];
+        if (filter === 'my-shared') {
+            featured = [];
+        } else if (filter === 'featured') {
+            // show all featured
+        } else if (filter === 'games') {
+            featured = featured.filter(p => p.category === 'games');
+        } else if (filter === 'art') {
+            featured = featured.filter(p => p.category === 'art');
+        }
+        if (query) {
+            featured = featured.filter(p =>
+                p.name.toLowerCase().includes(query) ||
+                p.description.toLowerCase().includes(query) ||
+                p.creator.toLowerCase().includes(query)
+            );
+        }
+
+        // Get community projects from server
+        let community = [];
+        if (filter !== 'featured') {
+            try {
+                const res = await fetch('/api/projects');
+                if (res.ok) {
+                    community = await res.json();
+                }
+            } catch (e) { /* offline */ }
+
+            if (filter === 'my-shared') {
+                community = community.filter(p => p.creator && p.creator === currentUser);
+            } else if (filter === 'games') {
+                community = community.filter(p => (p.tags || []).includes('Games'));
+            } else if (filter === 'art') {
+                community = community.filter(p => (p.tags || []).includes('Art'));
+            }
+            if (query) {
+                community = community.filter(p =>
+                    (p.name || '').toLowerCase().includes(query) ||
+                    (p.description || '').toLowerCase().includes(query) ||
+                    (p.creator || '').toLowerCase().includes(query)
+                );
+            }
+        }
+
+        // Render featured
+        if (featured.length > 0) {
+            featuredSection.style.display = '';
+            featured.forEach(proj => {
+                featuredGrid.appendChild(this.createExploreCard(proj, true));
+            });
+        } else {
+            featuredSection.style.display = 'none';
+        }
+
+        // Render community
+        if (community.length > 0) {
+            communitySection.style.display = '';
+            community.forEach(proj => {
+                communityGrid.appendChild(this.createExploreCard(proj, false));
+            });
+        } else {
+            communitySection.style.display = 'none';
+        }
+
+        // Show empty state
+        if (featured.length === 0 && community.length === 0) {
+            emptyEl.style.display = '';
+        } else {
+            emptyEl.style.display = 'none';
+        }
+    }
+
+    createExploreCard(project, isFeatured) {
+        const card = document.createElement('div');
+        card.className = 'explore-card';
+
+        const thumb = document.createElement('div');
+        thumb.className = 'explore-card-thumb';
+        if (project.thumbnail) {
+            const img = document.createElement('img');
+            img.src = project.thumbnail;
+            img.alt = project.name;
+            img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+            thumb.appendChild(img);
+        } else {
+            const icon = document.createElement('span');
+            icon.className = 'material-icons-round';
+            icon.style.cssText = 'font-size:48px;color:var(--bg-lighter);opacity:0.5';
+            icon.textContent = isFeatured ? 'star' : 'view_in_ar';
+            thumb.appendChild(icon);
+        }
+
+        if (isFeatured) {
+            const badge = document.createElement('span');
+            badge.className = 'explore-card-badge featured';
+            badge.textContent = 'Featured';
+            thumb.appendChild(badge);
+        }
+
+        const info = document.createElement('div');
+        info.className = 'explore-card-info';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'explore-card-name';
+        nameEl.textContent = project.name || 'Untitled';
+
+        const creatorEl = document.createElement('div');
+        creatorEl.className = 'explore-card-creator';
+        creatorEl.textContent = 'by ' + (project.creator || 'Unknown');
+
+        const descEl = document.createElement('div');
+        descEl.className = 'explore-card-desc';
+        descEl.textContent = project.description || '';
+
+        info.appendChild(nameEl);
+        info.appendChild(creatorEl);
+        if (project.description) info.appendChild(descEl);
+
+        const openBtn = document.createElement('button');
+        openBtn.className = 'explore-card-open-btn';
+        openBtn.innerHTML = '<span class="material-icons-round">file_copy</span> Open Copy';
+        openBtn.addEventListener('click', () => this.openExploreCopy(project));
+
+        card.appendChild(thumb);
+        card.appendChild(info);
+        card.appendChild(openBtn);
+        return card;
+    }
+
+    async openExploreCopy(project) {
+        let data = project.projectData;
+
+        // If no projectData inline, fetch from server
+        if (!data && project.id) {
+            try {
+                const res = await fetch('/api/projects/' + project.id);
+                if (res.ok) {
+                    const full = await res.json();
+                    data = full.projectData;
+                }
+            } catch (e) { /* offline */ }
+        }
+
+        if (!data) {
+            this.toast('Project data not available', 'error');
+            return;
+        }
+
+        const id = this.generateProjectId();
+        const now = Date.now();
+        const name = (project.name || 'Untitled') + ' (Remix)';
+        const projectData = JSON.parse(JSON.stringify(data));
+        projectData.name = name;
+
+        this.saveProjectData(id, projectData);
+        const index = this.getProjectIndex();
+        index[id] = {
+            name: name,
+            createdAt: now,
+            modifiedAt: now,
+            thumbnail: null
+        };
+        this.saveProjectIndex(index);
+
+        // Load it
+        this.loadProjectById(id);
+        this.toast('Opened remix: ' + name, 'success');
+    }
+
+    // ===== Publish / Share =====
+
+    initPublish() {
+        const modal = document.getElementById('publish-modal');
+
+        document.getElementById('publish-cancel').addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.add('hidden');
+        });
+
+        document.getElementById('publish-submit').addEventListener('click', () => {
+            this.publishProject();
+        });
+
+        document.getElementById('publish-unpublish').addEventListener('click', () => {
+            this.unpublishProject();
+            modal.classList.add('hidden');
+        });
+
+        document.getElementById('publish-copy-link').addEventListener('click', () => {
+            const input = document.getElementById('publish-link-input');
+            navigator.clipboard.writeText(input.value).then(() => {
+                this.toast('Link copied!', 'success');
+            }).catch(() => {
+                input.select();
+                document.execCommand('copy');
+                this.toast('Link copied!', 'success');
+            });
+        });
+
+        // Stop keyboard propagation
+        document.querySelectorAll('#publish-modal input, #publish-modal textarea').forEach(el => {
+            el.addEventListener('keydown', (e) => e.stopPropagation());
+        });
+    }
+
+    async showPublishModal() {
+        if (!this.currentProjectId) {
+            this.toast('Save a project first', 'error');
+            return;
+        }
+
+        const modal = document.getElementById('publish-modal');
+        const titleInput = document.getElementById('publish-title');
+        const descInput = document.getElementById('publish-description');
+        const shareLinkEl = document.getElementById('publish-share-link');
+        const unpublishBtn = document.getElementById('publish-unpublish');
+
+        titleInput.value = this.projectName || '';
+        descInput.value = '';
+
+        // Reset tags
+        document.querySelectorAll('.publish-tag-checkbox input').forEach(cb => cb.checked = false);
+
+        // Check if already published on server
+        let isPublished = false;
+        try {
+            const res = await fetch('/api/projects/check/' + this.currentProjectId);
+            if (res.ok) {
+                const info = await res.json();
+                isPublished = info.published;
+                if (isPublished) {
+                    descInput.value = info.description || '';
+                    (info.tags || []).forEach(tag => {
+                        const cb = document.querySelector(`.publish-tag-checkbox input[value="${tag}"]`);
+                        if (cb) cb.checked = true;
+                    });
+                }
+            }
+        } catch (e) { /* offline */ }
+
+        if (isPublished) {
+            shareLinkEl.classList.add('visible');
+            unpublishBtn.classList.remove('hidden');
+            this._generateShareLink();
+        } else {
+            shareLinkEl.classList.remove('visible');
+            unpublishBtn.classList.add('hidden');
+        }
+
+        modal.classList.remove('hidden');
+    }
+
+    async publishProject() {
+        const title = document.getElementById('publish-title').value.trim();
+        const description = document.getElementById('publish-description').value.trim();
+        const tags = [];
+        document.querySelectorAll('.publish-tag-checkbox input:checked').forEach(cb => tags.push(cb.value));
+
+        if (!title) {
+            this.toast('Please enter a title', 'error');
+            return;
+        }
+
+        const projectData = this._gatherProjectData();
+
+        try {
+            const res = await fetch('/api/projects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: this.currentProjectId,
+                    name: title,
+                    description,
+                    tags,
+                    thumbnail: null,
+                    projectData
+                })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                this.toast(err.error || 'Failed to publish', 'error');
+                return;
+            }
+        } catch (e) {
+            this.toast('Connection error', 'error');
+            return;
+        }
+
+        // Mark in local project index
+        const index = this.getProjectIndex();
+        if (index[this.currentProjectId]) {
+            index[this.currentProjectId].shared = true;
+            this.saveProjectIndex(index);
+        }
+
+        // Show share link
+        this._generateShareLink();
+        document.getElementById('publish-share-link').classList.add('visible');
+        document.getElementById('publish-unpublish').classList.remove('hidden');
+
+        this.toast('Project published!', 'success');
+    }
+
+    async unpublishProject() {
+        if (!this.currentProjectId) return;
+
+        try {
+            await fetch('/api/projects/' + this.currentProjectId, { method: 'DELETE' });
+        } catch (e) { /* ok */ }
+
+        const index = this.getProjectIndex();
+        if (index[this.currentProjectId]) {
+            delete index[this.currentProjectId].shared;
+            this.saveProjectIndex(index);
+        }
+
+        this.toast('Project unpublished', 'success');
+    }
+
+    _generateShareLink() {
+        try {
+            const data = this._gatherProjectData();
+            const json = JSON.stringify(data);
+            const encoded = btoa(unescape(encodeURIComponent(json)));
+            const url = window.location.origin + window.location.pathname + '#project=' + encoded;
+            document.getElementById('publish-link-input').value = url;
+        } catch (e) {
+            document.getElementById('publish-link-input').value = 'Project too large for link sharing';
+        }
+    }
+
     // ===== Toast =====
 
     toast(message, type = '') {
@@ -3385,10 +4334,10 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
         window.app = new App();
     } catch (e) {
-        console.error('BlockForge init error:', e);
+        console.error('Cobalt Studio init error:', e);
         const errDiv = document.createElement('div');
         errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;padding:40px;color:#ff6b6b;font-family:monospace;background:#1a1a2e;z-index:99999;overflow:auto';
-        errDiv.innerHTML = '<h2>Error Initializing BlockForge Studio</h2><pre>' + e.message + '\n\n' + e.stack + '</pre>';
+        errDiv.innerHTML = '<h2>Error Initializing Cobalt Studio</h2><pre>' + e.message + '\n\n' + e.stack + '</pre>';
         document.body.appendChild(errDiv);
     }
 });
