@@ -175,7 +175,9 @@ class Runtime {
                 scale: obj.scale.clone(),
                 visible: obj.visible,
                 color: obj.material ? obj.material.color.clone() : null,
-                opacity: obj.material ? obj.material.opacity : 1
+                opacity: obj.material ? obj.material.opacity : 1,
+                textureId: obj.userData.textureId || null,
+                tileScale: obj.userData.tileScale || null
             });
         });
 
@@ -300,6 +302,10 @@ class Runtime {
                     obj.material.color.copy(state.color);
                     obj.material.opacity = state.opacity;
                     obj.material.transparent = state.opacity < 1;
+                }
+                // Restore texture
+                if (state.textureId && window._textureManager) {
+                    window._textureManager.applyTexture(obj, state.textureId, state.tileScale || 1);
                 }
             }
         });

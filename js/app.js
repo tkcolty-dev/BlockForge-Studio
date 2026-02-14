@@ -11,6 +11,8 @@ class App {
         this.scene3d = new Scene3D(canvas);
         this.blockCode = new BlockCode();
         this.runtime = new Runtime(this.scene3d, this.blockCode);
+        this.textureManager = new TextureManager();
+        window._textureManager = this.textureManager;
 
         this.undoStack = [];
         this.redoStack = [];
@@ -547,6 +549,11 @@ class App {
             document.getElementById('prop-opacity').value = Math.round((mat.opacity ?? 1) * 100);
         }
 
+        // Update texture swatch highlight
+        const texId = obj.userData.textureId || null;
+        this._highlightTextureSwatch(texId);
+        this._updateTileScaleUI(texId, obj.userData.tileScale || 1);
+
         // Update status bar
         document.getElementById('status-pos').textContent =
             `X: ${obj.position.x.toFixed(1)} Y: ${obj.position.y.toFixed(1)} Z: ${obj.position.z.toFixed(1)}`;
@@ -663,6 +670,87 @@ class App {
                 swatch.classList.add('active');
             });
         });
+
+        // === Texture swatches ===
+        this._buildTextureSwatches();
+
+        // Tile scale slider
+        const tileSlider = document.getElementById('prop-tile-scale');
+        const tileValue = document.getElementById('tile-scale-value');
+        tileSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            tileValue.textContent = val;
+            const obj = this.scene3d.selectedObject;
+            if (!obj || !obj.userData.textureId) return;
+            obj.userData.tileScale = val;
+            this.textureManager.applyTexture(obj, obj.userData.textureId, val);
+            this.scene3d._needsRender = true;
+        });
+    }
+
+    _buildTextureSwatches() {
+        const container = document.getElementById('texture-swatches');
+        container.innerHTML = '';
+
+        // "None" button
+        const noneBtn = document.createElement('button');
+        noneBtn.className = 'texture-swatch-none active';
+        noneBtn.title = 'No Texture';
+        noneBtn.innerHTML = '<span class="material-icons-round" style="font-size:16px">close</span>';
+        noneBtn.addEventListener('click', () => this._setTexture(null));
+        container.appendChild(noneBtn);
+
+        // Category groups
+        this.textureManager.categories.forEach(cat => {
+            const label = document.createElement('div');
+            label.className = 'texture-category-label';
+            label.textContent = cat.name;
+            container.appendChild(label);
+
+            cat.ids.forEach(id => {
+                const btn = document.createElement('button');
+                btn.className = 'texture-swatch';
+                btn.title = this.textureManager.labels[id];
+                btn.dataset.textureId = id;
+                btn.style.backgroundImage = `url(${this.textureManager.getPreviewDataURL(id)})`;
+                btn.addEventListener('click', () => this._setTexture(id));
+                container.appendChild(btn);
+            });
+        });
+    }
+
+    _setTexture(textureId) {
+        const obj = this.scene3d.selectedObject;
+        if (!obj) return;
+
+        const tileScale = textureId ? (obj.userData.tileScale || 1) : 1;
+        this.textureManager.applyTexture(obj, textureId, tileScale);
+        this.scene3d._needsRender = true;
+        this._highlightTextureSwatch(textureId);
+        this._updateTileScaleUI(textureId, tileScale);
+    }
+
+    _highlightTextureSwatch(activeId) {
+        const container = document.getElementById('texture-swatches');
+        container.querySelectorAll('.texture-swatch, .texture-swatch-none').forEach(el => {
+            el.classList.remove('active');
+        });
+        if (!activeId) {
+            container.querySelector('.texture-swatch-none')?.classList.add('active');
+        } else {
+            container.querySelector(`[data-texture-id="${activeId}"]`)?.classList.add('active');
+        }
+    }
+
+    _updateTileScaleUI(textureId, tileScale) {
+        const row = document.getElementById('tile-scale-row');
+        if (textureId) {
+            row.classList.remove('hidden');
+            document.getElementById('prop-tile-scale').value = tileScale || 1;
+            document.getElementById('tile-scale-value').textContent = tileScale || 1;
+        } else {
+            row.classList.add('hidden');
+        }
     }
 
     // ===== Block Editor =====

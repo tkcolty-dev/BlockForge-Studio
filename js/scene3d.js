@@ -845,6 +845,12 @@ class Scene3D {
             dup.material.transparent = obj.material.transparent;
         }
 
+        // Copy texture
+        if (obj.userData.textureId && typeof TextureManager !== 'undefined') {
+            const mgr = window._textureManager || (window._textureManager = new TextureManager());
+            mgr.applyTexture(dup, obj.userData.textureId, obj.userData.tileScale || 1);
+        }
+
         return dup;
     }
 
@@ -1568,6 +1574,8 @@ class Scene3D {
                     metalness: obj.material.metalness,
                     opacity: obj.material.opacity
                 } : null,
+                textureId: obj.userData.textureId || null,
+                tileScale: obj.userData.tileScale || null,
                 childColors: childColors
             };
 
@@ -1616,6 +1624,12 @@ class Scene3D {
                 obj.material.metalness = item.material.metalness;
                 obj.material.opacity = item.material.opacity;
                 obj.material.transparent = item.material.opacity < 1;
+            }
+
+            // Restore texture
+            if (item.textureId && typeof TextureManager !== 'undefined') {
+                const mgr = window._textureManager || (window._textureManager = new TextureManager());
+                mgr.applyTexture(obj, item.textureId, item.tileScale || 1);
             }
 
             // Apply childColors to existing group children (for non-NPC groups that don't use opts.childColors in addObject)
