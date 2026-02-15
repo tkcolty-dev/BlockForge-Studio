@@ -3974,7 +3974,6 @@ class App {
 
     initExplore() {
         this.exploreCategoryFilter = 'all';
-        this.initFeaturedProjects();
 
         // Tab switching
         document.querySelectorAll('.title-tab-btn').forEach(btn => {
@@ -4009,202 +4008,45 @@ class App {
         document.getElementById('btn-sign-out').addEventListener('click', () => this.handleSignOut());
     }
 
-    initFeaturedProjects() {
-        this.featuredProjects = [
-            {
-                id: 'featured_coin_collector',
-                name: 'Coin Collector Arena',
-                creator: 'CobaltTeam',
-                description: 'Collect all the coins in the arena! Watch out for NPCs.',
-                category: 'games',
-                tags: ['Games', 'Adventure'],
-                publishedAt: Date.now() - 86400000,
-                projectData: {
-                    version: 1,
-                    name: 'Coin Collector Arena',
-                    scene: [
-                        { type: 'box', name: 'Arena Floor', position: { x: 0, y: -0.125, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 20, y: 0.25, z: 20 }, color: '#4a7c3f', anchored: true, collidable: true },
-                        { type: 'spawn', name: 'SpawnPoint', position: { x: 0, y: 0.5, z: 8 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71' },
-                        { type: 'coin', name: 'Coin1', position: { x: 3, y: 1, z: 3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f' },
-                        { type: 'coin', name: 'Coin2', position: { x: -4, y: 1, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f' },
-                        { type: 'coin', name: 'Coin3', position: { x: 5, y: 1, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f' },
-                        { type: 'coin', name: 'Coin4', position: { x: -6, y: 1, z: 4 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#f1c40f' },
-                        { type: 'npc', name: 'Guard', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#e74c3c' },
-                        { type: 'crate', name: 'Cover', position: { x: -3, y: 0.5, z: -4 }, rotation: { x: 0, y: 30, z: 0 }, scale: { x: 2, y: 2, z: 2 }, color: '#d4a24e', anchored: true, collidable: true }
-                    ],
-                    environment: { skybox: 'default' }
-                }
-            },
-            {
-                id: 'featured_sunset_village',
-                name: 'Sunset Village',
-                creator: 'CobaltTeam',
-                description: 'A peaceful village scene bathed in warm sunset light.',
-                category: 'art',
-                tags: ['Art'],
-                publishedAt: Date.now() - 172800000,
-                projectData: {
-                    version: 1,
-                    name: 'Sunset Village',
-                    scene: [
-                        { type: 'box', name: 'Ground', position: { x: 0, y: -0.125, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 30, y: 0.25, z: 30 }, color: '#4a7c3f', anchored: true, collidable: true },
-                        { type: 'house', name: 'House1', position: { x: -4, y: 0.5, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#e67e22' },
-                        { type: 'house', name: 'House2', position: { x: 4, y: 0.5, z: -2 }, rotation: { x: 0, y: 45, z: 0 }, scale: { x: 1.2, y: 1.2, z: 1.2 }, color: '#3498db' },
-                        { type: 'tree', name: 'Tree1', position: { x: -7, y: 0.5, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#27ae60' },
-                        { type: 'tree', name: 'Tree2', position: { x: 6, y: 0.5, z: 5 }, rotation: { x: 0, y: 30, z: 0 }, scale: { x: 1, y: 1.3, z: 1 }, color: '#27ae60' },
-                        { type: 'tree', name: 'Tree3', position: { x: 0, y: 0.5, z: 6 }, rotation: { x: 0, y: 60, z: 0 }, scale: { x: 1.2, y: 1.4, z: 1.2 }, color: '#27ae60' },
-                        { type: 'spawn', name: 'Spawn', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71' }
-                    ],
-                    environment: { skybox: 'sunset' }
-                }
-            },
-            {
-                id: 'featured_platformer',
-                name: 'Platformer Challenge',
-                creator: 'CobaltTeam',
-                description: 'Jump across floating platforms and collect gems to win!',
-                category: 'games',
-                tags: ['Games', 'Platformer'],
-                publishedAt: Date.now() - 259200000,
-                projectData: {
-                    version: 1,
-                    name: 'Platformer Challenge',
-                    scene: [
-                        { type: 'platform', name: 'Start', position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 3, y: 1, z: 3 }, color: '#1abc9c', anchored: true, collidable: true },
-                        { type: 'spawn', name: 'Spawn', position: { x: 0, y: 1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71' },
-                        { type: 'platform', name: 'Plat2', position: { x: 4, y: 1.5, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1, z: 2 }, color: '#1abc9c', anchored: true, collidable: true },
-                        { type: 'platform', name: 'Plat3', position: { x: 8, y: 3, z: -1 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1, z: 2 }, color: '#1abc9c', anchored: true, collidable: true },
-                        { type: 'gem', name: 'Gem1', position: { x: 4, y: 3, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#e74c3c' },
-                        { type: 'platform', name: 'Plat4', position: { x: 12, y: 4.5, z: -4 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 2, y: 1, z: 2 }, color: '#1abc9c', anchored: true, collidable: true },
-                        { type: 'gem', name: 'Gem2', position: { x: 8, y: 4.5, z: -1 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#3498db' },
-                        { type: 'platform', name: 'Finish', position: { x: 16, y: 6, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 3, y: 1, z: 3 }, color: '#f1c40f', anchored: true, collidable: true },
-                        { type: 'gem', name: 'Gem3', position: { x: 16, y: 7.5, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#f1c40f' }
-                    ],
-                    environment: { skybox: 'gradient' }
-                }
-            },
-            {
-                id: 'featured_neon_gallery',
-                name: 'Neon Gallery',
-                creator: 'CobaltTeam',
-                description: 'A glowing art gallery with emissive neon objects in the dark.',
-                category: 'art',
-                tags: ['Art'],
-                publishedAt: Date.now() - 345600000,
-                projectData: {
-                    version: 1,
-                    name: 'Neon Gallery',
-                    scene: [
-                        { type: 'box', name: 'Floor', position: { x: 0, y: -0.125, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 16, y: 0.25, z: 16 }, color: '#1a1a2e', anchored: true, collidable: true },
-                        { type: 'sphere', name: 'GlowSphere', position: { x: 0, y: 2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#e91e63', materialType: 'emissive' },
-                        { type: 'torus', name: 'GlowRing', position: { x: -4, y: 2, z: -3 }, rotation: { x: 45, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#00bcd4', materialType: 'emissive' },
-                        { type: 'cylinder', name: 'Pillar1', position: { x: 5, y: 1.5, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.5, y: 3, z: 0.5 }, color: '#9b59b6', materialType: 'emissive' },
-                        { type: 'cylinder', name: 'Pillar2', position: { x: -5, y: 1.5, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 0.5, y: 3, z: 0.5 }, color: '#2ecc71', materialType: 'emissive' },
-                        { type: 'cone', name: 'GlowCone', position: { x: 4, y: 1, z: 3 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 2, z: 1 }, color: '#f1c40f', materialType: 'emissive' },
-                        { type: 'spawn', name: 'Spawn', position: { x: 0, y: 0.5, z: 7 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71' }
-                    ],
-                    environment: { skybox: 'night' }
-                }
-            },
-            {
-                id: 'featured_castle_defense',
-                name: 'Castle Defense',
-                creator: 'CobaltTeam',
-                description: 'Defend your castle from approaching enemies! Build walls and fight back.',
-                category: 'games',
-                tags: ['Games', 'Adventure'],
-                publishedAt: Date.now() - 432000000,
-                projectData: {
-                    version: 1,
-                    name: 'Castle Defense',
-                    scene: [
-                        { type: 'box', name: 'Ground', position: { x: 0, y: -0.125, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 30, y: 0.25, z: 30 }, color: '#5a8c4f', anchored: true, collidable: true },
-                        { type: 'wall', name: 'FrontWall', position: { x: 0, y: 1, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true },
-                        { type: 'wall', name: 'LeftWall', position: { x: -6, y: 1, z: -1 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 3, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true },
-                        { type: 'wall', name: 'RightWall', position: { x: 6, y: 1, z: -1 }, rotation: { x: 0, y: 90, z: 0 }, scale: { x: 3, y: 1, z: 1 }, color: '#95a5a6', anchored: true, collidable: true },
-                        { type: 'arch', name: 'Gate', position: { x: 0, y: 0.5, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1.5, y: 1.5, z: 1.5 }, color: '#7f8c8d', anchored: true, collidable: true },
-                        { type: 'spawn', name: 'Spawn', position: { x: 0, y: 0.5, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#2ecc71' },
-                        { type: 'npc', name: 'Enemy1', position: { x: -5, y: 0.5, z: -12 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#c0392b' },
-                        { type: 'npc', name: 'Enemy2', position: { x: 3, y: 0.5, z: -14 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }, color: '#c0392b' }
-                    ],
-                    environment: { skybox: 'cloudy' }
-                }
-            }
-        ];
-    }
 
     async renderExploreGrid() {
-        const featuredGrid = document.getElementById('explore-featured-grid');
         const communityGrid = document.getElementById('explore-community-grid');
-        const featuredSection = document.getElementById('explore-featured-section');
         const communitySection = document.getElementById('explore-community-section');
         const emptyEl = document.getElementById('explore-empty');
         const query = (document.getElementById('explore-search').value || '').trim().toLowerCase();
         const filter = this.exploreCategoryFilter;
         const currentUser = this._cachedUser?.displayName || '';
 
-        featuredGrid.innerHTML = '';
         communityGrid.innerHTML = '';
 
-        // Filter featured projects
-        let featured = this.featuredProjects || [];
+        // Get community projects from server
+        let projects = [];
+        try {
+            const res = await fetch('/api/projects');
+            if (res.ok) {
+                projects = await res.json();
+            }
+        } catch (e) { /* offline */ }
+
         if (filter === 'my-shared') {
-            featured = [];
-        } else if (filter === 'featured') {
-            // show all featured
+            projects = projects.filter(p => p.creator && p.creator === currentUser);
         } else if (filter === 'games') {
-            featured = featured.filter(p => p.category === 'games');
+            projects = projects.filter(p => (p.tags || []).includes('Games'));
         } else if (filter === 'art') {
-            featured = featured.filter(p => p.category === 'art');
+            projects = projects.filter(p => (p.tags || []).includes('Art'));
         }
         if (query) {
-            featured = featured.filter(p =>
-                p.name.toLowerCase().includes(query) ||
-                p.description.toLowerCase().includes(query) ||
-                p.creator.toLowerCase().includes(query)
+            projects = projects.filter(p =>
+                (p.name || '').toLowerCase().includes(query) ||
+                (p.description || '').toLowerCase().includes(query) ||
+                (p.creator || '').toLowerCase().includes(query)
             );
         }
 
-        // Get community projects from server
-        let community = [];
-        if (filter !== 'featured') {
-            try {
-                const res = await fetch('/api/projects');
-                if (res.ok) {
-                    community = await res.json();
-                }
-            } catch (e) { /* offline */ }
-
-            if (filter === 'my-shared') {
-                community = community.filter(p => p.creator && p.creator === currentUser);
-            } else if (filter === 'games') {
-                community = community.filter(p => (p.tags || []).includes('Games'));
-            } else if (filter === 'art') {
-                community = community.filter(p => (p.tags || []).includes('Art'));
-            }
-            if (query) {
-                community = community.filter(p =>
-                    (p.name || '').toLowerCase().includes(query) ||
-                    (p.description || '').toLowerCase().includes(query) ||
-                    (p.creator || '').toLowerCase().includes(query)
-                );
-            }
-        }
-
-        // Render featured
-        if (featured.length > 0) {
-            featuredSection.style.display = '';
-            featured.forEach(proj => {
-                featuredGrid.appendChild(this.createExploreCard(proj, true));
-            });
-        } else {
-            featuredSection.style.display = 'none';
-        }
-
-        // Render community
-        if (community.length > 0) {
+        // Render projects
+        if (projects.length > 0) {
             communitySection.style.display = '';
-            community.forEach(proj => {
+            projects.forEach(proj => {
                 communityGrid.appendChild(this.createExploreCard(proj, false));
             });
         } else {
@@ -4212,7 +4054,7 @@ class App {
         }
 
         // Show empty state
-        if (featured.length === 0 && community.length === 0) {
+        if (projects.length === 0) {
             emptyEl.style.display = '';
         } else {
             emptyEl.style.display = 'none';
@@ -4235,15 +4077,8 @@ class App {
             const icon = document.createElement('span');
             icon.className = 'material-icons-round';
             icon.style.cssText = 'font-size:48px;color:var(--bg-lighter);opacity:0.5';
-            icon.textContent = isFeatured ? 'star' : 'view_in_ar';
+            icon.textContent = 'view_in_ar';
             thumb.appendChild(icon);
-        }
-
-        if (isFeatured) {
-            const badge = document.createElement('span');
-            badge.className = 'explore-card-badge featured';
-            badge.textContent = 'Featured';
-            thumb.appendChild(badge);
         }
 
         const info = document.createElement('div');
