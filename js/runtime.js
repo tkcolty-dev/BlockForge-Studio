@@ -285,8 +285,8 @@ class Runtime {
         const viewcube = document.querySelector('.viewcube-wrapper');
         if (viewcube) viewcube.classList.add('hidden');
 
-        // Hide editor grid
-        this.scene3d.setGridVisible(false);
+        // Hide editor grid (only in editor mode)
+        if (!this.scene3d.viewerMode) this.scene3d.setGridVisible(false);
 
         // Update controls hint
         const hints = {
@@ -465,8 +465,8 @@ class Runtime {
         const viewcube = document.querySelector('.viewcube-wrapper');
         if (viewcube) viewcube.classList.remove('hidden');
 
-        // Restore editor grid
-        this.scene3d.setGridVisible(true);
+        // Restore editor grid (only in editor mode, not viewer)
+        if (!this.scene3d.viewerMode) this.scene3d.setGridVisible(true);
 
         // Clear timers
         if (this._timerIntervals) {

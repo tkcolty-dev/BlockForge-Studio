@@ -967,6 +967,7 @@ class App {
         document.addEventListener('keydown', (e) => {
             if (!this.currentProjectId) return;
             if (this.runtime.isRunning) return;
+            if (this._ppScene3d) return; // Don't fire editor shortcuts while project page viewer is open
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
 
             switch (e.key) {
@@ -1151,8 +1152,12 @@ class App {
     }
 
     deleteProjectData(id) {
-        localStorage.removeItem('blockforge_project_' + id);
         const index = this.getProjectIndex();
+        // If project was shared, also delete from server
+        if (index[id] && index[id].shared) {
+            fetch('/api/projects/' + id, { method: 'DELETE' }).catch(() => {});
+        }
+        localStorage.removeItem('blockforge_project_' + id);
         delete index[id];
         this.saveProjectIndex(index);
     }
