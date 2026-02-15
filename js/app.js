@@ -4407,7 +4407,7 @@ class App {
 
         // Comment form
         document.getElementById('pp-comment-post').onclick = () => this._submitComment();
-        document.getElementById('pp-comment-input').addEventListener('keydown', (e) => e.stopPropagation());
+        document.getElementById('pp-comment-input').onkeydown = (e) => e.stopPropagation();
 
         // Load comments
         this._loadComments();
@@ -4416,7 +4416,7 @@ class App {
     _initViewerScene() {
         // Clean up previous viewer if any
         if (this._ppScene3d) {
-            this._ppScene3d.renderer.dispose();
+            this._ppScene3d.dispose();
             this._ppScene3d = null;
         }
         if (this._ppRuntime) {
@@ -4429,23 +4429,14 @@ class App {
         // Create viewer-mode Scene3D
         this._ppScene3d = new Scene3D(canvas, { viewerMode: true });
 
-        // Create a minimal blockCode for runtime
+        // Create a minimal blockCode that can compile scripts using real block definitions
+        const blockDefs = BlockCode.prototype.defineBlocks.call({});
         this._ppBlockCode = {
             customVariables: [],
             customMessages: [],
-            compileScripts: (obj) => {
-                if (!obj.userData.scripts || obj.userData.scripts.length === 0) return [];
-                const results = [];
-                obj.userData.scripts.forEach(script => {
-                    if (!script.trigger) return;
-                    results.push({
-                        trigger: script.trigger,
-                        triggerValues: script.triggerValues || {},
-                        commands: script.commands || []
-                    });
-                });
-                return results;
-            }
+            blocks: blockDefs,
+            compileScripts: BlockCode.prototype.compileScripts,
+            _compileBlock: BlockCode.prototype._compileBlock
         };
 
         // Create runtime with domMap pointing to viewer DOM
@@ -4582,7 +4573,7 @@ class App {
 
         // Dispose viewer
         if (this._ppScene3d) {
-            this._ppScene3d.renderer.dispose();
+            this._ppScene3d.dispose();
             this._ppScene3d = null;
         }
         this._ppRuntime = null;

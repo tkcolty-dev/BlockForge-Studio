@@ -1491,7 +1491,13 @@ class Scene3D {
         this.renderer.setSize(width, height);
     }
 
+    dispose() {
+        this._disposed = true;
+        if (this.renderer) this.renderer.dispose();
+    }
+
     animate() {
+        if (this._disposed) return;
         requestAnimationFrame(() => this.animate());
 
         if (!this.isPlaying) {
