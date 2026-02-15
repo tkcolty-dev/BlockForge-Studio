@@ -1157,8 +1157,14 @@ class App {
                 method: 'DELETE',
                 credentials: 'same-origin'
             }).then(() => {
-                // Refresh explore grid after server deletion
                 this.renderExploreGrid();
+            }).catch(() => {});
+        }
+        // Also delete from cloud sync
+        if (this._cachedUser && !this._offlineMode) {
+            fetch('/api/user/projects/' + id, {
+                method: 'DELETE',
+                credentials: 'same-origin'
             }).catch(() => {});
         }
         localStorage.removeItem('blockforge_project_' + id);
@@ -2572,6 +2578,27 @@ class App {
             }).catch(() => {});
         }
 
+        // Cloud sync — save to server
+        if (this._cachedUser && !this._offlineMode) {
+            const entry = index[this.currentProjectId];
+            fetch('/api/user/projects/' + this.currentProjectId, {
+                method: 'PUT',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: entry.name,
+                    project_data: JSON.stringify(data),
+                    thumbnail: entry.thumbnail,
+                    favorite: entry.favorite,
+                    shared: entry.shared,
+                    description: entry.description,
+                    tags: entry.tags,
+                    created_at: entry.createdAt,
+                    modified_at: entry.modifiedAt
+                })
+            }).catch(() => {});
+        }
+
         this.hasUnsavedChanges = false;
         this.lastSaveTime = Date.now();
         this.updateToolbarProjectName();
@@ -3640,6 +3667,7 @@ class App {
             if (res.ok) {
                 this._cachedUser = await res.json();
                 this._offlineMode = false;
+                this._syncProjects();
                 return true;
             }
         } catch (e) { /* not logged in */ }
@@ -3653,6 +3681,116 @@ class App {
         }
         this._offlineMode = true;
         return true;
+    }
+
+    async _syncProjects() {
+        if (this._offlineMode || !this._cachedUser) return;
+        try {
+            const res = await fetch('/api/user/projects', { credentials: 'same-origin' });
+            if (!res.ok) return;
+            const serverList = await res.json();
+            const serverMap = {};
+            for (const s of serverList) serverMap[s.id] = s;
+
+            const localIndex = this.getProjectIndex();
+            const allIds = new Set([...Object.keys(localIndex), ...Object.keys(serverMap)]);
+
+            for (const id of allIds) {
+                const local = localIndex[id];
+                const server = serverMap[id];
+
+                if (local && !server) {
+                    // Upload local-only project to server
+                    const data = this.getProjectData(id);
+                    if (data) {
+                        fetch('/api/user/projects/' + id, {
+                            method: 'PUT',
+                            credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: local.name,
+                                project_data: JSON.stringify(data),
+                                thumbnail: local.thumbnail,
+                                favorite: local.favorite,
+                                shared: local.shared,
+                                description: local.description,
+                                tags: local.tags,
+                                created_at: local.createdAt,
+                                modified_at: local.modifiedAt
+                            })
+                        }).catch(() => {});
+                    }
+                } else if (!local && server) {
+                    // Download server-only project
+                    try {
+                        const dRes = await fetch('/api/user/projects/' + id, { credentials: 'same-origin' });
+                        if (dRes.ok) {
+                            const { project_data } = await dRes.json();
+                            const parsed = JSON.parse(project_data);
+                            this.saveProjectData(id, parsed);
+                            localIndex[id] = {
+                                name: server.name,
+                                createdAt: Number(server.created_at),
+                                modifiedAt: Number(server.modified_at),
+                                thumbnail: server.thumbnail,
+                                favorite: server.favorite || false,
+                                shared: server.shared || false,
+                                description: server.description || '',
+                                tags: typeof server.tags === 'string' ? JSON.parse(server.tags) : (server.tags || [])
+                            };
+                        }
+                    } catch (e) { /* skip */ }
+                } else if (local && server) {
+                    const localTime = local.modifiedAt || 0;
+                    const serverTime = Number(server.modified_at) || 0;
+                    if (serverTime > localTime) {
+                        // Server is newer — download
+                        try {
+                            const dRes = await fetch('/api/user/projects/' + id, { credentials: 'same-origin' });
+                            if (dRes.ok) {
+                                const { project_data } = await dRes.json();
+                                const parsed = JSON.parse(project_data);
+                                this.saveProjectData(id, parsed);
+                                localIndex[id] = {
+                                    name: server.name,
+                                    createdAt: Number(server.created_at),
+                                    modifiedAt: Number(server.modified_at),
+                                    thumbnail: server.thumbnail,
+                                    favorite: server.favorite || false,
+                                    shared: server.shared || false,
+                                    description: server.description || '',
+                                    tags: typeof server.tags === 'string' ? JSON.parse(server.tags) : (server.tags || [])
+                                };
+                            }
+                        } catch (e) { /* skip */ }
+                    } else if (localTime > serverTime) {
+                        // Local is newer — upload
+                        const data = this.getProjectData(id);
+                        if (data) {
+                            fetch('/api/user/projects/' + id, {
+                                method: 'PUT',
+                                credentials: 'same-origin',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    name: local.name,
+                                    project_data: JSON.stringify(data),
+                                    thumbnail: local.thumbnail,
+                                    favorite: local.favorite,
+                                    shared: local.shared,
+                                    description: local.description,
+                                    tags: local.tags,
+                                    created_at: local.createdAt,
+                                    modified_at: local.modifiedAt
+                                })
+                            }).catch(() => {});
+                        }
+                    }
+                }
+            }
+            this.saveProjectIndex(localIndex);
+        } catch (e) {
+            console.warn('Project sync failed:', e);
+        }
     }
 
     initAuth() {
@@ -3928,9 +4066,10 @@ class App {
                 return;
             }
             this._cachedUser = data;
+            this._offlineMode = false;
             this.hideAuthScreen();
             this.updateUserDisplay();
-            this.showTitleScreen();
+            this._syncProjects().then(() => this.showTitleScreen());
             this.toast('Welcome to Cobalt Studio, ' + data.displayName + '!', 'success');
             // Prompt to choose avatar after signup
             setTimeout(() => this.showAvatarPicker(), 600);
@@ -3966,9 +4105,10 @@ class App {
                 return;
             }
             this._cachedUser = data;
+            this._offlineMode = false;
             this.hideAuthScreen();
             this.updateUserDisplay();
-            this.showTitleScreen();
+            this._syncProjects().then(() => this.showTitleScreen());
             this.toast('Welcome back, ' + data.displayName + '!', 'success');
         } catch (e) {
             errorEl.textContent = 'Connection error. Is the server running?';

@@ -110,6 +110,23 @@ async function initDb() {
             created_at BIGINT NOT NULL
         )
     `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS user_projects (
+            id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            project_data TEXT NOT NULL,
+            thumbnail TEXT,
+            favorite BOOLEAN DEFAULT false,
+            shared BOOLEAN DEFAULT false,
+            description TEXT DEFAULT '',
+            tags TEXT DEFAULT '[]',
+            created_at BIGINT NOT NULL,
+            modified_at BIGINT NOT NULL,
+            PRIMARY KEY (id, user_id)
+        )
+    `);
 }
 
 const AVATAR_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63', '#00bcd4'];
@@ -509,6 +526,47 @@ app.post('/api/projects/:id/emojis', authenticate, async (req, res) => {
         [req.params.id, req.user.id, username, emoji, now]
     );
     res.json({ ok: true, username, emoji, created_at: now });
+});
+
+// --- User project cloud sync ---
+app.get('/api/user/projects', authenticate, async (req, res) => {
+    const { rows } = await pool.query(
+        'SELECT id, name, thumbnail, favorite, shared, description, tags, created_at, modified_at FROM user_projects WHERE user_id = $1',
+        [req.user.id]
+    );
+    res.json(rows);
+});
+
+app.get('/api/user/projects/:id', authenticate, async (req, res) => {
+    const { rows } = await pool.query(
+        'SELECT project_data FROM user_projects WHERE id = $1 AND user_id = $2',
+        [req.params.id, req.user.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ project_data: rows[0].project_data });
+});
+
+app.put('/api/user/projects/:id', authenticate, async (req, res) => {
+    const { name, project_data, thumbnail, favorite, shared, description, tags, created_at, modified_at } = req.body;
+    await pool.query(`
+        INSERT INTO user_projects (id, user_id, name, project_data, thumbnail, favorite, shared, description, tags, created_at, modified_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ON CONFLICT (id, user_id) DO UPDATE SET
+            name = EXCLUDED.name,
+            project_data = EXCLUDED.project_data,
+            thumbnail = EXCLUDED.thumbnail,
+            favorite = EXCLUDED.favorite,
+            shared = EXCLUDED.shared,
+            description = EXCLUDED.description,
+            tags = EXCLUDED.tags,
+            modified_at = EXCLUDED.modified_at
+    `, [req.params.id, req.user.id, name, project_data, thumbnail || null, favorite || false, shared || false, description || '', JSON.stringify(tags || []), created_at || Date.now(), modified_at || Date.now()]);
+    res.json({ ok: true });
+});
+
+app.delete('/api/user/projects/:id', authenticate, async (req, res) => {
+    await pool.query('DELETE FROM user_projects WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+    res.json({ ok: true });
 });
 
 // Initialize DB and start server
