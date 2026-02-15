@@ -948,19 +948,17 @@ class App {
             if (e.key !== 'Escape') return;
             if (!this._ppScene3d) return;
 
+            e.preventDefault();
+
             // If viewer runtime is running, stop it
             if (this._ppRuntime && this._ppRuntime.isRunning) {
-                e.preventDefault();
                 this._ppStopPlay();
-                return;
             }
 
             // If viewer is fullscreen, exit fullscreen
             const ppContainer = document.getElementById('pp-viewport-container');
             if (ppContainer && ppContainer.classList.contains('pp-fullscreen')) {
-                e.preventDefault();
                 this._ppToggleFullscreen();
-                return;
             }
         });
 
@@ -1155,7 +1153,13 @@ class App {
         const index = this.getProjectIndex();
         // If project was shared, also delete from server
         if (index[id] && index[id].shared) {
-            fetch('/api/projects/' + id, { method: 'DELETE' }).catch(() => {});
+            fetch('/api/projects/' + id, {
+                method: 'DELETE',
+                credentials: 'same-origin'
+            }).then(() => {
+                // Refresh explore grid after server deletion
+                this.renderExploreGrid();
+            }).catch(() => {});
         }
         localStorage.removeItem('blockforge_project_' + id);
         delete index[id];
@@ -2553,6 +2557,7 @@ class App {
         if (existing.shared) {
             fetch('/api/projects', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     id: this.currentProjectId,
@@ -4434,6 +4439,7 @@ class App {
         document.getElementById('pp-btn-play').onclick = () => this._ppStartPlay();
         document.getElementById('pp-btn-stop').onclick = () => this._ppStopPlay();
         document.getElementById('pp-btn-fullscreen').onclick = () => this._ppToggleFullscreen();
+        document.getElementById('pp-exit-fullscreen').onclick = () => this._ppToggleFullscreen();
         document.getElementById('pp-remix-btn').onclick = () => this._ppRemix();
 
         // Comment form
@@ -4567,13 +4573,16 @@ class App {
     _ppToggleFullscreen() {
         const container = document.getElementById('pp-viewport-container');
         const icon = document.querySelector('#pp-btn-fullscreen .material-icons-round');
+        const exitBtn = document.getElementById('pp-exit-fullscreen');
 
         if (container.classList.contains('pp-fullscreen')) {
             container.classList.remove('pp-fullscreen');
             icon.textContent = 'fullscreen';
+            if (exitBtn) exitBtn.classList.add('hidden');
         } else {
             container.classList.add('pp-fullscreen');
             icon.textContent = 'fullscreen_exit';
+            if (exitBtn) exitBtn.classList.remove('hidden');
         }
 
         setTimeout(() => {
@@ -4614,6 +4623,8 @@ class App {
         // Exit fullscreen
         const container = document.getElementById('pp-viewport-container');
         if (container) container.classList.remove('pp-fullscreen');
+        const exitBtn = document.getElementById('pp-exit-fullscreen');
+        if (exitBtn) exitBtn.classList.add('hidden');
 
         // Dispose viewer
         if (this._ppScene3d) {
