@@ -2549,7 +2549,9 @@ class App {
             modifiedAt: Date.now(),
             thumbnail: thumbnail || existing.thumbnail || null,
             favorite: existing.favorite || false,
-            shared: existing.shared || false
+            shared: existing.shared || false,
+            description: existing.description || '',
+            tags: existing.tags || []
         };
         this.saveProjectIndex(index);
 
