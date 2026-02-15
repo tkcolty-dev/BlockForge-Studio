@@ -4031,6 +4031,18 @@ class App {
             toolbarAvatar.style.background = '';
             toolbarAvatar.title = user.displayName;
         }
+
+        // Admin inbox button
+        const inboxBtn = document.getElementById('btn-admin-inbox');
+        if (inboxBtn) {
+            if (user.isAdmin) {
+                inboxBtn.classList.remove('hidden');
+                inboxBtn.onclick = () => this._openAdminInbox();
+                this._updateInboxBadge();
+            } else {
+                inboxBtn.classList.add('hidden');
+            }
+        }
     }
 
     // ===== Explore =====
@@ -4441,6 +4453,7 @@ class App {
         document.getElementById('pp-btn-fullscreen').onclick = () => this._ppToggleFullscreen();
         document.getElementById('pp-exit-fullscreen').onclick = () => this._ppToggleFullscreen();
         document.getElementById('pp-remix-btn').onclick = () => this._ppRemix();
+        document.getElementById('pp-report-btn').onclick = () => this._ppReport();
 
         // Init viewer scene (wrapped in try-catch so page stays navigable)
         try {
@@ -4631,6 +4644,171 @@ class App {
         // Hide page
         document.getElementById('project-page').classList.add('hidden');
 
+    }
+
+    // ===== Report Project =====
+
+    async _ppReport() {
+        if (!this._ppProject || !this._ppProject.id) return;
+        if (this._offlineMode) {
+            this.toast('Sign in to report projects', 'error');
+            return;
+        }
+
+        const confirmed = await this.showConfirm(
+            'Report Project',
+            'Report this project for inappropriate content? This will be reviewed by a moderator.',
+            'Report',
+            'danger'
+        );
+        if (!confirmed) return;
+
+        try {
+            const res = await fetch(`/api/projects/${this._ppProject.id}/report`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: 'Inappropriate content' })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                this.toast('Project reported');
+            } else {
+                this.toast(data.error || 'Failed to report', 'error');
+            }
+        } catch {
+            this.toast('Failed to report project', 'error');
+        }
+    }
+
+    // ===== Admin Inbox =====
+
+    async _fetchReportCount() {
+        try {
+            const res = await fetch('/api/reports');
+            if (!res.ok) return 0;
+            const reports = await res.json();
+            return reports.length;
+        } catch { return 0; }
+    }
+
+    async _updateInboxBadge() {
+        const btn = document.getElementById('btn-admin-inbox');
+        const badge = document.getElementById('admin-inbox-badge');
+        if (!btn || !this._cachedUser?.isAdmin) return;
+
+        const count = await this._fetchReportCount();
+        if (count > 0) {
+            badge.textContent = count;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    async _openAdminInbox() {
+        // Fetch reports
+        let reports;
+        try {
+            const res = await fetch('/api/reports');
+            if (!res.ok) { this.toast('Failed to load reports', 'error'); return; }
+            reports = await res.json();
+        } catch { this.toast('Failed to load reports', 'error'); return; }
+
+        // Build modal
+        const overlay = document.createElement('div');
+        overlay.className = 'inbox-modal-overlay';
+
+        const timeAgo = (ts) => {
+            const diff = Date.now() - ts;
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return mins + 'm ago';
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return hrs + 'h ago';
+            return Math.floor(hrs / 24) + 'd ago';
+        };
+
+        let reportsHtml = '';
+        if (reports.length === 0) {
+            reportsHtml = '<div class="inbox-empty"><span class="material-icons-round" style="font-size:36px;display:block;margin-bottom:8px">check_circle</span>No reports</div>';
+        } else {
+            reports.forEach(r => {
+                reportsHtml += `
+                <div class="inbox-report" data-report-id="${r.id}">
+                    <div class="inbox-report-header">
+                        <span class="inbox-report-project">${this._escHtml(r.project_name || '(deleted project)')}</span>
+                        <span class="inbox-report-time">${timeAgo(Number(r.created_at))}</span>
+                    </div>
+                    <div class="inbox-report-meta">Reported by <strong>${this._escHtml(r.reporter_name || 'Unknown')}</strong> · Creator: ${this._escHtml(r.project_creator || 'Unknown')}</div>
+                    <div class="inbox-report-reason">${this._escHtml(r.reason)}</div>
+                    <div class="inbox-report-actions">
+                        <button class="inbox-dismiss-btn" data-action="dismiss" data-id="${r.id}">Dismiss</button>
+                        <button class="inbox-delete-btn" data-action="delete-project" data-id="${r.id}">Delete Project</button>
+                    </div>
+                </div>`;
+            });
+        }
+
+        overlay.innerHTML = `
+        <div class="inbox-modal">
+            <div class="inbox-modal-header">
+                <span class="material-icons-round">inbox</span>
+                <span>Report Inbox</span>
+                <button class="inbox-modal-close"><span class="material-icons-round">close</span></button>
+            </div>
+            <div class="inbox-modal-body">${reportsHtml}</div>
+        </div>`;
+
+        document.body.appendChild(overlay);
+
+        // Close
+        overlay.querySelector('.inbox-modal-close').onclick = () => overlay.remove();
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+        // Actions
+        overlay.addEventListener('click', async (e) => {
+            const btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            const action = btn.dataset.action;
+            const reportId = btn.dataset.id;
+
+            if (action === 'dismiss') {
+                try {
+                    const res = await fetch(`/api/reports/${reportId}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        btn.closest('.inbox-report').remove();
+                        this._updateInboxBadge();
+                        if (!overlay.querySelector('.inbox-report')) {
+                            overlay.querySelector('.inbox-modal-body').innerHTML = '<div class="inbox-empty"><span class="material-icons-round" style="font-size:36px;display:block;margin-bottom:8px">check_circle</span>No reports</div>';
+                        }
+                    }
+                } catch {}
+            } else if (action === 'delete-project') {
+                const confirmed = await this.showConfirm('Delete Project', 'Permanently delete this project and all related reports?', 'Delete', 'danger');
+                if (!confirmed) return;
+                try {
+                    const res = await fetch(`/api/reports/${reportId}/project`, { method: 'DELETE' });
+                    if (res.ok) {
+                        // Remove all reports for same project
+                        overlay.querySelectorAll('.inbox-report').forEach(el => {
+                            // just remove the one we acted on; the rest will refresh
+                        });
+                        btn.closest('.inbox-report').remove();
+                        this._updateInboxBadge();
+                        this.toast('Project deleted');
+                        if (!overlay.querySelector('.inbox-report')) {
+                            overlay.querySelector('.inbox-modal-body').innerHTML = '<div class="inbox-empty"><span class="material-icons-round" style="font-size:36px;display:block;margin-bottom:8px">check_circle</span>No reports</div>';
+                        }
+                    }
+                } catch {}
+            }
+        });
+    }
+
+    _escHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str || '';
+        return d.innerHTML;
     }
 
     // ===== Toast =====

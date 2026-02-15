@@ -10,6 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 const COOKIE_NAME = 'cobalt_session';
+const ADMIN_IDS = [2];
 
 // Valid avatar IDs (SVG avatars rendered on frontend)
 const VALID_AVATARS = ['default','fox','cat','robot','bear','panda','owl','penguin','astronaut','ninja','wizard','dragon','bunny','alien','pirate','ghost'];
@@ -87,6 +88,15 @@ async function initDb() {
         )
     `);
 
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS reports (
+            id SERIAL PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            reporter_id INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            created_at BIGINT NOT NULL
+        )
+    `);
 }
 
 const AVATAR_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63', '#00bcd4'];
@@ -242,7 +252,8 @@ app.get('/api/me', authenticate, async (req, res) => {
         username: req.user.username,
         displayName: req.user.displayName,
         avatarColor: req.user.avatarColor,
-        avatar: avatar.startsWith('custom:') ? 'custom' : avatar
+        avatar: avatar.startsWith('custom:') ? 'custom' : avatar,
+        isAdmin: ADMIN_IDS.includes(req.user.id)
     };
     if (avatar.startsWith('custom:')) {
         result.avatarUrl = '/api/avatars/' + avatar.replace('custom:', '');
@@ -385,6 +396,62 @@ app.get('/api/projects/check/:id', authenticate, async (req, res) => {
     );
     if (rows.length === 0) return res.json({ published: false });
     res.json({ published: true, name: rows[0].name, description: rows[0].description, tags: JSON.parse(rows[0].tags) });
+});
+
+// ===== Report Endpoints =====
+
+// POST /api/projects/:id/report — report a project
+app.post('/api/projects/:id/report', authenticate, async (req, res) => {
+    const projectId = req.params.id;
+    const { reason } = req.body;
+
+    const { rows: proj } = await pool.query('SELECT id FROM shared_projects WHERE id = $1', [projectId]);
+    if (proj.length === 0) return res.status(404).json({ error: 'Project not found' });
+
+    const { rows: existing } = await pool.query(
+        'SELECT id FROM reports WHERE project_id = $1 AND reporter_id = $2',
+        [projectId, req.user.id]
+    );
+    if (existing.length > 0) return res.status(409).json({ error: 'Already reported' });
+
+    await pool.query(
+        'INSERT INTO reports (project_id, reporter_id, reason, created_at) VALUES ($1, $2, $3, $4)',
+        [projectId, req.user.id, (reason || 'No reason given').slice(0, 500), Date.now()]
+    );
+    res.json({ ok: true });
+});
+
+// GET /api/reports — admin only, list all reports
+app.get('/api/reports', authenticate, async (req, res) => {
+    if (!ADMIN_IDS.includes(req.user.id)) return res.status(403).json({ error: 'Forbidden' });
+    const { rows } = await pool.query(`
+        SELECT r.id, r.project_id, r.reason, r.created_at,
+               sp.name AS project_name, sp.creator AS project_creator,
+               u.display_name AS reporter_name
+        FROM reports r
+        LEFT JOIN shared_projects sp ON sp.id = r.project_id
+        LEFT JOIN users u ON u.id = r.reporter_id
+        ORDER BY r.created_at DESC
+    `);
+    res.json(rows);
+});
+
+// DELETE /api/reports/:id — admin only, dismiss a report
+app.delete('/api/reports/:id', authenticate, async (req, res) => {
+    if (!ADMIN_IDS.includes(req.user.id)) return res.status(403).json({ error: 'Forbidden' });
+    await pool.query('DELETE FROM reports WHERE id = $1', [parseInt(req.params.id)]);
+    res.json({ ok: true });
+});
+
+// DELETE /api/reports/:id/project — admin only, delete project + report
+app.delete('/api/reports/:id/project', authenticate, async (req, res) => {
+    if (!ADMIN_IDS.includes(req.user.id)) return res.status(403).json({ error: 'Forbidden' });
+    const { rows } = await pool.query('SELECT project_id FROM reports WHERE id = $1', [parseInt(req.params.id)]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Report not found' });
+    const projectId = rows[0].project_id;
+    await pool.query('DELETE FROM shared_projects WHERE id = $1', [projectId]);
+    await pool.query('DELETE FROM reports WHERE project_id = $1', [projectId]);
+    res.json({ ok: true });
 });
 
 // Initialize DB and start server
