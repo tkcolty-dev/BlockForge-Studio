@@ -217,7 +217,7 @@ app.post('/api/signup', async (req, res) => {
     const user = { id: rows[0].id, username: username.toLowerCase(), display_name: username, avatar_color: avatarColor, avatar: 'default' };
     setAuthCookie(res, user);
 
-    res.json({ username: user.username, displayName: user.display_name, avatarColor: user.avatar_color, avatar: user.avatar });
+    res.json({ username: user.username, displayName: user.display_name, avatarColor: user.avatar_color, avatar: user.avatar, isAdmin: isAdmin(user) });
 });
 
 // POST /api/login
@@ -241,7 +241,7 @@ app.post('/api/login', async (req, res) => {
 
     setAuthCookie(res, user);
     const av = user.avatar || 'default';
-    const loginResult = { username: user.username, displayName: user.display_name, avatarColor: user.avatar_color, avatar: av.startsWith('custom:') ? 'custom' : av };
+    const loginResult = { username: user.username, displayName: user.display_name, avatarColor: user.avatar_color, avatar: av.startsWith('custom:') ? 'custom' : av, isAdmin: isAdmin(user) };
     if (av.startsWith('custom:')) loginResult.avatarUrl = '/api/avatars/' + av.replace('custom:', '');
     res.json(loginResult);
 });
