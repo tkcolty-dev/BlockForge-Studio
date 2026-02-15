@@ -4672,6 +4672,7 @@ class App {
         try {
             const res = await fetch('/api/projects/' + this._ppProjectId + '/comments', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ body })
             });
@@ -4698,7 +4699,8 @@ class App {
         if (!this._ppProjectId) return;
         try {
             const res = await fetch('/api/projects/' + this._ppProjectId + '/comments/' + commentId, {
-                method: 'DELETE'
+                method: 'DELETE',
+                credentials: 'same-origin'
             });
             if (res.ok) {
                 this._loadComments();
@@ -4731,8 +4733,10 @@ class App {
         header.appendChild(username);
         header.appendChild(time);
 
-        // Delete button for own comments
-        if (this._cachedUser && this._cachedUser.username === (comment.username || '').toLowerCase()) {
+        // Delete button for own comments or admins
+        const isOwn = this._cachedUser && this._cachedUser.username === (comment.username || '').toLowerCase();
+        const isAdmin = this._cachedUser && this._cachedUser.isAdmin;
+        if (isOwn || isAdmin) {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'pp-comment-delete';
             deleteBtn.innerHTML = '<span class="material-icons-round">delete</span>';
