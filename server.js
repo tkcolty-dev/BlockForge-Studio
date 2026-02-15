@@ -99,6 +99,17 @@ async function initDb() {
             created_at BIGINT NOT NULL
         )
     `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS emoji_chats (
+            id SERIAL PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            emoji TEXT NOT NULL,
+            created_at BIGINT NOT NULL
+        )
+    `);
 }
 
 const AVATAR_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63', '#00bcd4'];
@@ -454,6 +465,45 @@ app.delete('/api/reports/:id/project', authenticate, async (req, res) => {
     await pool.query('DELETE FROM shared_projects WHERE id = $1', [projectId]);
     await pool.query('DELETE FROM reports WHERE project_id = $1', [projectId]);
     res.json({ ok: true });
+});
+
+// ===== Emoji Chat Endpoints =====
+
+const ALLOWED_EMOJIS = ['👍','❤️','🔥','⭐','😂','😮','🎮','🎨','💎','🏆','👏','🚀','💯','🤩','😎','👾'];
+const emojiCooldowns = new Map();
+
+// GET /api/projects/:id/emojis — get emoji chat messages
+app.get('/api/projects/:id/emojis', async (req, res) => {
+    const { rows } = await pool.query(
+        'SELECT id, username, emoji, created_at FROM emoji_chats WHERE project_id = $1 ORDER BY created_at ASC LIMIT 50',
+        [req.params.id]
+    );
+    res.json(rows);
+});
+
+// POST /api/projects/:id/emojis — send emoji message
+app.post('/api/projects/:id/emojis', authenticate, async (req, res) => {
+    const { emoji } = req.body;
+    if (!emoji || !ALLOWED_EMOJIS.includes(emoji)) {
+        return res.status(400).json({ error: 'Invalid emoji' });
+    }
+
+    // Rate limit: 3 second cooldown
+    const now = Date.now();
+    const lastSent = emojiCooldowns.get(req.user.id) || 0;
+    if (now - lastSent < 3000) {
+        return res.status(429).json({ error: 'Wait a moment' });
+    }
+    emojiCooldowns.set(req.user.id, now);
+
+    const { rows } = await pool.query('SELECT display_name FROM users WHERE id = $1', [req.user.id]);
+    const username = rows.length > 0 ? rows[0].display_name : 'Anonymous';
+
+    await pool.query(
+        'INSERT INTO emoji_chats (project_id, user_id, username, emoji, created_at) VALUES ($1, $2, $3, $4, $5)',
+        [req.params.id, req.user.id, username, emoji, now]
+    );
+    res.json({ ok: true, username, emoji, created_at: now });
 });
 
 // Initialize DB and start server

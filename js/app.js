@@ -4456,6 +4456,7 @@ class App {
         document.getElementById('pp-exit-fullscreen').onclick = () => this._ppToggleFullscreen();
         document.getElementById('pp-remix-btn').onclick = () => this._ppRemix();
         document.getElementById('pp-report-btn').onclick = () => this._ppReport();
+        this._initEmojiChat();
 
         // Init viewer scene (wrapped in try-catch so page stays navigable)
         try {
@@ -4643,9 +4644,87 @@ class App {
         this._ppBlockCode = null;
         this._ppProjectData = null;
 
+        // Clear emoji chat
+        const emojiFeed = document.getElementById('pp-emoji-feed');
+        if (emojiFeed) emojiFeed.innerHTML = '';
+
         // Hide page
         document.getElementById('project-page').classList.add('hidden');
 
+    }
+
+    // ===== Emoji Chat =====
+
+    _initEmojiChat() {
+        const picker = document.getElementById('pp-emoji-picker');
+        const emojis = ['👍','❤️','🔥','⭐','😂','😮','🎮','🎨','💎','🏆','👏','🚀','💯','🤩','😎','👾'];
+        picker.innerHTML = '';
+        emojis.forEach(emoji => {
+            const btn = document.createElement('button');
+            btn.className = 'pp-emoji-btn';
+            btn.textContent = emoji;
+            btn.onclick = () => this._sendEmoji(emoji);
+            picker.appendChild(btn);
+        });
+        this._loadEmojiChat();
+    }
+
+    async _loadEmojiChat() {
+        const feed = document.getElementById('pp-emoji-feed');
+        if (!this._ppProject?.id) return;
+        try {
+            const res = await fetch(`/api/projects/${this._ppProject.id}/emojis`);
+            if (!res.ok) return;
+            const messages = await res.json();
+            feed.innerHTML = '';
+            if (messages.length === 0) {
+                feed.innerHTML = '<div class="pp-emoji-feed-empty">No messages yet</div>';
+            } else {
+                messages.forEach(msg => feed.appendChild(this._createEmojiMsg(msg)));
+                feed.scrollTop = feed.scrollHeight;
+            }
+        } catch {}
+    }
+
+    async _sendEmoji(emoji) {
+        if (!this._ppProject?.id) return;
+        if (this._offlineMode) {
+            this.toast('Sign in to chat', 'error');
+            return;
+        }
+        try {
+            const res = await fetch(`/api/projects/${this._ppProject.id}/emojis`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emoji })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                const feed = document.getElementById('pp-emoji-feed');
+                const empty = feed.querySelector('.pp-emoji-feed-empty');
+                if (empty) empty.remove();
+                feed.appendChild(this._createEmojiMsg(data));
+                feed.scrollTop = feed.scrollHeight;
+            } else {
+                this.toast(data.error || 'Failed to send', 'error');
+            }
+        } catch {
+            this.toast('Failed to send', 'error');
+        }
+    }
+
+    _createEmojiMsg(msg) {
+        const el = document.createElement('div');
+        el.className = 'pp-emoji-msg';
+        const name = document.createElement('span');
+        name.className = 'pp-emoji-msg-name';
+        name.textContent = msg.username || 'Anonymous';
+        const emoji = document.createElement('span');
+        emoji.className = 'pp-emoji-msg-emoji';
+        emoji.textContent = msg.emoji;
+        el.appendChild(name);
+        el.appendChild(emoji);
+        return el;
     }
 
     // ===== Report Project =====
