@@ -8,6 +8,6 @@ applications:
     command: node server.js
     services:
       - cobalt-db
-      - cobalt-ai
+      - cobalt-ai-qwen3
     env:
       NODE_ENV: production
