@@ -1180,7 +1180,12 @@ class App {
                 weather: document.getElementById('weather-type').value,
                 bgMusic: document.getElementById('bg-music').value,
                 musicVolume: document.getElementById('music-volume').value,
-                playerColors: this.gameSettings.playerColors
+                playerColors: this.gameSettings.playerColors,
+                controlScheme: this.gameSettings.controlScheme,
+                speed: this.gameSettings.speed,
+                jumpForce: this.gameSettings.jumpForce,
+                sensitivity: this.gameSettings.sensitivity,
+                keyBindings: this.gameSettings.keyBindings
             }
         };
     }
@@ -1241,6 +1246,16 @@ class App {
                 document.getElementById('setting-player-head').value = data.environment.playerColors.head;
                 document.getElementById('setting-player-detail').value = data.environment.playerColors.detail;
             }
+            if (data.environment.controlScheme) {
+                this.gameSettings.controlScheme = data.environment.controlScheme;
+                document.querySelectorAll('.control-scheme').forEach(l => {
+                    l.classList.toggle('selected', l.dataset.scheme === data.environment.controlScheme);
+                });
+            }
+            if (data.environment.speed) this.gameSettings.speed = data.environment.speed;
+            if (data.environment.jumpForce) this.gameSettings.jumpForce = data.environment.jumpForce;
+            if (data.environment.sensitivity) this.gameSettings.sensitivity = data.environment.sensitivity;
+            if (data.environment.keyBindings) this.gameSettings.keyBindings = data.environment.keyBindings;
         }
 
         this.refreshExplorer();
@@ -4476,12 +4491,13 @@ class App {
         }
 
         // Store game settings for play mode
+        const env = data.environment || {};
         this._ppGameSettings = {
-            controlScheme: data.environment?.controlScheme || 'first-person',
-            speed: 6,
-            jumpForce: 8,
-            sensitivity: 5,
-            keyBindings: {
+            controlScheme: env.controlScheme || 'first-person',
+            speed: env.speed || 6,
+            jumpForce: env.jumpForce || 8,
+            sensitivity: env.sensitivity || 5,
+            keyBindings: env.keyBindings || {
                 moveForward: 'KeyW',
                 moveBack: 'KeyS',
                 moveLeft: 'KeyA',
@@ -4492,9 +4508,9 @@ class App {
                 lookRight: 'ArrowRight',
                 jump: 'Space'
             },
-            playerColors: data.environment?.playerColors || { body: '#4c97ff', head: '#f5cba7', detail: '#e0b090' },
-            bgMusic: data.environment?.bgMusic || 'none',
-            musicVolume: data.environment?.musicVolume || 30
+            playerColors: env.playerColors || { body: '#4c97ff', head: '#f5cba7', detail: '#e0b090' },
+            bgMusic: env.bgMusic || 'none',
+            musicVolume: env.musicVolume || 30
         };
 
         // Store custom variables/messages for the blockcode stub

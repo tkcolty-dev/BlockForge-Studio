@@ -50,8 +50,11 @@ class Scene3D {
         this.orbitControls.enableDamping = true;
         this.orbitControls.dampingFactor = 0.08;
         this.orbitControls.target.set(0, 0, 0);
+        this.orbitControls.minDistance = 1;
+        this.orbitControls.maxDistance = 100;
 
         this.canvas.addEventListener('pointerdown', () => { this._needsRender = true; });
+        this.canvas.addEventListener('pointermove', () => { this._needsRender = true; });
         this.canvas.addEventListener('wheel', () => { this._needsRender = true; });
     }
 
