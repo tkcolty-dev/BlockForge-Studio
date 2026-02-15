@@ -226,6 +226,12 @@ class Scene3D {
         this._dragIntersect = new THREE.Vector3();
         this._pointerDownPos = new THREE.Vector2();
 
+        // Marquee selection state
+        this.marqueeEnabled = true;
+        this._marqueeActive = false;
+        this._marqueeStartPx = { x: 0, y: 0 };
+        this._marqueeEl = null;
+
         this.canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
         this.canvas.addEventListener('pointermove', (e) => this.onPointerMove(e));
         this.canvas.addEventListener('pointerup', (e) => this.onPointerUp(e));
@@ -918,7 +924,6 @@ class Scene3D {
     }
 
     addSelectionOutline(obj) {
-        // Simple outline using wireframe overlay
         const createOutline = (mesh) => {
             if (!mesh.geometry) return;
             const outlineMat = new THREE.MeshBasicMaterial({
@@ -1026,11 +1031,9 @@ class Scene3D {
     }
 
     addMultiSelectHighlight(obj) {
-        // Add a subtle emissive tint to indicate multi-selection
         const setEmissive = (mesh) => {
             if (!mesh.material) return;
             if (mesh.userData.isOutline) return;
-            // Store original emissive values for restoration
             if (mesh.userData._origEmissive === undefined) {
                 mesh.userData._origEmissive = mesh.material.emissive ? '#' + mesh.material.emissive.getHexString() : '#000000';
                 mesh.userData._origEmissiveIntensity = mesh.material.emissiveIntensity || 0;
@@ -1074,6 +1077,7 @@ class Scene3D {
                 restoreEmissive(child);
             }
         });
+
     }
 
     // ===== Interaction =====
@@ -1143,13 +1147,36 @@ class Scene3D {
                 this._isDragging = false; // Will become true on move beyond threshold
             }
         } else {
-            this.deselect();
+            // Empty space click — start marquee or just deselect
             this._dragObject = null;
+            if (this.marqueeEnabled) {
+                this._marqueeStartPx = { x: event.clientX, y: event.clientY };
+                this._marqueeActive = false; // becomes true on drag threshold
+                this._marqueePointerDown = true;
+                this.orbitControls.enabled = false;
+            } else {
+                this.deselectAll();
+            }
         }
     }
 
     onPointerMove(event) {
         if (this.isPlaying) return;
+
+        // Marquee drag
+        if (this._marqueePointerDown && !this._dragObject) {
+            const dx = event.clientX - this._marqueeStartPx.x;
+            const dy = event.clientY - this._marqueeStartPx.y;
+            if (!this._marqueeActive && Math.sqrt(dx * dx + dy * dy) > 4) {
+                this._marqueeActive = true;
+                this._createMarqueeEl();
+            }
+            if (this._marqueeActive) {
+                this._updateMarqueeEl(event.clientX, event.clientY);
+            }
+            return;
+        }
+
         if (!this._dragObject) return;
         if (this.transformControls.dragging) return;
 
@@ -1188,6 +1215,22 @@ class Scene3D {
     }
 
     onPointerUp(event) {
+        // Marquee release
+        if (this._marqueePointerDown) {
+            this._marqueePointerDown = false;
+            if (this._marqueeActive) {
+                this._finishMarquee(event.clientX, event.clientY);
+                this._marqueeActive = false;
+                this._removeMarqueeEl();
+            } else {
+                // Was just a click on empty space with no drag
+                this.deselectAll();
+            }
+            // Always re-enable orbit controls (enableRotate separately controls rotation)
+            this.orbitControls.enabled = true;
+            return;
+        }
+
         if (!this._dragObject) return;
 
         if (this._isDragging) {
@@ -1200,6 +1243,63 @@ class Scene3D {
 
         this._isDragging = false;
         this._dragObject = null;
+    }
+
+    // ===== Marquee Helpers =====
+
+    _createMarqueeEl() {
+        if (this._marqueeEl) return;
+        this._marqueeEl = document.createElement('div');
+        this._marqueeEl.className = 'marquee-select';
+        document.body.appendChild(this._marqueeEl);
+    }
+
+    _updateMarqueeEl(curX, curY) {
+        if (!this._marqueeEl) return;
+        const x1 = Math.min(this._marqueeStartPx.x, curX);
+        const y1 = Math.min(this._marqueeStartPx.y, curY);
+        const x2 = Math.max(this._marqueeStartPx.x, curX);
+        const y2 = Math.max(this._marqueeStartPx.y, curY);
+        this._marqueeEl.style.left = x1 + 'px';
+        this._marqueeEl.style.top = y1 + 'px';
+        this._marqueeEl.style.width = (x2 - x1) + 'px';
+        this._marqueeEl.style.height = (y2 - y1) + 'px';
+    }
+
+    _removeMarqueeEl() {
+        if (this._marqueeEl) {
+            this._marqueeEl.remove();
+            this._marqueeEl = null;
+        }
+    }
+
+    _finishMarquee(endX, endY) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x1 = Math.min(this._marqueeStartPx.x, endX);
+        const y1 = Math.min(this._marqueeStartPx.y, endY);
+        const x2 = Math.max(this._marqueeStartPx.x, endX);
+        const y2 = Math.max(this._marqueeStartPx.y, endY);
+
+        // Clear previous selection
+        this.deselectAll();
+
+        // Project each object center to screen and check if inside marquee
+        const matched = [];
+        this.objects.forEach(obj => {
+            const pos = new THREE.Vector3();
+            obj.getWorldPosition(pos);
+            pos.project(this.camera);
+
+            const screenX = (pos.x * 0.5 + 0.5) * rect.width + rect.left;
+            const screenY = (-pos.y * 0.5 + 0.5) * rect.height + rect.top;
+
+            if (screenX >= x1 && screenX <= x2 && screenY >= y1 && screenY <= y2 && pos.z < 1) {
+                matched.push(obj);
+            }
+        });
+
+        // Select all matched objects
+        matched.forEach(obj => this.selectMultiple(obj));
     }
 
     // ===== Tool Management =====

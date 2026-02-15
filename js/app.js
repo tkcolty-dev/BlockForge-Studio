@@ -51,8 +51,21 @@ class App {
         this._collabMembers = [];
         this._collabBroadcastPaused = false;
 
-        this.scene3d.onObjectSelected = (obj) => this.onObjectSelected(obj);
-        this.scene3d.onObjectDeselected = () => this.onObjectDeselected();
+        this.scene3d.onObjectSelected = (obj) => {
+            // Single-select clears any existing multi-select
+            this.scene3d.selectedObjects.forEach(o => this.scene3d.removeMultiSelectHighlight(o));
+            this.scene3d.selectedObjects = [];
+            this.onObjectSelected(obj);
+        };
+        this.scene3d.onObjectDeselected = () => {
+            // Deselect clears any existing multi-select
+            this.scene3d.selectedObjects.forEach(o => this.scene3d.removeMultiSelectHighlight(o));
+            this.scene3d.selectedObjects = [];
+            this.onObjectDeselected();
+        };
+        this.scene3d.onMultiSelect = (objects) => {
+            this.onMultiSelectChanged(objects);
+        };
         this.scene3d.onObjectChanged = (obj) => this.updateProperties(obj);
         this.scene3d.onFPSUpdate((fps) => {
             document.getElementById('info-fps').textContent = fps + ' FPS';
@@ -365,6 +378,8 @@ class App {
             item.className = 'tree-item';
             if (this.scene3d.selectedObject === obj) {
                 item.classList.add('selected');
+            } else if (this.scene3d.selectedObjects.includes(obj)) {
+                item.classList.add('multi-selected');
             }
 
             const iconName = this.getObjectIcon(obj.userData.type);
@@ -373,8 +388,12 @@ class App {
                 <span>${obj.userData.name}</span>
             `;
 
-            item.addEventListener('click', () => {
-                this.scene3d.selectObject(obj);
+            item.addEventListener('click', (e) => {
+                if (e.shiftKey) {
+                    this.scene3d.selectMultiple(obj);
+                } else {
+                    this.scene3d.selectObject(obj);
+                }
                 this.refreshExplorer();
             });
 
@@ -497,15 +516,7 @@ class App {
 
         // Actions
         document.getElementById('btn-duplicate').addEventListener('click', () => {
-            if (this.scene3d.selectedObject) {
-                const dup = this.scene3d.duplicateObject(this.scene3d.selectedObject);
-                if (dup) {
-                    this.scene3d.selectObject(dup);
-                    this.refreshExplorer();
-                    this.updateObjectCount();
-                    this.saveUndoState();
-                }
-            }
+            this.duplicateAllSelected();
         });
 
         document.getElementById('btn-delete').addEventListener('click', () => {
@@ -518,6 +529,7 @@ class App {
     }
 
     onObjectSelected(obj) {
+        this._hideMultiSelectSummary();
         document.getElementById('no-selection').classList.add('hidden');
         document.getElementById('properties-content').classList.remove('hidden');
         document.getElementById('material-no-selection').classList.add('hidden');
@@ -532,6 +544,7 @@ class App {
     }
 
     onObjectDeselected() {
+        this._hideMultiSelectSummary();
         document.getElementById('no-selection').classList.remove('hidden');
         document.getElementById('properties-content').classList.add('hidden');
         document.getElementById('material-no-selection').classList.remove('hidden');
@@ -540,6 +553,71 @@ class App {
 
         this.blockCode.setTarget(null);
         this.refreshExplorer();
+    }
+
+    onMultiSelectChanged(objects) {
+        if (objects.length > 1) {
+            // Show multi-select summary in properties panel
+            document.getElementById('no-selection').classList.add('hidden');
+            document.getElementById('properties-content').classList.add('hidden');
+            document.getElementById('material-no-selection').classList.remove('hidden');
+            document.getElementById('material-content').classList.add('hidden');
+            document.getElementById('npc-colors-section').classList.add('hidden');
+            this._showMultiSelectSummary(objects.length);
+        } else if (objects.length === 1) {
+            this._hideMultiSelectSummary();
+            this.onObjectSelected(objects[0]);
+        } else {
+            this._hideMultiSelectSummary();
+            this.onObjectDeselected();
+        }
+        this.refreshExplorer();
+    }
+
+    _showMultiSelectSummary(count) {
+        // Hide normal properties, show multi-select overlay
+        document.getElementById('properties-content').classList.add('hidden');
+        let overlay = document.getElementById('multi-select-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'multi-select-overlay';
+            document.getElementById('properties-content').parentNode.insertBefore(
+                overlay, document.getElementById('properties-content').nextSibling
+            );
+        }
+        overlay.classList.remove('hidden');
+        overlay.innerHTML = `
+            <div class="panel-section">
+                <div class="section-header"><span>Multi-Selection</span></div>
+                <div class="empty-state" style="padding: 16px 0;">
+                    <span class="material-icons-round" style="font-size: 32px; color: var(--accent);">select_all</span>
+                    <p style="margin: 8px 0 4px;">${count} objects selected</p>
+                    <p style="font-size: 11px; color: var(--text-dim);">Shift+Click to add/remove objects</p>
+                </div>
+            </div>
+            <div class="panel-section">
+                <div class="section-header"><span>Bulk Actions</span></div>
+                <div class="action-buttons">
+                    <button class="action-btn" id="btn-multi-duplicate">
+                        <span class="material-icons-round">content_copy</span> Duplicate All
+                    </button>
+                    <button class="action-btn danger" id="btn-multi-delete">
+                        <span class="material-icons-round">delete</span> Delete All
+                    </button>
+                </div>
+            </div>
+        `;
+        document.getElementById('btn-multi-duplicate').addEventListener('click', () => {
+            this.duplicateAllSelected();
+        });
+        document.getElementById('btn-multi-delete').addEventListener('click', () => {
+            this.deleteSelected();
+        });
+    }
+
+    _hideMultiSelectSummary() {
+        const overlay = document.getElementById('multi-select-overlay');
+        if (overlay) overlay.classList.add('hidden');
     }
 
     updateProperties(obj) {
@@ -873,7 +951,7 @@ class App {
 
         this.scene3d.canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            if (this.scene3d.selectedObject) {
+            if (this.scene3d.selectedObject || this.scene3d.selectedObjects.length > 0) {
                 menu.classList.remove('hidden');
                 menu.style.left = e.clientX + 'px';
                 menu.style.top = e.clientY + 'px';
@@ -889,14 +967,7 @@ class App {
                 const action = item.dataset.action;
                 switch (action) {
                     case 'duplicate':
-                        if (this.scene3d.selectedObject) {
-                            const dup = this.scene3d.duplicateObject(this.scene3d.selectedObject);
-                            if (dup) {
-                                this.scene3d.selectObject(dup);
-                                this.refreshExplorer();
-                                this.updateObjectCount();
-                            }
-                        }
+                        this.duplicateAllSelected();
                         break;
                     case 'delete':
                         this.deleteSelected();
@@ -921,11 +992,43 @@ class App {
     }
 
     deleteSelected() {
-        if (this.scene3d.selectedObject) {
+        if (this.scene3d.selectedObjects.length > 1) {
+            this.saveUndoState();
+            const toDelete = [...this.scene3d.selectedObjects];
+            toDelete.forEach(obj => this.scene3d.removeObject(obj));
+            this.scene3d.selectedObjects = [];
+            this.refreshExplorer();
+            this.updateObjectCount();
+        } else if (this.scene3d.selectedObject) {
             this.saveUndoState();
             this.scene3d.removeObject(this.scene3d.selectedObject);
             this.refreshExplorer();
             this.updateObjectCount();
+        }
+    }
+
+    duplicateAllSelected() {
+        if (this.scene3d.selectedObjects.length > 1) {
+            this.saveUndoState();
+            let lastDup = null;
+            const toDuplicate = [...this.scene3d.selectedObjects];
+            toDuplicate.forEach(obj => {
+                const dup = this.scene3d.duplicateObject(obj);
+                if (dup) lastDup = dup;
+            });
+            if (lastDup) {
+                this.scene3d.selectObject(lastDup);
+            }
+            this.refreshExplorer();
+            this.updateObjectCount();
+        } else if (this.scene3d.selectedObject) {
+            this.saveUndoState();
+            const dup = this.scene3d.duplicateObject(this.scene3d.selectedObject);
+            if (dup) {
+                this.scene3d.selectObject(dup);
+                this.refreshExplorer();
+                this.updateObjectCount();
+            }
         }
     }
 
@@ -1027,14 +1130,17 @@ class App {
                 case 'D':
                     if (e.ctrlKey || e.metaKey) {
                         e.preventDefault();
-                        if (this.scene3d.selectedObject) {
-                            const dup = this.scene3d.duplicateObject(this.scene3d.selectedObject);
-                            if (dup) {
-                                this.scene3d.selectObject(dup);
-                                this.refreshExplorer();
-                                this.updateObjectCount();
-                            }
-                        }
+                        this.duplicateAllSelected();
+                    }
+                    break;
+                case 'a':
+                case 'A':
+                    if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        this.scene3d.deselectAll();
+                        this.scene3d.objects.forEach(obj => {
+                            this.scene3d.selectMultiple(obj);
+                        });
                     }
                     break;
                 case 'z':
@@ -1073,7 +1179,7 @@ class App {
                     } else if (document.getElementById('block-editor').classList.contains('fullscreen')) {
                         this.toggleFullscreenEditor();
                     } else {
-                        this.scene3d.deselect();
+                        this.scene3d.deselectAll();
                     }
                     break;
             }
@@ -2617,12 +2723,17 @@ class App {
             document.getElementById('setting-sensitivity-val').textContent = e.target.value;
         });
 
-        // Mouse orbit toggle
+        // Mouse orbit toggle — orbit ON = marquee OFF, orbit OFF = marquee ON
         const mouseOrbitCheckbox = document.getElementById('setting-mouse-orbit');
         mouseOrbitCheckbox.checked = this.gameSettings.mouseOrbit;
+        // Apply initial state
+        this.scene3d.marqueeEnabled = !this.gameSettings.mouseOrbit;
         mouseOrbitCheckbox.addEventListener('change', (e) => {
             this.gameSettings.mouseOrbit = e.target.checked;
             this.scene3d.orbitControls.enableRotate = e.target.checked;
+            this.scene3d.orbitControls.enabled = true;
+            this.scene3d.marqueeEnabled = !e.target.checked;
+            this.toast(e.target.checked ? 'Mouse orbit enabled' : 'Drag-to-select enabled', 'success');
         });
 
         // Graphics quality

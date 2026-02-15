@@ -641,6 +641,16 @@ body.editor-expanded #main-content {
 
 .tree-item:hover { background: var(--bg-lighter); }
 .tree-item.selected { background: var(--accent-dim); color: var(--text-bright); }
+.tree-item.multi-selected { background: var(--bg-hover); color: var(--text-bright); }
+
+/* ===== Marquee Selection ===== */
+.marquee-select {
+    position: fixed;
+    border: 1.5px solid var(--accent);
+    background: rgba(76, 151, 255, 0.1);
+    pointer-events: none;
+    z-index: 50;
+}
 .tree-item.root { font-weight: 600; }
 
 .tree-icon { font-size: 16px; color: var(--accent); }
