@@ -481,11 +481,16 @@ app.get('/api/projects/:id/emojis', async (req, res) => {
     res.json(rows);
 });
 
-// POST /api/projects/:id/emojis — send emoji message
+// POST /api/projects/:id/emojis — send emoji message (1-15 emojis)
 app.post('/api/projects/:id/emojis', authenticate, async (req, res) => {
     const { emoji } = req.body;
-    if (!emoji || !ALLOWED_EMOJIS.includes(emoji)) {
+    // Accept a string of 1-15 emojis
+    if (!emoji || typeof emoji !== 'string') {
         return res.status(400).json({ error: 'Invalid emoji' });
+    }
+    const emojiChars = [...emoji];
+    if (emojiChars.length === 0 || emojiChars.length > 15 || !emojiChars.every(e => ALLOWED_EMOJIS.includes(e))) {
+        return res.status(400).json({ error: 'Invalid emoji (max 15)' });
     }
 
     // Rate limit: 3 second cooldown

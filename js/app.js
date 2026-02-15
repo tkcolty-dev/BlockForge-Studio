@@ -4645,6 +4645,7 @@ class App {
         this._ppProjectData = null;
 
         // Clear emoji chat
+        if (this._emojiPollTimer) { clearInterval(this._emojiPollTimer); this._emojiPollTimer = null; }
         const emojiFeed = document.getElementById('pp-emoji-feed');
         if (emojiFeed) emojiFeed.innerHTML = '';
 
@@ -4658,15 +4659,49 @@ class App {
     _initEmojiChat() {
         const picker = document.getElementById('pp-emoji-picker');
         const emojis = ['👍','❤️','🔥','⭐','😂','😮','🎮','🎨','💎','🏆','👏','🚀','💯','🤩','😎','👾'];
+        this._emojiDraft = '';
         picker.innerHTML = '';
+
+        // Compose area: preview + send button
+        const compose = document.createElement('div');
+        compose.className = 'pp-emoji-compose';
+        const preview = document.createElement('span');
+        preview.className = 'pp-emoji-compose-preview';
+        preview.id = 'pp-emoji-preview';
+        preview.textContent = '';
+        const sendBtn = document.createElement('button');
+        sendBtn.className = 'pp-emoji-send-btn';
+        sendBtn.textContent = 'Send';
+        sendBtn.onclick = () => this._sendEmojiDraft();
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'pp-emoji-clear-btn';
+        clearBtn.textContent = '✕';
+        clearBtn.title = 'Clear';
+        clearBtn.onclick = () => { this._emojiDraft = ''; preview.textContent = ''; };
+        compose.appendChild(preview);
+        compose.appendChild(clearBtn);
+        compose.appendChild(sendBtn);
+        picker.appendChild(compose);
+
+        // Emoji grid
+        const grid = document.createElement('div');
+        grid.className = 'pp-emoji-grid';
         emojis.forEach(emoji => {
             const btn = document.createElement('button');
             btn.className = 'pp-emoji-btn';
             btn.textContent = emoji;
-            btn.onclick = () => this._sendEmoji(emoji);
-            picker.appendChild(btn);
+            btn.onclick = () => {
+                if ([...this._emojiDraft].length >= 15) return;
+                this._emojiDraft += emoji;
+                preview.textContent = this._emojiDraft;
+            };
+            grid.appendChild(btn);
         });
+        picker.appendChild(grid);
+
         this._loadEmojiChat();
+        // Auto-poll every 5 seconds
+        this._emojiPollTimer = setInterval(() => this._loadEmojiChat(), 5000);
     }
 
     async _loadEmojiChat() {
@@ -4685,12 +4720,16 @@ class App {
         } catch {}
     }
 
-    async _sendEmoji(emoji) {
+    async _sendEmojiDraft() {
+        if (!this._emojiDraft) return;
         if (!this._ppProject?.id) return;
         if (this._offlineMode) {
             this.toast('Sign in to chat', 'error');
             return;
         }
+        const emoji = this._emojiDraft;
+        this._emojiDraft = '';
+        document.getElementById('pp-emoji-preview').textContent = '';
         try {
             const res = await fetch(`/api/projects/${this._ppProject.id}/emojis`, {
                 method: 'POST',
