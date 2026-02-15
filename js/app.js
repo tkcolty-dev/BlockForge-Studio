@@ -2544,9 +2544,26 @@ class App {
             createdAt: existing.createdAt || Date.now(),
             modifiedAt: Date.now(),
             thumbnail: thumbnail || existing.thumbnail || null,
-            favorite: existing.favorite || false
+            favorite: existing.favorite || false,
+            shared: existing.shared || false
         };
         this.saveProjectIndex(index);
+
+        // Auto-update published version if project is shared
+        if (existing.shared) {
+            fetch('/api/projects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: this.currentProjectId,
+                    name: this.projectName || data.name || 'My Game',
+                    description: existing.description || '',
+                    tags: existing.tags || [],
+                    thumbnail: thumbnail || null,
+                    projectData: data
+                })
+            }).catch(() => {});
+        }
 
         this.hasUnsavedChanges = false;
         this.lastSaveTime = Date.now();
@@ -4310,10 +4327,12 @@ class App {
             return;
         }
 
-        // Mark in local project index
+        // Mark in local project index with publish metadata
         const index = this.getProjectIndex();
         if (index[this.currentProjectId]) {
             index[this.currentProjectId].shared = true;
+            index[this.currentProjectId].description = description;
+            index[this.currentProjectId].tags = tags;
             this.saveProjectIndex(index);
         }
 
@@ -4410,11 +4429,7 @@ class App {
         // Show page
         document.getElementById('project-page').classList.remove('hidden');
 
-        // Init viewer scene
-        this._initViewerScene();
-        this._loadProjectIntoViewer(data);
-
-        // Wire buttons
+        // Wire buttons FIRST so back always works even if viewer init fails
         document.getElementById('pp-back').onclick = () => this.closeProjectPage();
         document.getElementById('pp-btn-play').onclick = () => this._ppStartPlay();
         document.getElementById('pp-btn-stop').onclick = () => this._ppStopPlay();
@@ -4424,6 +4439,14 @@ class App {
         // Comment form
         document.getElementById('pp-comment-post').onclick = () => this._submitComment();
         document.getElementById('pp-comment-input').onkeydown = (e) => e.stopPropagation();
+
+        // Init viewer scene (wrapped in try-catch so page stays navigable)
+        try {
+            this._initViewerScene();
+            this._loadProjectIntoViewer(data);
+        } catch (e) {
+            console.error('Failed to init viewer:', e);
+        }
 
         // Load comments
         this._loadComments();
@@ -4466,8 +4489,8 @@ class App {
         });
 
         this._ppRuntime.onStop = () => {
-            document.getElementById('pp-btn-play').classList.remove('hidden');
-            document.getElementById('pp-btn-stop').classList.add('hidden');
+            document.getElementById('pp-btn-play').classList.remove('active');
+            document.getElementById('pp-btn-stop').classList.remove('active');
         };
     }
 
@@ -4530,11 +4553,15 @@ class App {
         this._ppRuntime.playerColors = this._ppGameSettings.playerColors;
         this._ppRuntime._uiScreens = this._ppRuntime._uiScreens || [];
         this._ppRuntime.start(this._ppGameSettings);
+        document.getElementById('pp-btn-play').classList.add('active');
+        document.getElementById('pp-btn-stop').classList.add('active');
     }
 
     _ppStopPlay() {
         if (!this._ppRuntime || !this._ppRuntime.isRunning) return;
         this._ppRuntime.stop();
+        document.getElementById('pp-btn-play').classList.remove('active');
+        document.getElementById('pp-btn-stop').classList.remove('active');
     }
 
     _ppToggleFullscreen() {

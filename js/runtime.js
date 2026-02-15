@@ -276,10 +276,12 @@ class Runtime {
         // Show play overlay with controls hint
         const playOverlay = this._getElement('playOverlay', 'play-overlay');
         if (playOverlay) playOverlay.classList.remove('hidden');
-        const btnPlay = this._getElement('btnPlay', 'btn-play');
-        if (btnPlay) btnPlay.classList.add('hidden');
-        const btnStop = this._getElement('btnStop', 'btn-stop');
-        if (btnStop) btnStop.classList.remove('hidden');
+        if (!this.scene3d.viewerMode) {
+            const btnPlay = this._getElement('btnPlay', 'btn-play');
+            if (btnPlay) btnPlay.classList.add('hidden');
+            const btnStop = this._getElement('btnStop', 'btn-stop');
+            if (btnStop) btnStop.classList.remove('hidden');
+        }
         const statusMode = this._getElement('statusMode', 'status-mode');
         if (statusMode) statusMode.textContent = 'Play Mode';
         const viewcube = document.querySelector('.viewcube-wrapper');
@@ -456,10 +458,12 @@ class Runtime {
         // Hide play overlay
         const playOverlay = this._getElement('playOverlay', 'play-overlay');
         if (playOverlay) playOverlay.classList.add('hidden');
-        const btnPlay = this._getElement('btnPlay', 'btn-play');
-        if (btnPlay) btnPlay.classList.remove('hidden');
-        const btnStop = this._getElement('btnStop', 'btn-stop');
-        if (btnStop) btnStop.classList.add('hidden');
+        if (!this.scene3d.viewerMode) {
+            const btnPlay = this._getElement('btnPlay', 'btn-play');
+            if (btnPlay) btnPlay.classList.remove('hidden');
+            const btnStop = this._getElement('btnStop', 'btn-stop');
+            if (btnStop) btnStop.classList.add('hidden');
+        }
         const statusMode = this._getElement('statusMode', 'status-mode');
         if (statusMode) statusMode.textContent = 'Edit Mode';
         const viewcube = document.querySelector('.viewcube-wrapper');
