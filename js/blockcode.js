@@ -13,6 +13,7 @@ class BlockCode {
         this.customBlocks = {}; // user-created blocks
         this.customVariables = []; // user-created variable names
         this.customMessages = []; // user-created message names
+        this.onScriptsChanged = null; // collab callback
 
         this.drawer = document.getElementById('block-drawer');
         this.workspace = document.getElementById('workspace-canvas');
@@ -1267,6 +1268,9 @@ class BlockCode {
     saveScriptsToObject() {
         if (this.targetObject) {
             this.targetObject.userData.scripts = this.workspaceScripts;
+            if (this.onScriptsChanged) {
+                this.onScriptsChanged(this.targetObject, this.workspaceScripts);
+            }
         }
     }
 

@@ -2590,6 +2590,29 @@ input[type="checkbox"] {
 
 .title-import-btn .material-icons-round { font-size: 20px; color: var(--text-dim); }
 
+.title-join-party-btn {
+    background: linear-gradient(135deg, #9b59b6, #8e44ad);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    padding: 14px 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 14px;
+    font-family: inherit;
+    transition: all 0.2s;
+}
+.title-join-party-btn:hover {
+    background: linear-gradient(135deg, #a66bbe, #9b59b6);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(155, 89, 182, 0.3);
+}
+.title-join-party-btn:active { transform: translateY(0); }
+.title-join-party-btn .material-icons-round { font-size: 22px; }
+
 .title-section-header {
     display: flex;
     align-items: center;
@@ -5121,8 +5144,9 @@ kbd {
     border-color: rgba(46, 204, 113, 0.4);
 }
 
-/* Guest save button disabled look */
-#btn-save.guest-disabled {
+/* Guest save/share button disabled look */
+#btn-save.guest-disabled,
+#btn-share.guest-disabled {
     opacity: 0.4;
     pointer-events: none;
 }

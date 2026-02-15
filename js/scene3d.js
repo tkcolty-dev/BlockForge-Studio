@@ -1872,6 +1872,9 @@ class Scene3D {
             case 'opacity':
                 if (obj.material) { obj.material.opacity = value; obj.material.transparent = value < 1; }
                 break;
+            case 'scripts':
+                obj.userData.scripts = value;
+                break;
             case 'materialType':
                 // Apply material preset
                 if (obj.material) {

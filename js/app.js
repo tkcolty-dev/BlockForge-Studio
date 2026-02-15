@@ -209,12 +209,28 @@ class App {
     }
 
     startPlay() {
+        if (this._collabRoom && this._collabMembers.length > 1) {
+            this._collabStartVote('play');
+            return;
+        }
+        this._doStartPlay();
+    }
+
+    _doStartPlay() {
         this.runtime.playerColors = this.gameSettings.playerColors;
         this.runtime._uiScreens = this.uiScreens;
         this.runtime.start(this.gameSettings);
     }
 
     stopPlay() {
+        if (this._collabRoom && this._collabMembers.length > 1) {
+            this._collabStartVote('stop');
+            return;
+        }
+        this._doStopPlay();
+    }
+
+    _doStopPlay() {
         this.runtime.stop();
     }
 
@@ -1035,6 +1051,7 @@ class App {
                     if (this.runtime.isRunning) this.stopPlay();
                     else this.startPlay();
                     break;
+
                 case 'ArrowUp':
                 case 'ArrowDown':
                 case 'ArrowLeft':
@@ -1127,7 +1144,21 @@ class App {
         if (loadBtn.dataset.tooltip !== undefined) loadBtn.dataset.tooltip = 'My Projects';
     }
 
+    _updateGuestRestrictions() {
+        const isGuest = this._offlineMode;
+        document.getElementById('btn-save').classList.toggle('guest-disabled', isGuest);
+        document.getElementById('btn-share').classList.toggle('guest-disabled', isGuest);
+    }
+
     // ===== Multi-Project Storage =====
+
+    _storagePrefix() {
+        // Namespace by user id so different accounts don't share projects
+        if (this._cachedUser && !this._offlineMode && this._cachedUser.username) {
+            return 'bf_' + this._cachedUser.username + '_';
+        }
+        return 'bf_guest_';
+    }
 
     generateProjectId() {
         return 'proj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
@@ -1135,26 +1166,43 @@ class App {
 
     getProjectIndex() {
         try {
-            return JSON.parse(localStorage.getItem('blockforge_projects') || '{}');
+            // Try user-namespaced key first
+            const prefix = this._storagePrefix();
+            const data = localStorage.getItem(prefix + 'projects');
+            if (data) return JSON.parse(data);
+            // Migrate from old shared key if exists and user is logged in
+            if (!this._offlineMode) {
+                const old = localStorage.getItem('blockforge_projects');
+                if (old) return JSON.parse(old);
+            }
+            return {};
         } catch (e) {
             return {};
         }
     }
 
     saveProjectIndex(index) {
-        localStorage.setItem('blockforge_projects', JSON.stringify(index));
+        const prefix = this._storagePrefix();
+        localStorage.setItem(prefix + 'projects', JSON.stringify(index));
     }
 
     getProjectData(id) {
         try {
-            return JSON.parse(localStorage.getItem('blockforge_project_' + id));
+            const prefix = this._storagePrefix();
+            const data = localStorage.getItem(prefix + 'project_' + id);
+            if (data) return JSON.parse(data);
+            // Fallback to old shared key
+            const old = localStorage.getItem('blockforge_project_' + id);
+            if (old) return JSON.parse(old);
+            return null;
         } catch (e) {
             return null;
         }
     }
 
     saveProjectData(id, data) {
-        localStorage.setItem('blockforge_project_' + id, JSON.stringify(data));
+        const prefix = this._storagePrefix();
+        localStorage.setItem(prefix + 'project_' + id, JSON.stringify(data));
     }
 
     deleteProjectData(id) {
@@ -1175,6 +1223,9 @@ class App {
                 credentials: 'same-origin'
             }).catch(() => {});
         }
+        const prefix = this._storagePrefix();
+        localStorage.removeItem(prefix + 'project_' + id);
+        // Also clean up old key if it exists
         localStorage.removeItem('blockforge_project_' + id);
         delete index[id];
         this.saveProjectIndex(index);
@@ -1315,11 +1366,41 @@ class App {
         }
     }
 
+    _migrateToNamespacedStorage() {
+        // Migrate projects from old shared 'blockforge_projects' key to user-namespaced key
+        if (this._offlineMode) return;
+        const prefix = this._storagePrefix();
+        // Skip if already migrated (user-namespaced key exists)
+        if (localStorage.getItem(prefix + 'projects')) return;
+        const oldRaw = localStorage.getItem('blockforge_projects');
+        if (!oldRaw) return;
+        try {
+            const oldIndex = JSON.parse(oldRaw);
+            // Copy index
+            localStorage.setItem(prefix + 'projects', oldRaw);
+            // Copy each project's data
+            for (const id of Object.keys(oldIndex)) {
+                const projData = localStorage.getItem('blockforge_project_' + id);
+                if (projData) {
+                    localStorage.setItem(prefix + 'project_' + id, projData);
+                }
+            }
+            // Remove old shared keys so other accounts don't pick them up
+            localStorage.removeItem('blockforge_projects');
+            for (const id of Object.keys(oldIndex)) {
+                localStorage.removeItem('blockforge_project_' + id);
+            }
+        } catch (e) {
+            console.error('Storage namespace migration failed:', e);
+        }
+    }
+
     // ===== Title Screen =====
 
     initTitleScreen() {
         document.getElementById('btn-new-project').addEventListener('click', () => this.showNewProjectModal());
         document.getElementById('btn-import-project').addEventListener('click', () => this.importProjectFromFile());
+        document.getElementById('btn-title-join-party').addEventListener('click', () => this.joinPartyFromTitle());
 
         // New project modal
         const modal = document.getElementById('new-project-modal');
@@ -1655,11 +1736,18 @@ class App {
 
         document.getElementById('title-screen').classList.remove('hidden');
         document.getElementById('project-search').value = '';
+        // Hide/disable features for guest (offline) mode
+        const isGuest = this._offlineMode;
+        const joinPartyBtn = document.getElementById('btn-title-join-party');
+        if (joinPartyBtn) joinPartyBtn.style.display = isGuest ? 'none' : '';
+        document.getElementById('btn-new-project').style.display = isGuest ? 'none' : '';
+        document.getElementById('btn-import-project').style.display = isGuest ? 'none' : '';
         this.renderProjectGrid();
     }
 
     hideTitleScreen() {
         document.getElementById('title-screen').classList.add('hidden');
+        this._updateGuestRestrictions();
         setTimeout(() => this.scene3d.onResize(), 50);
     }
 
@@ -2003,7 +2091,8 @@ class App {
 
     _getProjectSize(id) {
         try {
-            const raw = localStorage.getItem('blockforge_project_' + id);
+            const prefix = this._storagePrefix();
+            const raw = localStorage.getItem(prefix + 'project_' + id) || localStorage.getItem('blockforge_project_' + id);
             if (!raw) return '';
             const bytes = new Blob([raw]).size;
             if (bytes < 1024) return bytes + ' B';
@@ -2553,6 +2642,10 @@ class App {
 
     saveProject(silent) {
         if (!this.currentProjectId) return;
+        if (this._offlineMode) {
+            if (!silent) this.toast('Sign in to save projects');
+            return;
+        }
         if (this._collabGuest()) {
             if (!silent) this.toast('Only the host can save the project');
             return;
@@ -2718,6 +2811,10 @@ class App {
     // ===== Share Link =====
 
     shareProject() {
+        if (this._collabRoom && this._collabMembers.length > 1) {
+            this._collabStartVote('share');
+            return;
+        }
         this.showPublishModal();
     }
 
@@ -3683,6 +3780,7 @@ class App {
             if (res.ok) {
                 this._cachedUser = await res.json();
                 this._offlineMode = false;
+                this._migrateToNamespacedStorage();
                 this._syncProjects();
                 return true;
             }
@@ -5091,6 +5189,81 @@ class App {
         return this._collabRoom && !this._collabIsHost;
     }
 
+    // --- Collab vote system (play/stop/share) ---
+
+    _collabStartVote(action) {
+        if (this._collabVotePending) {
+            this.toast('A vote is already in progress');
+            return;
+        }
+        const userName = this._cachedUser?.displayName || 'Someone';
+        this._collabVotePending = action;
+        this._collabVoteAccepted = 1; // requester auto-accepts
+        this._collabVoteTotal = this._collabMembers.length;
+        this._collabVoteDeclined = false;
+
+        this._collabSend({
+            type: 'vote-request',
+            action: action,
+            requester: userName
+        });
+
+        const labels = { play: 'Play', stop: 'Stop', share: 'Share' };
+        this.toast('Waiting for others to agree to ' + labels[action] + '...');
+    }
+
+    async _handleVoteRequest(msg) {
+        const labels = { play: 'Play', stop: 'Stop', share: 'Share' };
+        const label = labels[msg.action] || msg.action;
+        const accepted = await this.showConfirm(
+            label + ' Request',
+            msg.requester + ' wants to ' + label.toLowerCase() + '. Ready?',
+            'Ready',
+            'primary'
+        );
+        this._collabSend({
+            type: 'vote-response',
+            action: msg.action,
+            accepted: !!accepted
+        });
+    }
+
+    _handleVoteResponse(msg) {
+        if (!this._collabVotePending || this._collabVotePending !== msg.action) return;
+        if (msg.accepted) {
+            this._collabVoteAccepted++;
+        } else {
+            this._collabVoteDeclined = true;
+        }
+
+        // Check if all votes are in
+        const votesIn = this._collabVoteAccepted + (this._collabVoteDeclined ? 1 : 0);
+        if (this._collabVoteDeclined) {
+            const labels = { play: 'Play', stop: 'Stop', share: 'Share' };
+            this.toast(labels[msg.action] + ' was declined');
+            this._collabSend({ type: 'vote-failed', action: msg.action });
+            this._collabVotePending = null;
+        } else if (this._collabVoteAccepted >= this._collabVoteTotal) {
+            this._collabSend({ type: 'vote-passed', action: msg.action });
+            this._collabExecuteAction(msg.action);
+            this._collabVotePending = null;
+        }
+    }
+
+    _collabExecuteAction(action) {
+        switch (action) {
+            case 'play':
+                this._doStartPlay();
+                break;
+            case 'stop':
+                this._doStopPlay();
+                break;
+            case 'share':
+                this.showPublishModal();
+                break;
+        }
+    }
+
     initCollab() {
         const partyBtn = document.getElementById('btn-party');
         partyBtn.addEventListener('click', () => this.showCollabModal());
@@ -5164,6 +5337,7 @@ class App {
         // Unhook broadcasts
         this.scene3d.onObjectAdded = null;
         this.scene3d.onObjectRemoved = null;
+        this.blockCode.onScriptsChanged = null;
 
         // Re-enable save button
         document.getElementById('btn-save').classList.remove('guest-disabled');
@@ -5181,24 +5355,40 @@ class App {
     }
 
     async collabCreateRoom() {
+        if (this._offlineMode) {
+            this.toast('Sign in to use multiplayer');
+            return;
+        }
         if (!this.currentProjectId) {
             this.toast('Open a project first');
             return;
         }
+        if (this._collabRoom) {
+            this.toast('Already in a room — leave first');
+            return;
+        }
         try {
-            const ws = await this._collabConnect();
+            await this._collabConnect();
             this._collabSend({ type: 'create-room', projectName: this.projectName });
         } catch {
-            this.toast('Connection failed');
+            this.toast('Connection failed — are you signed in?');
         }
     }
 
     async collabJoinRoom(code) {
+        if (this._offlineMode) {
+            this.toast('Sign in to use multiplayer');
+            return;
+        }
+        if (this._collabRoom) {
+            this.toast('Already in a room — leave first');
+            return;
+        }
         try {
-            const ws = await this._collabConnect();
+            await this._collabConnect();
             this._collabSend({ type: 'join-room', roomCode: code });
         } catch {
-            this.toast('Connection failed');
+            this.toast('Connection failed — are you signed in?');
         }
     }
 
@@ -5212,6 +5402,29 @@ class App {
         this.toast('Left the room');
     }
 
+    async joinPartyFromTitle() {
+        if (this._offlineMode) {
+            this.toast('Sign in to use multiplayer');
+            return;
+        }
+        const code = await this.showPrompt('Join Party', 'Enter the 6-character room code:', '');
+        if (!code || code.trim().length < 4) return;
+
+        // Create a temporary project so the editor is ready to receive scene data
+        const id = this.generateProjectId();
+        this.currentProjectId = id;
+        this.projectName = 'Party Session';
+        this.hasUnsavedChanges = false;
+        this.scene3d.deserialize([]); // clear scene
+        this.hideTitleScreen();
+        this.updateToolbarProjectName();
+        this.refreshExplorer();
+        this.updateObjectCount();
+
+        // Now join the room — the host will send scene state
+        this.collabJoinRoom(code.trim());
+    }
+
     _handleCollabMessage(msg) {
         switch (msg.type) {
             case 'room-created': {
@@ -5222,6 +5435,7 @@ class App {
                 document.getElementById('btn-party').classList.add('in-room');
                 this._updateCollabUI();
                 this._updatePresenceBar();
+                this.showCollabModal();
                 this.toast('Room created: ' + msg.roomCode, 'success');
                 break;
             }
@@ -5236,6 +5450,7 @@ class App {
                 document.getElementById('btn-party').classList.add('in-room');
                 this._updateCollabUI();
                 this._updatePresenceBar();
+                this.showCollabModal();
                 this.toast('Joined room: ' + msg.roomCode, 'success');
                 break;
             }
@@ -5269,14 +5484,14 @@ class App {
                 this._collabMembers = msg.members || [];
                 this._updateCollabUI();
                 this._updatePresenceBar();
-                this.toast(msg.displayName + ' joined the room');
+                this.toast(msg.displayName + ' joined', 'success');
                 break;
             }
             case 'member-left': {
                 this._collabMembers = msg.members || [];
                 this._updateCollabUI();
                 this._updatePresenceBar();
-                this.toast(msg.displayName + ' left the room');
+                this.toast(msg.displayName + ' left');
                 break;
             }
             case 'room-closed': {
@@ -5318,6 +5533,32 @@ class App {
             case 'update-property': {
                 this.scene3d.remoteUpdateProperty(msg.collabId, msg.prop, msg.value);
                 if (msg.prop === 'name') this.refreshExplorer();
+                if (msg.prop === 'scripts') {
+                    const obj = this.scene3d.findByCollabId(msg.collabId);
+                    if (obj && obj === this.scene3d.selectedObject) {
+                        this.blockCode.workspaceScripts = obj.userData.scripts || [];
+                        this.blockCode.renderWorkspace();
+                    }
+                }
+                break;
+            }
+            case 'vote-request': {
+                this._handleVoteRequest(msg);
+                break;
+            }
+            case 'vote-response': {
+                this._handleVoteResponse(msg);
+                break;
+            }
+            case 'vote-passed': {
+                this._collabVotePending = null;
+                this._collabExecuteAction(msg.action);
+                break;
+            }
+            case 'vote-failed': {
+                this._collabVotePending = null;
+                const labels = { play: 'Play', stop: 'Stop', share: 'Share' };
+                this.toast((labels[msg.action] || msg.action) + ' was declined');
                 break;
             }
         }
@@ -5383,6 +5624,17 @@ class App {
                     z: THREE.MathUtils.radToDeg(obj.rotation.z)
                 },
                 scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z }
+            });
+        };
+
+        // Block code script changes
+        this.blockCode.onScriptsChanged = (obj, scripts) => {
+            if (this._collabBroadcastPaused || !obj.userData.collabId) return;
+            this._collabSend({
+                type: 'update-property',
+                collabId: obj.userData.collabId,
+                prop: 'scripts',
+                value: JSON.parse(JSON.stringify(scripts))
             });
         };
 

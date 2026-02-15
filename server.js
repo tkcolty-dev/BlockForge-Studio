@@ -757,7 +757,11 @@ wss.on('connection', (ws) => {
             case 'add-object':
             case 'remove-object':
             case 'update-transform':
-            case 'update-property': {
+            case 'update-property':
+            case 'vote-request':
+            case 'vote-response':
+            case 'vote-passed':
+            case 'vote-failed': {
                 // Relay to all other members in the same room
                 for (const [code, room] of rooms) {
                     if (room.members.has(ws)) {
