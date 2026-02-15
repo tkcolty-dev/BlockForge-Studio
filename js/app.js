@@ -4423,7 +4423,16 @@ class App {
 
         const creatorEl = document.createElement('div');
         creatorEl.className = 'explore-card-creator';
-        creatorEl.textContent = 'by ' + (project.creator || 'Unknown');
+        const creatorName = project.creator || 'Unknown';
+        creatorEl.textContent = 'by ';
+        const creatorLink = document.createElement('span');
+        creatorLink.className = 'clickable-username';
+        creatorLink.textContent = creatorName;
+        creatorLink.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.openProfilePage(creatorName);
+        });
+        creatorEl.appendChild(creatorLink);
 
         const descEl = document.createElement('div');
         descEl.className = 'explore-card-desc';
@@ -4648,6 +4657,9 @@ class App {
     // ===== Project Page (Scratch-style) =====
 
     async openProjectPage(project) {
+        // Hide profile page if open
+        document.getElementById('profile-page').classList.add('hidden');
+
         this._ppProject = project;
         this._ppProjectId = project.id;
 
@@ -4710,6 +4722,11 @@ class App {
         document.getElementById('pp-exit-fullscreen').onclick = () => this._ppToggleFullscreen();
         document.getElementById('pp-remix-btn').onclick = () => this._ppRemix();
         document.getElementById('pp-report-btn').onclick = () => this._ppReport();
+        const creatorCard = document.querySelector('.pp-creator-card');
+        if (creatorCard) {
+            creatorCard.style.cursor = 'pointer';
+            creatorCard.onclick = () => this.openProfilePage(project.creator || 'Unknown');
+        }
         this._initEmojiChat();
 
         // Init viewer scene (wrapped in try-catch so page stays navigable)
@@ -4908,6 +4925,70 @@ class App {
 
     }
 
+    // ===== Profile Page =====
+
+    async openProfilePage(username) {
+        if (this._offlineMode) {
+            this.toast('Sign in to view profiles', 'error');
+            return;
+        }
+        try {
+            const res = await fetch('/api/users/' + encodeURIComponent(username));
+            if (!res.ok) {
+                this.toast('User not found', 'error');
+                return;
+            }
+            const user = await res.json();
+
+            // Populate banner
+            document.getElementById('prof-display-name').textContent = user.displayName;
+            document.getElementById('prof-username').textContent = '@' + user.username;
+            document.getElementById('prof-project-count').textContent = user.projectCount;
+
+            // Member since
+            const d = new Date(Number(user.createdAt));
+            const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            document.getElementById('prof-member-since').textContent = 'Member since ' + months[d.getMonth()] + ' ' + d.getFullYear();
+
+            // Avatar
+            const avatarEl = document.getElementById('prof-avatar');
+            avatarEl.innerHTML = '';
+            if (user.avatarUrl) {
+                const img = document.createElement('img');
+                img.src = user.avatarUrl;
+                img.alt = user.displayName;
+                avatarEl.appendChild(img);
+            } else {
+                avatarEl.textContent = (user.displayName || 'U').charAt(0).toUpperCase();
+            }
+            avatarEl.style.background = user.avatarColor || 'var(--accent)';
+
+            // Project grid
+            const grid = document.getElementById('prof-project-grid');
+            const empty = document.getElementById('prof-empty');
+            grid.innerHTML = '';
+            if (user.projects.length > 0) {
+                empty.classList.add('hidden');
+                user.projects.forEach(proj => {
+                    grid.appendChild(this.createExploreCard(proj, false));
+                });
+            } else {
+                empty.classList.remove('hidden');
+            }
+
+            // Show page
+            document.getElementById('profile-page').classList.remove('hidden');
+            document.getElementById('prof-back').onclick = () => this.closeProfilePage();
+        } catch (e) {
+            this.toast('Failed to load profile', 'error');
+        }
+    }
+
+    closeProfilePage() {
+        document.getElementById('profile-page').classList.add('hidden');
+        document.getElementById('prof-project-grid').innerHTML = '';
+    }
+
     // ===== Emoji Chat =====
 
     _initEmojiChat() {
@@ -5008,8 +5089,11 @@ class App {
         const el = document.createElement('div');
         el.className = 'pp-emoji-msg';
         const name = document.createElement('span');
-        name.className = 'pp-emoji-msg-name';
+        name.className = 'pp-emoji-msg-name clickable-username';
         name.textContent = msg.username || 'Anonymous';
+        name.addEventListener('click', () => {
+            if (msg.username) this.openProfilePage(msg.username);
+        });
         const emoji = document.createElement('span');
         emoji.className = 'pp-emoji-msg-emoji';
         emoji.textContent = msg.emoji;

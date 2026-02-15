@@ -293,6 +293,35 @@ app.get('/api/me', authenticate, async (req, res) => {
     res.json(result);
 });
 
+// GET /api/users/:username — public user profile
+app.get('/api/users/:username', async (req, res) => {
+    const lookup = req.params.username;
+    const { rows: userRows } = await pool.query(
+        'SELECT id, username, display_name, avatar_color, avatar, created_at FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(display_name) = LOWER($1)',
+        [lookup]
+    );
+    if (userRows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const user = userRows[0];
+    const { rows: projRows } = await pool.query(
+        'SELECT id, name, description, tags, thumbnail, published_at FROM shared_projects WHERE user_id = $1 ORDER BY published_at DESC',
+        [user.id]
+    );
+    const projects = projRows.map(r => ({
+        id: r.id, name: r.name, description: r.description,
+        creator: user.display_name,
+        tags: JSON.parse(r.tags), thumbnail: r.thumbnail, publishedAt: r.published_at
+    }));
+    const result = {
+        username: user.username, displayName: user.display_name,
+        avatarColor: user.avatar_color, avatar: user.avatar && user.avatar.startsWith('custom:') ? 'custom' : (user.avatar || 'default'),
+        createdAt: user.created_at, projects, projectCount: projects.length
+    };
+    if (user.avatar && user.avatar.startsWith('custom:')) {
+        result.avatarUrl = '/api/avatars/' + user.avatar.replace('custom:', '');
+    }
+    res.json(result);
+});
+
 // POST /api/me/avatar — upload profile picture (base64 image)
 app.post('/api/me/avatar', authenticate, async (req, res) => {
     const { image } = req.body;

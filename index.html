@@ -1468,6 +1468,38 @@
         </div>
     </div>
 
+    <!-- Profile Page -->
+    <div id="profile-page" class="hidden">
+        <div class="prof-header">
+            <button class="prof-back-btn" id="prof-back">
+                <span class="material-icons-round">arrow_back</span>
+                <span>Back</span>
+            </button>
+        </div>
+        <div class="prof-body">
+            <div class="prof-banner">
+                <div class="prof-avatar-large" id="prof-avatar"></div>
+                <div class="prof-user-info">
+                    <div class="prof-display-name" id="prof-display-name"></div>
+                    <div class="prof-username" id="prof-username"></div>
+                    <div class="prof-member-since" id="prof-member-since"></div>
+                </div>
+                <div class="prof-stats">
+                    <div class="prof-stat">
+                        <span class="prof-stat-value" id="prof-project-count">0</span>
+                        <span class="prof-stat-label">Shared Projects</span>
+                    </div>
+                </div>
+            </div>
+            <h3 class="prof-section-title">Shared Projects</h3>
+            <div class="prof-project-grid" id="prof-project-grid"></div>
+            <div class="prof-empty hidden" id="prof-empty">
+                <span class="material-icons-round">inventory_2</span>
+                <p>No shared projects yet</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="js/three.min.js"></script>
     <script src="js/OrbitControls.js"></script>
