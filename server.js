@@ -55,6 +55,28 @@ function getPgConfig() {
 
 const pool = new Pool(getPgConfig());
 
+// Parse VCAP_SERVICES for GenAI service
+function getGenaiConfig() {
+    if (process.env.VCAP_SERVICES) {
+        const vcap = JSON.parse(process.env.VCAP_SERVICES);
+        const genaiService = (vcap.genai || [])[0];
+        if (genaiService && genaiService.credentials) {
+            const creds = genaiService.credentials;
+            // Top-level api_base includes /openai path; endpoint.api_base does not
+            const apiBase = creds.api_base || (creds.endpoint && creds.endpoint.api_base) || '';
+            const apiKey = creds.api_key || (creds.endpoint && creds.endpoint.api_key) || '';
+            const model = creds.model_name || '';
+            return { apiBase, apiKey, model };
+        }
+    }
+    // Local fallback (set env vars for local dev)
+    return {
+        apiBase: process.env.GENAI_API_BASE || '',
+        apiKey: process.env.GENAI_API_KEY || '',
+        model: process.env.GENAI_MODEL || ''
+    };
+}
+
 // Database setup
 async function initDb() {
     await pool.query(`
@@ -354,6 +376,10 @@ app.post('/api/me/avatar', authenticate, async (req, res) => {
     );
     await pool.query('UPDATE users SET avatar = $1 WHERE id = $2', ['custom:' + filename, req.user.id]);
 
+    // Refresh JWT cookie with updated avatar
+    const { rows: userRows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    if (userRows.length > 0) setAuthCookie(res, userRows[0]);
+
     res.json({ ok: true, avatarUrl: '/api/avatars/' + filename });
 });
 
@@ -361,6 +387,11 @@ app.post('/api/me/avatar', authenticate, async (req, res) => {
 app.delete('/api/me/avatar', authenticate, async (req, res) => {
     await pool.query('DELETE FROM avatars WHERE user_id = $1', [req.user.id]);
     await pool.query('UPDATE users SET avatar = $1 WHERE id = $2', ['default', req.user.id]);
+
+    // Refresh JWT cookie with updated avatar
+    const { rows: userRows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    if (userRows.length > 0) setAuthCookie(res, userRows[0]);
+
     res.json({ ok: true });
 });
 
@@ -370,7 +401,7 @@ app.get('/api/avatars/:filename', async (req, res) => {
     const { rows } = await pool.query('SELECT mime_type, data FROM avatars WHERE filename = $1', [filename]);
     if (rows.length === 0) return res.status(404).send('Not found');
     res.set('Content-Type', rows[0].mime_type);
-    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Cache-Control', 'no-cache');
     res.send(rows[0].data);
 });
 
@@ -385,26 +416,43 @@ app.post('/api/logout', (req, res) => {
 // GET /api/projects
 app.get('/api/projects', async (req, res) => {
     const { rows } = await pool.query(
-        'SELECT id, name, description, creator, tags, thumbnail, published_at FROM shared_projects ORDER BY published_at DESC'
+        `SELECT sp.id, sp.name, sp.description, sp.creator, sp.tags, sp.thumbnail, sp.published_at,
+                u.avatar, u.avatar_color
+         FROM shared_projects sp
+         LEFT JOIN users u ON sp.user_id = u.id
+         ORDER BY sp.published_at DESC`
     );
-    const projects = rows.map(row => ({
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        creator: row.creator,
-        tags: JSON.parse(row.tags),
-        thumbnail: row.thumbnail,
-        publishedAt: row.published_at
-    }));
+    const projects = rows.map(row => {
+        const proj = {
+            id: row.id,
+            name: row.name,
+            description: row.description,
+            creator: row.creator,
+            tags: JSON.parse(row.tags),
+            thumbnail: row.thumbnail,
+            publishedAt: row.published_at,
+            creatorAvatarColor: row.avatar_color
+        };
+        if (row.avatar && row.avatar.startsWith('custom:')) {
+            proj.creatorAvatarUrl = '/api/avatars/' + row.avatar.replace('custom:', '');
+        }
+        return proj;
+    });
     res.json(projects);
 });
 
 // GET /api/projects/:id
 app.get('/api/projects/:id', async (req, res) => {
-    const { rows } = await pool.query('SELECT * FROM shared_projects WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query(
+        `SELECT sp.*, u.avatar, u.avatar_color
+         FROM shared_projects sp
+         LEFT JOIN users u ON sp.user_id = u.id
+         WHERE sp.id = $1`,
+        [req.params.id]
+    );
     if (rows.length === 0) return res.status(404).json({ error: 'Project not found' });
     const row = rows[0];
-    res.json({
+    const result = {
         id: row.id,
         name: row.name,
         description: row.description,
@@ -412,8 +460,13 @@ app.get('/api/projects/:id', async (req, res) => {
         tags: JSON.parse(row.tags),
         thumbnail: row.thumbnail,
         publishedAt: row.published_at,
-        projectData: JSON.parse(row.project_data)
-    });
+        projectData: JSON.parse(row.project_data),
+        creatorAvatarColor: row.avatar_color
+    };
+    if (row.avatar && row.avatar.startsWith('custom:')) {
+        result.creatorAvatarUrl = '/api/avatars/' + row.avatar.replace('custom:', '');
+    }
+    res.json(result);
 });
 
 // POST /api/projects
@@ -600,6 +653,119 @@ app.delete('/api/user/projects/:id', authenticate, async (req, res) => {
     res.json({ ok: true });
 });
 
+// ===== AI Build Assistant =====
+
+const AI_SYSTEM_PROMPT = `You are an AI assistant for a 3D block-building game editor called Cobalt Studio. The user will describe a structure or scene they want to build and you must respond with ONLY a JSON array of objects to place in the scene. No explanation, no markdown, no code fences — just the raw JSON array.
+
+Each object in the array must have:
+- "type": one of: box, sphere, cylinder, cone, plane, wedge, stairs, pyramid, dome, arch, wall, corner, tree, house, platform, bridge, crate, gem
+- "position": {"x": number, "y": number, "z": number} — Y is up. Ground is y=0. Place objects so their base sits on the ground or on other objects.
+- "scale": {"x": number, "y": number, "z": number} — default is 1,1,1 for a 1x1x1 unit object
+- "color": a hex color string like "#8B4513"
+- "name": a short descriptive name for this part
+
+Guidelines:
+- Keep structures reasonable (5-40 objects)
+- Use realistic proportions: walls are tall and thin, floors are wide and flat, roofs are pyramid or wedge shapes
+- Place objects so they connect properly (no floating gaps)
+- Use varied colors to make structures visually interesting
+- Y=0 is ground level. A box with scale.y=3 centered at y=1.5 has its base on the ground.
+- For walls, use box type with thin depth (e.g. scale z=0.2) and tall height
+- For floors/roofs, use box type with thin height (e.g. scale y=0.2) and wide x/z
+
+Example response for "a small house":
+[{"type":"box","position":{"x":0,"y":1.5,"z":0},"scale":{"x":4,"y":3,"z":4},"color":"#D2B48C","name":"Walls"},{"type":"pyramid","position":{"x":0,"y":3.5,"z":0},"scale":{"x":5,"y":2,"z":5},"color":"#8B0000","name":"Roof"},{"type":"box","position":{"x":0,"y":0.75,"z":2.01},"scale":{"x":1,"y":1.5,"z":0.1},"color":"#654321","name":"Door"},{"type":"box","position":{"x":1.5,"y":1.8,"z":2.01},"scale":{"x":0.8,"y":0.8,"z":0.1},"color":"#87CEEB","name":"Window"}]`;
+
+app.post('/api/ai/build', authenticate, async (req, res) => {
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+        return res.status(400).json({ error: 'Prompt is required' });
+    }
+    if (prompt.length > 500) {
+        return res.status(400).json({ error: 'Prompt too long (max 500 characters)' });
+    }
+
+    const config = getGenaiConfig();
+    if (!config.apiBase) {
+        return res.status(503).json({ error: 'AI service not configured' });
+    }
+
+    try {
+        const url = config.apiBase.replace(/\/+$/, '') + '/v1/chat/completions';
+        const body = JSON.stringify({
+            model: config.model || undefined,
+            messages: [
+                { role: 'system', content: AI_SYSTEM_PROMPT },
+                { role: 'user', content: prompt.trim() }
+            ],
+            temperature: 0.7,
+            max_tokens: 4096
+        });
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(config.apiKey ? { 'Authorization': 'Bearer ' + config.apiKey } : {})
+            },
+            body
+        });
+
+        if (!response.ok) {
+            const errText = await response.text().catch(() => '');
+            console.error('GenAI API error:', response.status, errText);
+            return res.status(502).json({ error: 'AI service error' });
+        }
+
+        const data = await response.json();
+        const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (!content) {
+            return res.status(502).json({ error: 'Empty AI response' });
+        }
+
+        // Extract JSON array from response (handle potential markdown fences)
+        let jsonStr = content.trim();
+        const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fenceMatch) jsonStr = fenceMatch[1].trim();
+
+        // Find the JSON array in the response
+        const arrStart = jsonStr.indexOf('[');
+        const arrEnd = jsonStr.lastIndexOf(']');
+        if (arrStart === -1 || arrEnd === -1) {
+            return res.status(502).json({ error: 'AI response was not valid JSON' });
+        }
+        jsonStr = jsonStr.substring(arrStart, arrEnd + 1);
+
+        const objects = JSON.parse(jsonStr);
+        if (!Array.isArray(objects)) {
+            return res.status(502).json({ error: 'AI response was not an array' });
+        }
+
+        // Validate and sanitize each object
+        const validTypes = new Set(['box','sphere','cylinder','cone','plane','wedge','stairs','pyramid','dome','arch','wall','corner','tree','house','platform','bridge','crate','gem']);
+        const sanitized = objects.slice(0, 50).map(obj => ({
+            type: validTypes.has(obj.type) ? obj.type : 'box',
+            position: {
+                x: Number(obj.position?.x) || 0,
+                y: Number(obj.position?.y) || 0,
+                z: Number(obj.position?.z) || 0
+            },
+            scale: {
+                x: Math.min(Math.abs(Number(obj.scale?.x) || 1), 50),
+                y: Math.min(Math.abs(Number(obj.scale?.y) || 1), 50),
+                z: Math.min(Math.abs(Number(obj.scale?.z) || 1), 50)
+            },
+            color: /^#[0-9a-fA-F]{6}$/.test(obj.color) ? obj.color : '#4a90d9',
+            name: (typeof obj.name === 'string' ? obj.name : 'Object').slice(0, 50)
+        }));
+
+        res.json({ objects: sanitized });
+    } catch (err) {
+        console.error('AI build error:', err);
+        res.status(500).json({ error: 'Failed to generate structure' });
+    }
+});
+
 // ===== WebSocket Collab Server =====
 
 const server = http.createServer(app);
@@ -629,7 +795,10 @@ function broadcastToRoom(roomCode, msg, excludeWs) {
 function getMemberList(room) {
     const list = [];
     for (const [, info] of room.members) {
-        list.push({ userId: info.userId, displayName: info.displayName, avatar: info.avatar });
+        const member = { userId: info.userId, displayName: info.displayName, avatar: info.avatar };
+        if (info.avatarUrl) member.avatarUrl = info.avatarUrl;
+        if (info.avatarColor) member.avatarColor = info.avatarColor;
+        list.push(member);
     }
     return list;
 }
@@ -709,7 +878,10 @@ wss.on('connection', (ws) => {
                     projectName: msg.projectName || 'Untitled',
                     members: new Map()
                 };
-                room.members.set(ws, { userId: user.id, displayName: user.displayName, avatar: user.avatar });
+                const avatarVal = user.avatar || 'default';
+                const memberInfo = { userId: user.id, displayName: user.displayName, avatar: avatarVal, avatarColor: user.avatarColor };
+                if (avatarVal.startsWith('custom:')) memberInfo.avatarUrl = '/api/avatars/' + avatarVal.replace('custom:', '');
+                room.members.set(ws, memberInfo);
                 rooms.set(code, room);
                 ws.send(JSON.stringify({
                     type: 'room-created',
@@ -731,7 +903,10 @@ wss.on('connection', (ws) => {
                 }
                 // Remove from any existing room first
                 removeFromRoom(ws);
-                room.members.set(ws, { userId: user.id, displayName: user.displayName, avatar: user.avatar });
+                const jAvatarVal = user.avatar || 'default';
+                const jMemberInfo = { userId: user.id, displayName: user.displayName, avatar: jAvatarVal, avatarColor: user.avatarColor };
+                if (jAvatarVal.startsWith('custom:')) jMemberInfo.avatarUrl = '/api/avatars/' + jAvatarVal.replace('custom:', '');
+                room.members.set(ws, jMemberInfo);
 
                 // Tell the joiner they're in
                 ws.send(JSON.stringify({
@@ -787,6 +962,7 @@ wss.on('connection', (ws) => {
             case 'remove-object':
             case 'update-transform':
             case 'update-property':
+            case 'update-environment':
             case 'vote-request':
             case 'vote-response':
             case 'vote-passed':

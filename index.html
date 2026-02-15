@@ -281,6 +281,9 @@
             <div class="toolbar-user" id="toolbar-user">
                 <div class="toolbar-user-avatar" id="toolbar-user-avatar"></div>
             </div>
+            <button class="tool-btn" id="btn-ai-assistant" title="AI Build Assistant">
+                <span class="material-icons-round">auto_awesome</span>
+            </button>
             <button class="tool-btn" id="btn-party" title="Multiplayer Party">
                 <span class="material-icons-round">group</span>
             </button>
@@ -1255,6 +1258,29 @@
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- AI Assistant Panel -->
+    <div id="ai-panel" class="ai-panel hidden">
+        <div class="ai-panel-header">
+            <span class="material-icons-round ai-panel-icon">auto_awesome</span>
+            <span class="ai-panel-title">AI Build Assistant</span>
+            <button class="ai-panel-close" id="ai-panel-close">
+                <span class="material-icons-round">close</span>
+            </button>
+        </div>
+        <div class="ai-panel-messages" id="ai-messages">
+            <div class="ai-message ai-system">
+                <span class="material-icons-round">auto_awesome</span>
+                <span>Describe what you want to build and I'll place it in your scene!</span>
+            </div>
+        </div>
+        <div class="ai-panel-input">
+            <input type="text" id="ai-prompt-input" placeholder="Build a castle with towers..." maxlength="500" autocomplete="off" spellcheck="false">
+            <button class="ai-build-btn" id="ai-build-btn" title="Generate">
+                <span class="material-icons-round">arrow_upward</span>
+            </button>
         </div>
     </div>
 

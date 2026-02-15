@@ -35,6 +35,7 @@ class App {
         this.initExplore();
         this.initPublish();
         this.initCollab();
+        this.initAIAssistant();
 
         this.VERSION = '1.0.0';
         this.currentProjectId = null;
@@ -962,6 +963,11 @@ class App {
 
         this.scene3d._needsRender = true;
         this.updateProperties(obj);
+
+        // Broadcast transform to collab members
+        if (this.scene3d.onObjectChanged) {
+            this.scene3d.onObjectChanged(obj);
+        }
     }
 
     // ===== Keyboard Shortcuts =====
@@ -1097,28 +1103,39 @@ class App {
     // ===== Environment =====
 
     initEnvironment() {
+        const sendEnv = (prop, value) => {
+            if (this._collabBroadcastPaused) return;
+            this._collabSend({ type: 'update-environment', prop, value });
+        };
+
         document.getElementById('sky-color').addEventListener('input', (e) => {
             this.scene3d.setSkyColor(e.target.value);
+            sendEnv('skyColor', e.target.value);
         });
 
         document.getElementById('skybox-type').addEventListener('change', (e) => {
             this.scene3d.setSkybox(e.target.value);
+            sendEnv('skybox', e.target.value);
         });
 
         document.getElementById('ambient-light').addEventListener('input', (e) => {
             this.scene3d.setAmbientIntensity(e.target.value / 100);
+            sendEnv('ambientLight', e.target.value);
         });
 
         document.getElementById('fog-density').addEventListener('input', (e) => {
             this.scene3d.setFog(parseInt(e.target.value));
+            sendEnv('fogDensity', e.target.value);
         });
 
         document.getElementById('shadows-enabled').addEventListener('change', (e) => {
             this.scene3d.setShadows(e.target.checked);
+            sendEnv('shadows', e.target.checked);
         });
 
         document.getElementById('weather-type').addEventListener('change', (e) => {
             this.scene3d.setWeather(e.target.value);
+            sendEnv('weather', e.target.value);
         });
 
         document.getElementById('bg-music').addEventListener('change', (e) => {
@@ -2749,6 +2766,7 @@ class App {
     }
 
     undo() {
+        if (this._collabRoom) { this.toast('Undo disabled during collaboration'); return; }
         if (this.undoStack.length === 0) return;
         this.redoStack.push(JSON.stringify(this.scene3d.serialize()));
         const state = JSON.parse(this.undoStack.pop());
@@ -2759,6 +2777,7 @@ class App {
     }
 
     redo() {
+        if (this._collabRoom) { this.toast('Redo disabled during collaboration'); return; }
         if (this.redoStack.length === 0) return;
         this.undoStack.push(JSON.stringify(this.scene3d.serialize()));
         const state = JSON.parse(this.redoStack.pop());
@@ -4424,7 +4443,17 @@ class App {
         const creatorEl = document.createElement('div');
         creatorEl.className = 'explore-card-creator';
         const creatorName = project.creator || 'Unknown';
-        creatorEl.textContent = 'by ';
+
+        // Creator avatar
+        if (project.creatorAvatarUrl) {
+            const avatarImg = document.createElement('img');
+            avatarImg.src = project.creatorAvatarUrl;
+            avatarImg.alt = creatorName;
+            avatarImg.style.cssText = 'width:16px;height:16px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px';
+            creatorEl.appendChild(avatarImg);
+        }
+
+        creatorEl.appendChild(document.createTextNode('by '));
         const creatorLink = document.createElement('span');
         creatorLink.className = 'clickable-username';
         creatorLink.textContent = creatorName;
@@ -4672,6 +4701,7 @@ class App {
                     const full = await res.json();
                     data = full.projectData;
                     this._ppProject = full;
+                    project = full;
                 }
             } catch (e) { /* offline */ }
         }
@@ -4685,14 +4715,23 @@ class App {
 
         // Populate metadata
         document.getElementById('pp-title').textContent = project.name || 'Untitled';
-        document.getElementById('pp-creator').textContent = 'by ' + (project.creator || 'Unknown');
+        const ppCreatorEl = document.getElementById('pp-creator');
+        ppCreatorEl.textContent = 'by ' + (project.creator || 'Unknown');
+        ppCreatorEl.style.cursor = 'pointer';
+        ppCreatorEl.onclick = () => this.openProfilePage(project.creator || 'Unknown');
         document.getElementById('pp-description').textContent = project.description || 'No description provided.';
         document.getElementById('pp-creator-name').textContent = project.creator || 'Unknown';
 
         // Creator avatar
         const avatarEl = document.getElementById('pp-creator-avatar');
         const creatorName = project.creator || 'U';
-        avatarEl.textContent = creatorName.charAt(0).toUpperCase();
+        if (project.creatorAvatarUrl) {
+            avatarEl.innerHTML = `<img src="${project.creatorAvatarUrl}" alt="${this._escHtml(creatorName)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+        } else {
+            avatarEl.innerHTML = '';
+            avatarEl.textContent = creatorName.charAt(0).toUpperCase();
+        }
+        if (project.creatorAvatarColor) avatarEl.style.background = project.creatorAvatarColor;
 
         // Tags
         const tags = project.tags || (this._ppProject.tags) || [];
@@ -5626,6 +5665,31 @@ class App {
                 }
                 break;
             }
+            case 'update-environment': {
+                this._collabBroadcastPaused = true;
+                const { prop, value } = msg;
+                if (prop === 'skyColor') {
+                    document.getElementById('sky-color').value = value;
+                    this.scene3d.setSkyColor(value);
+                } else if (prop === 'skybox') {
+                    document.getElementById('skybox-type').value = value;
+                    this.scene3d.setSkybox(value);
+                } else if (prop === 'ambientLight') {
+                    document.getElementById('ambient-light').value = value;
+                    this.scene3d.setAmbientIntensity(value / 100);
+                } else if (prop === 'fogDensity') {
+                    document.getElementById('fog-density').value = value;
+                    this.scene3d.setFog(parseInt(value));
+                } else if (prop === 'shadows') {
+                    document.getElementById('shadows-enabled').checked = value;
+                    this.scene3d.setShadows(value);
+                } else if (prop === 'weather') {
+                    document.getElementById('weather-type').value = value;
+                    this.scene3d.setWeather(value);
+                }
+                this._collabBroadcastPaused = false;
+                break;
+            }
             case 'vote-request': {
                 this._handleVoteRequest(msg);
                 break;
@@ -5776,13 +5840,18 @@ class App {
             // Member list
             const list = document.getElementById('collab-member-list');
             const colors = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6'];
-            list.innerHTML = this._collabMembers.map((m, i) => `
+            list.innerHTML = this._collabMembers.map((m, i) => {
+                const bgColor = m.avatarColor || colors[i % colors.length];
+                const avatarContent = m.avatarUrl
+                    ? `<img src="${m.avatarUrl}" alt="${this._escHtml(m.displayName)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+                    : (m.displayName || '?')[0].toUpperCase();
+                return `
                 <div class="collab-member-item">
-                    <div class="collab-member-avatar" style="background:${colors[i % colors.length]}">${(m.displayName || '?')[0].toUpperCase()}</div>
+                    <div class="collab-member-avatar" style="background:${bgColor}">${avatarContent}</div>
                     <span class="collab-member-name">${this._escHtml(m.displayName)}</span>
                     <span class="collab-member-role">${i === 0 ? 'Host' : 'Guest'}</span>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         } else {
             joinSection.classList.remove('hidden');
             activeSection.classList.add('hidden');
@@ -5801,6 +5870,130 @@ class App {
         bar.innerHTML = this._collabMembers.map((m, i) => `
             <div class="collab-presence-dot" style="background:${colors[i % colors.length]}" title="${this._escHtml(m.displayName)}">${(m.displayName || '?')[0].toUpperCase()}</div>
         `).join('');
+    }
+
+    // ===== AI Build Assistant =====
+
+    initAIAssistant() {
+        const panel = document.getElementById('ai-panel');
+        const btn = document.getElementById('btn-ai-assistant');
+        const closeBtn = document.getElementById('ai-panel-close');
+        const input = document.getElementById('ai-prompt-input');
+        const buildBtn = document.getElementById('ai-build-btn');
+
+        btn.addEventListener('click', () => {
+            panel.classList.toggle('hidden');
+            if (!panel.classList.contains('hidden')) {
+                input.focus();
+            }
+        });
+
+        closeBtn.addEventListener('click', () => {
+            panel.classList.add('hidden');
+        });
+
+        const submit = () => {
+            const prompt = input.value.trim();
+            if (!prompt) return;
+            input.value = '';
+            this._aiGenerateStructure(prompt);
+        };
+
+        buildBtn.addEventListener('click', submit);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') submit();
+        });
+    }
+
+    _aiAddMessage(text, type) {
+        const container = document.getElementById('ai-messages');
+        const msg = document.createElement('div');
+        msg.className = 'ai-message ' + type;
+        if (type === 'ai-user') {
+            msg.textContent = text;
+        } else {
+            msg.innerHTML = '<span class="material-icons-round">' +
+                (type === 'ai-result' ? 'check_circle' : type === 'ai-error' ? 'error' : 'auto_awesome') +
+                '</span><span>' + text + '</span>';
+        }
+        container.appendChild(msg);
+        container.scrollTop = container.scrollHeight;
+        return msg;
+    }
+
+    async _aiGenerateStructure(prompt) {
+        const buildBtn = document.getElementById('ai-build-btn');
+        const input = document.getElementById('ai-prompt-input');
+        const container = document.getElementById('ai-messages');
+
+        // Show user message
+        this._aiAddMessage(prompt, 'ai-user');
+
+        // Show loading
+        const loadingEl = document.createElement('div');
+        loadingEl.className = 'ai-loading';
+        loadingEl.innerHTML = '<span class="ai-loading-dots"><span></span><span></span><span></span></span> Generating...';
+        container.appendChild(loadingEl);
+        container.scrollTop = container.scrollHeight;
+
+        buildBtn.disabled = true;
+        input.disabled = true;
+
+        try {
+            const res = await fetch('/api/ai/build', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+            });
+
+            loadingEl.remove();
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Request failed' }));
+                this._aiAddMessage(err.error || 'Failed to generate', 'ai-error');
+                return;
+            }
+
+            const data = await res.json();
+            const objects = data.objects;
+
+            if (!objects || objects.length === 0) {
+                this._aiAddMessage('No objects were generated. Try a different prompt.', 'ai-error');
+                return;
+            }
+
+            // Calculate offset from camera target so structures appear in front of the user
+            const target = this.scene3d.orbitControls.target;
+            const offsetX = target.x;
+            const offsetZ = target.z;
+
+            this.saveUndoState();
+
+            for (const obj of objects) {
+                this.scene3d.addObject(obj.type, {
+                    name: obj.name,
+                    position: {
+                        x: obj.position.x + offsetX,
+                        y: obj.position.y,
+                        z: obj.position.z + offsetZ
+                    },
+                    scale: obj.scale,
+                    color: obj.color
+                });
+            }
+
+            this.refreshExplorer();
+            this.updateObjectCount();
+            this._aiAddMessage('Placed ' + objects.length + ' object' + (objects.length !== 1 ? 's' : '') + '!', 'ai-result');
+            this.toast('AI placed ' + objects.length + ' objects', 'success');
+        } catch (err) {
+            loadingEl.remove();
+            this._aiAddMessage('Connection error. Please try again.', 'ai-error');
+        } finally {
+            buildBtn.disabled = false;
+            input.disabled = false;
+            input.focus();
+        }
     }
 
     // ===== Toast =====
