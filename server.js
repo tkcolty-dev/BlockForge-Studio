@@ -119,63 +119,24 @@ function setAuthCookie(res, user) {
 // ===== CAPTCHA =====
 
 function generateCaptcha() {
-    const types = ['twoStep', 'wordMath', 'sequence', 'comparison', 'remainder'];
-    const type = types[Math.floor(Math.random() * types.length)];
+    const variant = Math.floor(Math.random() * 3);
     let question, answer;
 
-    if (type === 'twoStep') {
-        const variant = Math.random() < 0.5;
-        if (variant) {
-            const a = Math.floor(Math.random() * 8) + 2;
-            const b = Math.floor(Math.random() * 8) + 2;
-            const c = Math.floor(Math.random() * 5) + 2;
-            answer = (a + b) * c;
-            question = `What is (${a} + ${b}) × ${c}?`;
-        } else {
-            const a = Math.floor(Math.random() * 6) + 2;
-            const b = Math.floor(Math.random() * 6) + 2;
-            const c = Math.floor(Math.random() * 10) + 1;
-            answer = a * b + c;
-            question = `What is ${a} × ${b} + ${c}?`;
-        }
-    } else if (type === 'wordMath') {
-        const items = ['apples', 'coins', 'stars', 'gems', 'blocks'];
-        const item = items[Math.floor(Math.random() * items.length)];
-        const total = Math.floor(Math.random() * 30) + 15;
-        const give = Math.floor(Math.random() * (total - 5)) + 3;
-        answer = total - give;
-        question = `If you have ${total} ${item} and give away ${give}, how many are left?`;
-    } else if (type === 'sequence') {
-        const start = Math.floor(Math.random() * 5) + 1;
-        const step = Math.floor(Math.random() * 4) + 2;
-        const seq = [];
-        for (let i = 0; i < 4; i++) seq.push(start + step * i);
-        answer = start + step * 4;
-        question = `What comes next: ${seq.join(', ')}, ?`;
-    } else if (type === 'comparison') {
-        const a = Math.floor(Math.random() * 8) + 3;
-        const b = Math.floor(Math.random() * 8) + 3;
-        const c = Math.floor(Math.random() * 8) + 3;
-        const d = Math.floor(Math.random() * 8) + 3;
-        const left = a * b;
-        const right = c * d;
-        if (left === right) {
-            answer = left + right;
-            question = `What is ${a} × ${b} + ${c} × ${d}?`;
-        } else {
-            answer = Math.max(left, right);
-            question = `Which is bigger: ${a} × ${b} or ${c} × ${d}? (type the bigger number)`;
-        }
+    if (variant === 0) {
+        const a = Math.floor(Math.random() * 20) + 1;
+        const b = Math.floor(Math.random() * 20) + 1;
+        answer = a + b;
+        question = `What is ${a} + ${b}?`;
+    } else if (variant === 1) {
+        const b = Math.floor(Math.random() * 15) + 1;
+        const a = b + Math.floor(Math.random() * 15) + 1;
+        answer = a - b;
+        question = `What is ${a} - ${b}?`;
     } else {
-        const b = Math.floor(Math.random() * 7) + 3;
-        const a = Math.floor(Math.random() * 40) + b + 5;
-        answer = a % b;
-        if (answer === 0) {
-            answer = a / b;
-            question = `What is ${a} ÷ ${b}?`;
-        } else {
-            question = `What is the remainder when ${a} is divided by ${b}?`;
-        }
+        const a = Math.floor(Math.random() * 10) + 2;
+        const b = Math.floor(Math.random() * 10) + 2;
+        answer = a * b;
+        question = `What is ${a} x ${b}?`;
     }
 
     const token = jwt.sign({ answer, ts: Date.now() }, JWT_SECRET, { expiresIn: '10m' });
@@ -203,13 +164,15 @@ app.post('/api/signup', async (req, res) => {
     const { username, password, captchaToken, captchaAnswer } = req.body;
 
     // Validate captcha
-    if (!captchaToken || captchaAnswer === undefined || captchaAnswer === '') {
+    if (!captchaToken || captchaAnswer === undefined || captchaAnswer === null || String(captchaAnswer).trim() === '') {
         return res.status(400).json({ error: 'Please solve the bot check' });
     }
     try {
         const decoded = jwt.verify(captchaToken, JWT_SECRET);
-        if (String(decoded.answer) !== String(captchaAnswer).trim()) {
-            return res.status(400).json({ error: 'Wrong answer to bot check', refreshCaptcha: true });
+        const expected = Number(decoded.answer);
+        const provided = Number(String(captchaAnswer).trim());
+        if (isNaN(expected) || isNaN(provided) || expected !== provided) {
+            return res.status(400).json({ error: 'Wrong answer, try again', refreshCaptcha: true });
         }
     } catch {
         return res.status(400).json({ error: 'Bot check expired, try again', refreshCaptcha: true });
