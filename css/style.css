@@ -4207,7 +4207,7 @@ kbd {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     background: var(--bg-darkest);
-    z-index: 5000;
+    z-index: 10001;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -4304,8 +4304,25 @@ kbd {
     width: 100vw;
     height: 100vh;
     aspect-ratio: auto;
-    z-index: 10000;
+    z-index: 10002;
     border-radius: 0;
+}
+
+/* Viewer play overlay & crosshair */
+#pp-play-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 50;
+    pointer-events: none;
+}
+
+#pp-crosshair {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.7));
+    transition: none;
 }
 
 .pp-controls {
