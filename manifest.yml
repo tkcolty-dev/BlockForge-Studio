@@ -1,0 +1,12 @@
+---
+applications:
+  - name: cobalt-studio
+    memory: 256M
+    instances: 1
+    buildpacks:
+      - nodejs_buildpack
+    command: node server.js
+    services:
+      - cobalt-db
+    env:
+      NODE_ENV: production

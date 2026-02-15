@@ -1,11 +1,10 @@
 const express = require('express');
-const Database = require('better-sqlite3');
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,44 +19,74 @@ app.use(express.json({ limit: '50mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname)));
 
+// Parse VCAP_SERVICES for PostgreSQL connection
+function getPgConfig() {
+    if (process.env.VCAP_SERVICES) {
+        const vcap = JSON.parse(process.env.VCAP_SERVICES);
+        const pgService = (vcap.postgres || vcap['user-provided'] || [])[0];
+        if (pgService && pgService.credentials) {
+            const creds = pgService.credentials;
+            if (creds.uri) {
+                return { connectionString: creds.uri };
+            }
+            return {
+                host: creds.hostname || creds.host || (creds.hosts && creds.hosts[0]),
+                port: creds.port,
+                database: creds.db || creds.name || creds.dbname || creds.database,
+                user: creds.user || creds.username,
+                password: creds.password
+            };
+        }
+    }
+    // Local fallback
+    return {
+        host: process.env.PGHOST || 'localhost',
+        port: process.env.PGPORT || 5432,
+        database: process.env.PGDATABASE || 'cobalt',
+        user: process.env.PGUSER || 'postgres',
+        password: process.env.PGPASSWORD || 'postgres'
+    };
+}
+
+const pool = new Pool(getPgConfig());
+
 // Database setup
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
-const avatarDir = path.join(dataDir, 'avatars');
-if (!fs.existsSync(avatarDir)) fs.mkdirSync(avatarDir);
+async function initDb() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            display_name TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            avatar_color TEXT NOT NULL,
+            avatar TEXT DEFAULT 'default',
+            created_at BIGINT NOT NULL
+        )
+    `);
 
-const db = new Database(path.join(dataDir, 'users.db'));
-db.pragma('journal_mode = WAL');
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS shared_projects (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            creator TEXT NOT NULL,
+            tags TEXT DEFAULT '[]',
+            thumbnail TEXT,
+            published_at BIGINT NOT NULL,
+            project_data TEXT NOT NULL
+        )
+    `);
 
-db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        display_name TEXT NOT NULL,
-        password_hash TEXT NOT NULL,
-        avatar_color TEXT NOT NULL,
-        avatar TEXT DEFAULT 'default',
-        created_at INTEGER NOT NULL
-    )
-`);
-
-// Add avatar column if missing (migration for existing DBs)
-try { db.exec('ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT "robot"'); } catch (e) { /* already exists */ }
-
-db.exec(`
-    CREATE TABLE IF NOT EXISTS shared_projects (
-        id TEXT PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        name TEXT NOT NULL,
-        description TEXT DEFAULT '',
-        creator TEXT NOT NULL,
-        tags TEXT DEFAULT '[]',
-        thumbnail TEXT,
-        published_at INTEGER NOT NULL,
-        project_data TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-`);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS avatars (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id),
+            filename TEXT NOT NULL,
+            mime_type TEXT NOT NULL,
+            data BYTEA NOT NULL
+        )
+    `);
+}
 
 const AVATAR_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63', '#00bcd4'];
 
@@ -95,7 +124,6 @@ function generateCaptcha() {
     let question, answer;
 
     if (type === 'twoStep') {
-        // Two-step math: (a + b) × c, or a × b + c
         const variant = Math.random() < 0.5;
         if (variant) {
             const a = Math.floor(Math.random() * 8) + 2;
@@ -111,7 +139,6 @@ function generateCaptcha() {
             question = `What is ${a} × ${b} + ${c}?`;
         }
     } else if (type === 'wordMath') {
-        // Word-based: "If you have X apples and give away Y, how many left?"
         const items = ['apples', 'coins', 'stars', 'gems', 'blocks'];
         const item = items[Math.floor(Math.random() * items.length)];
         const total = Math.floor(Math.random() * 30) + 15;
@@ -119,7 +146,6 @@ function generateCaptcha() {
         answer = total - give;
         question = `If you have ${total} ${item} and give away ${give}, how many are left?`;
     } else if (type === 'sequence') {
-        // What comes next: 2, 4, 6, 8, ?
         const start = Math.floor(Math.random() * 5) + 1;
         const step = Math.floor(Math.random() * 4) + 2;
         const seq = [];
@@ -127,7 +153,6 @@ function generateCaptcha() {
         answer = start + step * 4;
         question = `What comes next: ${seq.join(', ')}, ?`;
     } else if (type === 'comparison') {
-        // Which is bigger: a × b or c × d?
         const a = Math.floor(Math.random() * 8) + 3;
         const b = Math.floor(Math.random() * 8) + 3;
         const c = Math.floor(Math.random() * 8) + 3;
@@ -142,7 +167,6 @@ function generateCaptcha() {
             question = `Which is bigger: ${a} × ${b} or ${c} × ${d}? (type the bigger number)`;
         }
     } else {
-        // Remainder: What is the remainder of a ÷ b?
         const b = Math.floor(Math.random() * 7) + 3;
         const a = Math.floor(Math.random() * 40) + b + 5;
         answer = a % b;
@@ -165,11 +189,11 @@ app.get('/api/captcha', (req, res) => {
 });
 
 // GET /api/check-username/:username
-app.get('/api/check-username/:username', (req, res) => {
+app.get('/api/check-username/:username', async (req, res) => {
     const username = (req.params.username || '').toLowerCase();
     if (!username || username.length < 3) return res.json({ available: false });
-    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-    res.json({ available: !existing });
+    const { rows } = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
+    res.json({ available: rows.length === 0 });
 });
 
 // ===== Auth Endpoints =====
@@ -201,19 +225,20 @@ app.post('/api/signup', async (req, res) => {
         return res.status(400).json({ error: 'Password must be at least 4 characters' });
     }
 
-    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username.toLowerCase());
-    if (existing) {
+    const { rows: existing } = await pool.query('SELECT id FROM users WHERE username = $1', [username.toLowerCase()]);
+    if (existing.length > 0) {
         return res.status(409).json({ error: 'Username already taken' });
     }
 
     const hash = await bcrypt.hash(password, 10);
     const avatarColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 
-    const result = db.prepare(
-        'INSERT INTO users (username, display_name, password_hash, avatar_color, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(username.toLowerCase(), username, hash, avatarColor, 'default', Date.now());
+    const { rows } = await pool.query(
+        'INSERT INTO users (username, display_name, password_hash, avatar_color, avatar, created_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+        [username.toLowerCase(), username, hash, avatarColor, 'default', Date.now()]
+    );
 
-    const user = { id: result.lastInsertRowid, username: username.toLowerCase(), display_name: username, avatar_color: avatarColor, avatar: 'default' };
+    const user = { id: rows[0].id, username: username.toLowerCase(), display_name: username, avatar_color: avatarColor, avatar: 'default' };
     setAuthCookie(res, user);
 
     res.json({ username: user.username, displayName: user.display_name, avatarColor: user.avatar_color, avatar: user.avatar });
@@ -227,7 +252,8 @@ app.post('/api/login', async (req, res) => {
         return res.status(400).json({ error: 'Username and password required' });
     }
 
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username.toLowerCase());
+    const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [username.toLowerCase()]);
+    const user = rows[0];
     if (!user) {
         return res.status(401).json({ error: 'Invalid username or password' });
     }
@@ -245,10 +271,9 @@ app.post('/api/login', async (req, res) => {
 });
 
 // GET /api/me
-app.get('/api/me', authenticate, (req, res) => {
-    // Fetch fresh avatar from DB (JWT may be stale after avatar change)
-    const dbUser = db.prepare('SELECT avatar FROM users WHERE id = ?').get(req.user.id);
-    const avatar = dbUser ? dbUser.avatar : (req.user.avatar || 'default');
+app.get('/api/me', authenticate, async (req, res) => {
+    const { rows } = await pool.query('SELECT avatar FROM users WHERE id = $1', [req.user.id]);
+    const avatar = rows.length > 0 ? rows[0].avatar : (req.user.avatar || 'default');
     const result = {
         username: req.user.username,
         displayName: req.user.displayName,
@@ -262,7 +287,7 @@ app.get('/api/me', authenticate, (req, res) => {
 });
 
 // POST /api/me/avatar — upload profile picture (base64 image)
-app.post('/api/me/avatar', authenticate, (req, res) => {
+app.post('/api/me/avatar', authenticate, async (req, res) => {
     const { image } = req.body;
     if (!image || typeof image !== 'string') {
         return res.status(400).json({ error: 'No image provided' });
@@ -275,6 +300,7 @@ app.post('/api/me/avatar', authenticate, (req, res) => {
     }
 
     const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+    const mimeType = `image/${match[1]}`;
     const buffer = Buffer.from(match[2], 'base64');
 
     // Limit to 500KB
@@ -284,35 +310,32 @@ app.post('/api/me/avatar', authenticate, (req, res) => {
 
     const filename = `${req.user.id}.${ext}`;
 
-    // Delete any old avatar files for this user
-    try {
-        const existing = fs.readdirSync(avatarDir).filter(f => f.startsWith(req.user.id + '.'));
-        existing.forEach(f => fs.unlinkSync(path.join(avatarDir, f)));
-    } catch (e) { /* ignore */ }
-
-    fs.writeFileSync(path.join(avatarDir, filename), buffer);
-    db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run('custom:' + filename, req.user.id);
+    // Upsert avatar in database
+    await pool.query(
+        `INSERT INTO avatars (user_id, filename, mime_type, data) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id) DO UPDATE SET filename = $2, mime_type = $3, data = $4`,
+        [req.user.id, filename, mimeType, buffer]
+    );
+    await pool.query('UPDATE users SET avatar = $1 WHERE id = $2', ['custom:' + filename, req.user.id]);
 
     res.json({ ok: true, avatarUrl: '/api/avatars/' + filename });
 });
 
 // DELETE /api/me/avatar — remove custom avatar, revert to default
-app.delete('/api/me/avatar', authenticate, (req, res) => {
-    const user = db.prepare('SELECT avatar FROM users WHERE id = ?').get(req.user.id);
-    if (user && user.avatar && user.avatar.startsWith('custom:')) {
-        const filename = user.avatar.replace('custom:', '');
-        try { fs.unlinkSync(path.join(avatarDir, filename)); } catch (e) { /* ignore */ }
-    }
-    db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run('default', req.user.id);
+app.delete('/api/me/avatar', authenticate, async (req, res) => {
+    await pool.query('DELETE FROM avatars WHERE user_id = $1', [req.user.id]);
+    await pool.query('UPDATE users SET avatar = $1 WHERE id = $2', ['default', req.user.id]);
     res.json({ ok: true });
 });
 
-// GET /api/avatars/:filename — serve uploaded avatar images
-app.get('/api/avatars/:filename', (req, res) => {
+// GET /api/avatars/:filename — serve uploaded avatar images from database
+app.get('/api/avatars/:filename', async (req, res) => {
     const filename = req.params.filename.replace(/[^a-zA-Z0-9._-]/g, '');
-    const filePath = path.join(avatarDir, filename);
-    if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
-    res.sendFile(filePath);
+    const { rows } = await pool.query('SELECT mime_type, data FROM avatars WHERE filename = $1', [filename]);
+    if (rows.length === 0) return res.status(404).send('Not found');
+    res.set('Content-Type', rows[0].mime_type);
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(rows[0].data);
 });
 
 // POST /api/logout
@@ -324,10 +347,10 @@ app.post('/api/logout', (req, res) => {
 // ===== Community Endpoints =====
 
 // GET /api/projects
-app.get('/api/projects', (req, res) => {
-    const rows = db.prepare(
+app.get('/api/projects', async (req, res) => {
+    const { rows } = await pool.query(
         'SELECT id, name, description, creator, tags, thumbnail, published_at FROM shared_projects ORDER BY published_at DESC'
-    ).all();
+    );
     const projects = rows.map(row => ({
         id: row.id,
         name: row.name,
@@ -341,9 +364,10 @@ app.get('/api/projects', (req, res) => {
 });
 
 // GET /api/projects/:id
-app.get('/api/projects/:id', (req, res) => {
-    const row = db.prepare('SELECT * FROM shared_projects WHERE id = ?').get(req.params.id);
-    if (!row) return res.status(404).json({ error: 'Project not found' });
+app.get('/api/projects/:id', async (req, res) => {
+    const { rows } = await pool.query('SELECT * FROM shared_projects WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    const row = rows[0];
     res.json({
         id: row.id,
         name: row.name,
@@ -357,7 +381,7 @@ app.get('/api/projects/:id', (req, res) => {
 });
 
 // POST /api/projects
-app.post('/api/projects', authenticate, (req, res) => {
+app.post('/api/projects', authenticate, async (req, res) => {
     const { id, name, description, tags, thumbnail, projectData } = req.body;
 
     if (!name || !name.trim()) {
@@ -367,34 +391,44 @@ app.post('/api/projects', authenticate, (req, res) => {
         return res.status(400).json({ error: 'Project data is required' });
     }
 
-    const user = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
-    const creator = user ? user.display_name : 'Anonymous';
+    const { rows } = await pool.query('SELECT display_name FROM users WHERE id = $1', [req.user.id]);
+    const creator = rows.length > 0 ? rows[0].display_name : 'Anonymous';
 
-    db.prepare(`
-        INSERT OR REPLACE INTO shared_projects (id, user_id, name, description, creator, tags, thumbnail, published_at, project_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, req.user.id, name.trim(), (description || '').trim(), creator, JSON.stringify(tags || []), thumbnail || null, Date.now(), JSON.stringify(projectData));
+    await pool.query(
+        `INSERT INTO shared_projects (id, user_id, name, description, creator, tags, thumbnail, published_at, project_data)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (id) DO UPDATE SET name = $3, description = $4, creator = $5, tags = $6, thumbnail = $7, published_at = $8, project_data = $9`,
+        [id, req.user.id, name.trim(), (description || '').trim(), creator, JSON.stringify(tags || []), thumbnail || null, Date.now(), JSON.stringify(projectData)]
+    );
 
     res.json({ ok: true });
 });
 
 // DELETE /api/projects/:id
-app.delete('/api/projects/:id', authenticate, (req, res) => {
-    const row = db.prepare('SELECT user_id FROM shared_projects WHERE id = ?').get(req.params.id);
-    if (!row) return res.status(404).json({ error: 'Project not found' });
-    if (row.user_id !== req.user.id) return res.status(403).json({ error: 'Not your project' });
-    db.prepare('DELETE FROM shared_projects WHERE id = ?').run(req.params.id);
+app.delete('/api/projects/:id', authenticate, async (req, res) => {
+    const { rows } = await pool.query('SELECT user_id FROM shared_projects WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    if (rows[0].user_id !== req.user.id) return res.status(403).json({ error: 'Not your project' });
+    await pool.query('DELETE FROM shared_projects WHERE id = $1', [req.params.id]);
     res.json({ ok: true });
 });
 
 // GET /api/projects/check/:id
-app.get('/api/projects/check/:id', authenticate, (req, res) => {
-    const row = db.prepare('SELECT id, name, description, tags FROM shared_projects WHERE id = ? AND user_id = ?')
-        .get(req.params.id, req.user.id);
-    if (!row) return res.json({ published: false });
-    res.json({ published: true, name: row.name, description: row.description, tags: JSON.parse(row.tags) });
+app.get('/api/projects/check/:id', authenticate, async (req, res) => {
+    const { rows } = await pool.query(
+        'SELECT id, name, description, tags FROM shared_projects WHERE id = $1 AND user_id = $2',
+        [req.params.id, req.user.id]
+    );
+    if (rows.length === 0) return res.json({ published: false });
+    res.json({ published: true, name: rows[0].name, description: rows[0].description, tags: JSON.parse(rows[0].tags) });
 });
 
-app.listen(PORT, () => {
-    console.log(`Cobalt Studio running at http://localhost:${PORT}`);
+// Initialize DB and start server
+initDb().then(() => {
+    app.listen(PORT, () => {
+        console.log(`Cobalt Studio running on port ${PORT}`);
+    });
+}).catch(err => {
+    console.error('Failed to initialize database:', err);
+    process.exit(1);
 });
