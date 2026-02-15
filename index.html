@@ -277,6 +277,9 @@
             <div class="toolbar-user" id="toolbar-user">
                 <div class="toolbar-user-avatar" id="toolbar-user-avatar"></div>
             </div>
+            <button class="tool-btn" id="btn-party" title="Multiplayer Party">
+                <span class="material-icons-round">group</span>
+            </button>
             <button class="tool-btn" id="btn-templates" title="Map Templates">
                 <span class="material-icons-round">dashboard</span>
             </button>
@@ -572,6 +575,9 @@
                 </div>
                 <div class="viewport-gizmo" id="viewport-gizmo">
                     <!-- Camera orientation gizmo -->
+                </div>
+                <div class="collab-presence-bar hidden" id="collab-presence-bar">
+                    <!-- Populated dynamically -->
                 </div>
             </div>
             <!-- Play mode overlay -->
@@ -1203,6 +1209,47 @@
                 </button>
                 <button class="action-btn" id="screen-editor-cancel">Cancel</button>
                 <button class="action-btn primary" id="screen-editor-save">Save Screen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Collab Modal -->
+    <div id="collab-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:420px">
+            <div class="modal-header">
+                <span class="material-icons-round">group</span>
+                <span>Multiplayer Party</span>
+                <button class="modal-close" id="collab-close">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!-- Create/Join section (shown when not in a room) -->
+                <div id="collab-join-section">
+                    <p style="color:var(--text-dim);font-size:12px;margin-bottom:16px">Build together in real time. Create a room and share the code, or join an existing room.</p>
+                    <button class="action-btn primary" id="collab-create-btn" style="width:100%;justify-content:center;padding:10px;font-size:14px;margin-bottom:16px">
+                        <span class="material-icons-round">add_circle</span> Create Room
+                    </button>
+                    <div class="collab-divider"><span>or join a room</span></div>
+                    <div class="collab-join-row">
+                        <input type="text" id="collab-code-input" class="collab-code-input" placeholder="ROOM CODE" maxlength="6" spellcheck="false" autocomplete="off">
+                        <button class="action-btn primary" id="collab-join-btn">Join</button>
+                    </div>
+                </div>
+                <!-- Active room section (shown when in a room) -->
+                <div id="collab-active-section" class="hidden">
+                    <div class="collab-room-info">
+                        <div class="collab-room-code-label">Room Code</div>
+                        <div class="collab-room-code" id="collab-room-code"></div>
+                        <div class="collab-role-badge" id="collab-role-badge">HOST</div>
+                    </div>
+                    <div class="collab-member-list" id="collab-member-list">
+                        <!-- Populated dynamically -->
+                    </div>
+                    <button class="action-btn collab-leave-btn" id="collab-leave-btn">
+                        <span class="material-icons-round">logout</span> Leave Room
+                    </button>
+                </div>
             </div>
         </div>
     </div>

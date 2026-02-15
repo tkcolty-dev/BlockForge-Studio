@@ -1,10 +1,12 @@
 const express = require('express');
+const http = require('http');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 const path = require('path');
+const { WebSocketServer } = require('ws');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -569,9 +571,224 @@ app.delete('/api/user/projects/:id', authenticate, async (req, res) => {
     res.json({ ok: true });
 });
 
+// ===== WebSocket Collab Server =====
+
+const server = http.createServer(app);
+const wss = new WebSocketServer({ noServer: true });
+
+// Room data: roomCode → { hostWs, hostUserId, projectName, members: Map<ws, {userId, displayName, avatar}> }
+const rooms = new Map();
+
+function generateRoomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return rooms.has(code) ? generateRoomCode() : code;
+}
+
+function broadcastToRoom(roomCode, msg, excludeWs) {
+    const room = rooms.get(roomCode);
+    if (!room) return;
+    const data = JSON.stringify(msg);
+    for (const [ws] of room.members) {
+        if (ws !== excludeWs && ws.readyState === 1) {
+            ws.send(data);
+        }
+    }
+}
+
+function getMemberList(room) {
+    const list = [];
+    for (const [, info] of room.members) {
+        list.push({ userId: info.userId, displayName: info.displayName, avatar: info.avatar });
+    }
+    return list;
+}
+
+function removeFromRoom(ws) {
+    for (const [code, room] of rooms) {
+        if (room.members.has(ws)) {
+            const info = room.members.get(ws);
+            room.members.delete(ws);
+
+            if (ws === room.hostWs) {
+                // Host left — close entire room
+                for (const [memberWs] of room.members) {
+                    if (memberWs.readyState === 1) {
+                        memberWs.send(JSON.stringify({ type: 'room-closed' }));
+                    }
+                }
+                rooms.delete(code);
+            } else {
+                // Guest left — notify remaining
+                broadcastToRoom(code, {
+                    type: 'member-left',
+                    userId: info.userId,
+                    displayName: info.displayName,
+                    members: getMemberList(room)
+                });
+            }
+            return;
+        }
+    }
+}
+
+// Authenticate WebSocket upgrade via JWT cookie
+server.on('upgrade', (req, socket, head) => {
+    // Parse cookies manually
+    const cookieHeader = req.headers.cookie || '';
+    const cookies = {};
+    cookieHeader.split(';').forEach(c => {
+        const [k, ...v] = c.trim().split('=');
+        if (k) cookies[k] = v.join('=');
+    });
+    const token = cookies[COOKIE_NAME];
+    if (!token) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+        return;
+    }
+    try {
+        const user = jwt.verify(token, JWT_SECRET);
+        wss.handleUpgrade(req, socket, head, (ws) => {
+            ws._user = user;
+            wss.emit('connection', ws, req);
+        });
+    } catch {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+    }
+});
+
+wss.on('connection', (ws) => {
+    ws._alive = true;
+    ws.on('pong', () => { ws._alive = true; });
+
+    ws.on('message', (raw) => {
+        let msg;
+        try { msg = JSON.parse(raw); } catch { return; }
+        const user = ws._user;
+
+        switch (msg.type) {
+            case 'create-room': {
+                // Remove from any existing room first
+                removeFromRoom(ws);
+                const code = generateRoomCode();
+                const room = {
+                    hostWs: ws,
+                    hostUserId: user.id,
+                    projectName: msg.projectName || 'Untitled',
+                    members: new Map()
+                };
+                room.members.set(ws, { userId: user.id, displayName: user.displayName, avatar: user.avatar });
+                rooms.set(code, room);
+                ws.send(JSON.stringify({
+                    type: 'room-created',
+                    roomCode: code,
+                    members: getMemberList(room)
+                }));
+                break;
+            }
+            case 'join-room': {
+                const code = (msg.roomCode || '').toUpperCase().trim();
+                const room = rooms.get(code);
+                if (!room) {
+                    ws.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
+                    return;
+                }
+                if (room.members.size >= 4) {
+                    ws.send(JSON.stringify({ type: 'error', message: 'Room is full (max 4)' }));
+                    return;
+                }
+                // Remove from any existing room first
+                removeFromRoom(ws);
+                room.members.set(ws, { userId: user.id, displayName: user.displayName, avatar: user.avatar });
+
+                // Tell the joiner they're in
+                ws.send(JSON.stringify({
+                    type: 'room-joined',
+                    roomCode: code,
+                    hostName: room.members.get(room.hostWs)?.displayName || 'Host',
+                    members: getMemberList(room)
+                }));
+
+                // Tell host to send scene state to new joiner
+                if (room.hostWs.readyState === 1) {
+                    room.hostWs.send(JSON.stringify({
+                        type: 'request-state',
+                        userId: user.id,
+                        displayName: user.displayName
+                    }));
+                }
+
+                // Notify all others about the new member
+                broadcastToRoom(code, {
+                    type: 'member-joined',
+                    userId: user.id,
+                    displayName: user.displayName,
+                    avatar: user.avatar,
+                    members: getMemberList(room)
+                }, ws);
+                break;
+            }
+            case 'leave-room': {
+                removeFromRoom(ws);
+                ws.send(JSON.stringify({ type: 'left-room' }));
+                break;
+            }
+            case 'room-state': {
+                // Host sends full scene to a specific new joiner
+                const targetUserId = msg.targetUserId;
+                for (const [code, room] of rooms) {
+                    if (room.hostWs === ws) {
+                        for (const [memberWs, info] of room.members) {
+                            if (info.userId === targetUserId && memberWs.readyState === 1) {
+                                memberWs.send(JSON.stringify({
+                                    type: 'room-state',
+                                    projectData: msg.projectData
+                                }));
+                            }
+                        }
+                        break;
+                    }
+                }
+                break;
+            }
+            case 'add-object':
+            case 'remove-object':
+            case 'update-transform':
+            case 'update-property': {
+                // Relay to all other members in the same room
+                for (const [code, room] of rooms) {
+                    if (room.members.has(ws)) {
+                        broadcastToRoom(code, msg, ws);
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    });
+
+    ws.on('close', () => {
+        removeFromRoom(ws);
+    });
+});
+
+// Heartbeat — ping every 30s, disconnect dead connections
+const heartbeat = setInterval(() => {
+    wss.clients.forEach(ws => {
+        if (!ws._alive) { ws.terminate(); return; }
+        ws._alive = false;
+        ws.ping();
+    });
+}, 30000);
+
+wss.on('close', () => clearInterval(heartbeat));
+
 // Initialize DB and start server
 initDb().then(() => {
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
         console.log(`Cobalt Studio running on port ${PORT}`);
     });
 }).catch(err => {

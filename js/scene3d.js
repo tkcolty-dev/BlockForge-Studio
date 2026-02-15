@@ -36,6 +36,9 @@ class Scene3D {
         this.onObjectDeselected = null;
         this.onObjectChanged = null;
         this.onMultiSelect = null;
+        this.onObjectAdded = null;
+        this.onObjectRemoved = null;
+        this._collabIdCounter = 0;
 
         // Render-on-demand: dirty flag
         this._needsRender = true;
@@ -781,6 +784,7 @@ class Scene3D {
             id: id,
             name: name,
             type: type,
+            collabId: options.collabId || this._generateCollabId(),
             anchored: options.anchored !== undefined ? options.anchored : false,
             collidable: options.collidable !== undefined ? options.collidable : true,
             mass: options.mass || 1,
@@ -794,11 +798,18 @@ class Scene3D {
         this.objects.push(mesh);
         this._needsRender = true;
 
+        if (this.onObjectAdded) {
+            this.onObjectAdded(mesh);
+        }
+
         return mesh;
     }
 
     removeObject(obj) {
         if (!obj) return;
+        if (this.onObjectRemoved) {
+            this.onObjectRemoved(obj);
+        }
         this._needsRender = true;
         const idx = this.objects.indexOf(obj);
         if (idx !== -1) {
@@ -1694,6 +1705,7 @@ class Scene3D {
             const data = {
                 type: obj.userData.type,
                 name: obj.userData.name,
+                collabId: obj.userData.collabId,
                 position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
                 rotation: {
                     x: THREE.MathUtils.radToDeg(obj.rotation.x),
@@ -1734,6 +1746,7 @@ class Scene3D {
         data.forEach(item => {
             const opts = {
                 name: item.name,
+                collabId: item.collabId,
                 position: item.position,
                 rotation: item.rotation,
                 scale: item.scale,
@@ -1782,5 +1795,96 @@ class Scene3D {
                 });
             }
         });
+    }
+
+    // ===== Collaboration Helpers =====
+
+    _generateCollabId() {
+        return 'c' + Date.now().toString(36) + '_' + (this._collabIdCounter++).toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+    }
+
+    findByCollabId(collabId) {
+        return this.objects.find(obj => obj.userData.collabId === collabId) || null;
+    }
+
+    remoteAddObject(type, opts) {
+        const savedAdded = this.onObjectAdded;
+        this.onObjectAdded = null;
+        const mesh = this.addObject(type, opts);
+        this.onObjectAdded = savedAdded;
+        return mesh;
+    }
+
+    remoteRemoveObject(collabId) {
+        const obj = this.findByCollabId(collabId);
+        if (!obj) return;
+        const savedRemoved = this.onObjectRemoved;
+        this.onObjectRemoved = null;
+        this.removeObject(obj);
+        this.onObjectRemoved = savedRemoved;
+    }
+
+    remoteUpdateTransform(collabId, pos, rot, scale) {
+        const obj = this.findByCollabId(collabId);
+        if (!obj) return;
+        if (pos) obj.position.set(pos.x, pos.y, pos.z);
+        if (rot) obj.rotation.set(
+            THREE.MathUtils.degToRad(rot.x || 0),
+            THREE.MathUtils.degToRad(rot.y || 0),
+            THREE.MathUtils.degToRad(rot.z || 0)
+        );
+        if (scale) obj.scale.set(scale.x, scale.y, scale.z);
+        this._needsRender = true;
+    }
+
+    remoteUpdateProperty(collabId, prop, value) {
+        const obj = this.findByCollabId(collabId);
+        if (!obj) return;
+        switch (prop) {
+            case 'color':
+                if (obj.material && obj.material.color) obj.material.color.set(value);
+                break;
+            case 'name':
+                obj.userData.name = value;
+                break;
+            case 'anchored':
+                obj.userData.anchored = value;
+                break;
+            case 'collidable':
+                obj.userData.collidable = value;
+                break;
+            case 'mass':
+                obj.userData.mass = value;
+                break;
+            case 'visible':
+                obj.visible = value;
+                obj.userData.visible = value;
+                break;
+            case 'locked':
+                obj.userData.locked = value;
+                break;
+            case 'roughness':
+                if (obj.material) obj.material.roughness = value;
+                break;
+            case 'metalness':
+                if (obj.material) obj.material.metalness = value;
+                break;
+            case 'opacity':
+                if (obj.material) { obj.material.opacity = value; obj.material.transparent = value < 1; }
+                break;
+            case 'materialType':
+                // Apply material preset
+                if (obj.material) {
+                    switch (value) {
+                        case 'metallic': obj.material.metalness = 0.8; obj.material.roughness = 0.2; break;
+                        case 'glass': obj.material.opacity = 0.4; obj.material.transparent = true; obj.material.roughness = 0.1; obj.material.metalness = 0; break;
+                        case 'emissive': obj.material.emissive = obj.material.color; obj.material.emissiveIntensity = 0.4; break;
+                        case 'flat': obj.material.roughness = 1; obj.material.metalness = 0; break;
+                        default: obj.material.roughness = 0.6; obj.material.metalness = 0.1; break;
+                    }
+                }
+                break;
+        }
+        this._needsRender = true;
     }
 }

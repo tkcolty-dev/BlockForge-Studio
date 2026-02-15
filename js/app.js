@@ -34,6 +34,7 @@ class App {
         this.initAuth();
         this.initExplore();
         this.initPublish();
+        this.initCollab();
 
         this.VERSION = '1.0.0';
         this.currentProjectId = null;
@@ -41,6 +42,13 @@ class App {
         this.hasUnsavedChanges = false;
         this.lastSaveTime = null;
         this.projectSortBy = 'date';
+
+        // Collab state
+        this._collabWs = null;
+        this._collabRoom = null;
+        this._collabIsHost = false;
+        this._collabMembers = [];
+        this._collabBroadcastPaused = false;
 
         this.scene3d.onObjectSelected = (obj) => this.onObjectSelected(obj);
         this.scene3d.onObjectDeselected = () => this.onObjectDeselected();
@@ -111,9 +119,9 @@ class App {
             });
         }
 
-        // Auto-save every 60 seconds
+        // Auto-save every 60 seconds (skip for collab guests)
         setInterval(() => {
-            if (this.currentProjectId) {
+            if (this.currentProjectId && !this._collabGuest()) {
                 this.saveProject(true);
             }
         }, 60000);
@@ -1631,6 +1639,10 @@ class App {
     }
 
     showTitleScreen() {
+        // Leave collab room if in one
+        if (this._collabRoom) {
+            this.collabLeave();
+        }
         // Auto-save current project before showing title screen
         if (this.currentProjectId) {
             this.saveProject(true);
@@ -2541,6 +2553,10 @@ class App {
 
     saveProject(silent) {
         if (!this.currentProjectId) return;
+        if (this._collabGuest()) {
+            if (!silent) this.toast('Only the host can save the project');
+            return;
+        }
 
         const data = this._gatherProjectData();
         this.saveProjectData(this.currentProjectId, data);
@@ -5067,6 +5083,388 @@ class App {
         const d = document.createElement('div');
         d.textContent = str || '';
         return d.innerHTML;
+    }
+
+    // ===== Collaboration (Multiplayer Party) =====
+
+    _collabGuest() {
+        return this._collabRoom && !this._collabIsHost;
+    }
+
+    initCollab() {
+        const partyBtn = document.getElementById('btn-party');
+        partyBtn.addEventListener('click', () => this.showCollabModal());
+
+        document.getElementById('collab-close').addEventListener('click', () => {
+            document.getElementById('collab-modal').classList.add('hidden');
+        });
+        document.getElementById('collab-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal-overlay')) {
+                document.getElementById('collab-modal').classList.add('hidden');
+            }
+        });
+
+        document.getElementById('collab-create-btn').addEventListener('click', () => this.collabCreateRoom());
+        document.getElementById('collab-join-btn').addEventListener('click', () => {
+            const code = document.getElementById('collab-code-input').value.trim();
+            if (code.length >= 4) this.collabJoinRoom(code);
+        });
+        document.getElementById('collab-code-input').addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') {
+                const code = e.target.value.trim();
+                if (code.length >= 4) this.collabJoinRoom(code);
+            }
+        });
+        document.getElementById('collab-leave-btn').addEventListener('click', () => this.collabLeave());
+    }
+
+    showCollabModal() {
+        const modal = document.getElementById('collab-modal');
+        modal.classList.remove('hidden');
+        this._updateCollabUI();
+    }
+
+    _collabConnect() {
+        return new Promise((resolve, reject) => {
+            if (this._collabWs && this._collabWs.readyState === WebSocket.OPEN) {
+                resolve(this._collabWs);
+                return;
+            }
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${proto}//${location.host}`);
+            ws.onopen = () => {
+                this._collabWs = ws;
+                resolve(ws);
+            };
+            ws.onerror = () => {
+                reject(new Error('WebSocket connection failed'));
+            };
+            ws.onclose = () => {
+                if (this._collabRoom) {
+                    this.toast('Disconnected from room');
+                    this._collabCleanup();
+                }
+            };
+            ws.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    this._handleCollabMessage(msg);
+                } catch {}
+            };
+        });
+    }
+
+    _collabCleanup() {
+        this._collabRoom = null;
+        this._collabIsHost = false;
+        this._collabMembers = [];
+        this._collabBroadcastPaused = false;
+
+        // Unhook broadcasts
+        this.scene3d.onObjectAdded = null;
+        this.scene3d.onObjectRemoved = null;
+
+        // Re-enable save button
+        document.getElementById('btn-save').classList.remove('guest-disabled');
+
+        // Update UI
+        document.getElementById('btn-party').classList.remove('in-room');
+        document.getElementById('collab-presence-bar').classList.add('hidden');
+        this._updateCollabUI();
+    }
+
+    _collabSend(msg) {
+        if (this._collabWs && this._collabWs.readyState === WebSocket.OPEN) {
+            this._collabWs.send(JSON.stringify(msg));
+        }
+    }
+
+    async collabCreateRoom() {
+        if (!this.currentProjectId) {
+            this.toast('Open a project first');
+            return;
+        }
+        try {
+            const ws = await this._collabConnect();
+            this._collabSend({ type: 'create-room', projectName: this.projectName });
+        } catch {
+            this.toast('Connection failed');
+        }
+    }
+
+    async collabJoinRoom(code) {
+        try {
+            const ws = await this._collabConnect();
+            this._collabSend({ type: 'join-room', roomCode: code });
+        } catch {
+            this.toast('Connection failed');
+        }
+    }
+
+    collabLeave() {
+        this._collabSend({ type: 'leave-room' });
+        if (this._collabWs) {
+            this._collabWs.close();
+            this._collabWs = null;
+        }
+        this._collabCleanup();
+        this.toast('Left the room');
+    }
+
+    _handleCollabMessage(msg) {
+        switch (msg.type) {
+            case 'room-created': {
+                this._collabRoom = msg.roomCode;
+                this._collabIsHost = true;
+                this._collabMembers = msg.members || [];
+                this._hookCollabBroadcasts();
+                document.getElementById('btn-party').classList.add('in-room');
+                this._updateCollabUI();
+                this._updatePresenceBar();
+                this.toast('Room created: ' + msg.roomCode, 'success');
+                break;
+            }
+            case 'room-joined': {
+                this._collabRoom = msg.roomCode;
+                this._collabIsHost = false;
+                this._collabMembers = msg.members || [];
+                this._hookCollabBroadcasts();
+
+                // Disable save for guests
+                document.getElementById('btn-save').classList.add('guest-disabled');
+                document.getElementById('btn-party').classList.add('in-room');
+                this._updateCollabUI();
+                this._updatePresenceBar();
+                this.toast('Joined room: ' + msg.roomCode, 'success');
+                break;
+            }
+            case 'request-state': {
+                // Host: send full scene to new joiner
+                if (this._collabIsHost) {
+                    const data = this._gatherProjectData();
+                    this._collabSend({
+                        type: 'room-state',
+                        targetUserId: msg.userId,
+                        projectData: data
+                    });
+                }
+                break;
+            }
+            case 'room-state': {
+                // Guest: receive full scene from host
+                if (msg.projectData) {
+                    this._collabBroadcastPaused = true;
+                    this._applyProjectData(msg.projectData);
+                    this.projectName = msg.projectData.name || this.projectName;
+                    this.updateToolbarProjectName();
+                    this.refreshExplorer();
+                    this.updateObjectCount();
+                    this._collabBroadcastPaused = false;
+                    this.toast('Scene synced from host', 'success');
+                }
+                break;
+            }
+            case 'member-joined': {
+                this._collabMembers = msg.members || [];
+                this._updateCollabUI();
+                this._updatePresenceBar();
+                this.toast(msg.displayName + ' joined the room');
+                break;
+            }
+            case 'member-left': {
+                this._collabMembers = msg.members || [];
+                this._updateCollabUI();
+                this._updatePresenceBar();
+                this.toast(msg.displayName + ' left the room');
+                break;
+            }
+            case 'room-closed': {
+                this._collabCleanup();
+                this.toast('Room was closed by the host');
+                break;
+            }
+            case 'left-room': {
+                this._collabCleanup();
+                break;
+            }
+            case 'error': {
+                this.toast(msg.message || 'Room error');
+                break;
+            }
+            case 'add-object': {
+                this._collabBroadcastPaused = true;
+                const obj = this.scene3d.remoteAddObject(msg.objectType, msg.objectData);
+                if (obj && msg.objectData.scripts) {
+                    obj.userData.scripts = msg.objectData.scripts;
+                }
+                this.refreshExplorer();
+                this.updateObjectCount();
+                this._collabBroadcastPaused = false;
+                break;
+            }
+            case 'remove-object': {
+                this._collabBroadcastPaused = true;
+                this.scene3d.remoteRemoveObject(msg.collabId);
+                this.refreshExplorer();
+                this.updateObjectCount();
+                this._collabBroadcastPaused = false;
+                break;
+            }
+            case 'update-transform': {
+                this.scene3d.remoteUpdateTransform(msg.collabId, msg.position, msg.rotation, msg.scale);
+                break;
+            }
+            case 'update-property': {
+                this.scene3d.remoteUpdateProperty(msg.collabId, msg.prop, msg.value);
+                if (msg.prop === 'name') this.refreshExplorer();
+                break;
+            }
+        }
+    }
+
+    _hookCollabBroadcasts() {
+        // Object added
+        this.scene3d.onObjectAdded = (mesh) => {
+            if (this._collabBroadcastPaused) return;
+            let color = '#4a90d9';
+            if (mesh.material && mesh.material.color) color = '#' + mesh.material.color.getHexString();
+            this._collabSend({
+                type: 'add-object',
+                objectType: mesh.userData.type,
+                objectData: {
+                    collabId: mesh.userData.collabId,
+                    name: mesh.userData.name,
+                    position: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
+                    rotation: {
+                        x: THREE.MathUtils.radToDeg(mesh.rotation.x),
+                        y: THREE.MathUtils.radToDeg(mesh.rotation.y),
+                        z: THREE.MathUtils.radToDeg(mesh.rotation.z)
+                    },
+                    scale: { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z },
+                    color: color,
+                    anchored: mesh.userData.anchored,
+                    collidable: mesh.userData.collidable,
+                    mass: mesh.userData.mass,
+                    scripts: mesh.userData.scripts,
+                    customParts: mesh.userData.customParts,
+                    customObjectId: mesh.userData.customObjectId
+                }
+            });
+        };
+
+        // Object removed
+        this.scene3d.onObjectRemoved = (obj) => {
+            if (this._collabBroadcastPaused) return;
+            this._collabSend({
+                type: 'remove-object',
+                collabId: obj.userData.collabId
+            });
+        };
+
+        // Transform changes — throttled
+        const origOnChanged = this.scene3d.onObjectChanged;
+        let lastTransformBroadcast = 0;
+        this.scene3d.onObjectChanged = (obj) => {
+            // Call original handler (updates properties panel)
+            if (origOnChanged) origOnChanged(obj);
+
+            if (this._collabBroadcastPaused) return;
+            const now = Date.now();
+            if (now - lastTransformBroadcast < 66) return; // ~15fps
+            lastTransformBroadcast = now;
+            this._collabSend({
+                type: 'update-transform',
+                collabId: obj.userData.collabId,
+                position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+                rotation: {
+                    x: THREE.MathUtils.radToDeg(obj.rotation.x),
+                    y: THREE.MathUtils.radToDeg(obj.rotation.y),
+                    z: THREE.MathUtils.radToDeg(obj.rotation.z)
+                },
+                scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z }
+            });
+        };
+
+        // Property changes — hook into property input events
+        this._collabPropertyHooks();
+    }
+
+    _collabPropertyHooks() {
+        const sendProp = (prop, value) => {
+            if (this._collabBroadcastPaused || !this.scene3d.selectedObject) return;
+            this._collabSend({
+                type: 'update-property',
+                collabId: this.scene3d.selectedObject.userData.collabId,
+                prop, value
+            });
+        };
+
+        // Color
+        const colorPicker = document.getElementById('prop-color');
+        colorPicker.addEventListener('input', () => sendProp('color', colorPicker.value));
+
+        // Name
+        const nameInput = document.getElementById('prop-name');
+        nameInput.addEventListener('change', () => sendProp('name', nameInput.value));
+
+        // Physics
+        document.getElementById('prop-anchored').addEventListener('change', (e) => sendProp('anchored', e.target.checked));
+        document.getElementById('prop-collidable').addEventListener('change', (e) => sendProp('collidable', e.target.checked));
+        document.getElementById('prop-mass').addEventListener('change', (e) => sendProp('mass', parseFloat(e.target.value)));
+
+        // Visibility & locked
+        document.getElementById('prop-visible').addEventListener('change', (e) => sendProp('visible', e.target.checked));
+        document.getElementById('prop-locked').addEventListener('change', (e) => sendProp('locked', e.target.checked));
+
+        // Material
+        document.getElementById('prop-roughness').addEventListener('input', (e) => sendProp('roughness', parseInt(e.target.value) / 100));
+        document.getElementById('prop-metalness').addEventListener('input', (e) => sendProp('metalness', parseInt(e.target.value) / 100));
+        document.getElementById('prop-opacity').addEventListener('input', (e) => sendProp('opacity', parseInt(e.target.value) / 100));
+        document.getElementById('prop-material-type').addEventListener('change', (e) => sendProp('materialType', e.target.value));
+    }
+
+    _updateCollabUI() {
+        const joinSection = document.getElementById('collab-join-section');
+        const activeSection = document.getElementById('collab-active-section');
+
+        if (this._collabRoom) {
+            joinSection.classList.add('hidden');
+            activeSection.classList.remove('hidden');
+
+            document.getElementById('collab-room-code').textContent = this._collabRoom;
+            const badge = document.getElementById('collab-role-badge');
+            badge.textContent = this._collabIsHost ? 'HOST' : 'GUEST';
+            badge.className = 'collab-role-badge ' + (this._collabIsHost ? 'host' : 'guest');
+
+            // Member list
+            const list = document.getElementById('collab-member-list');
+            const colors = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6'];
+            list.innerHTML = this._collabMembers.map((m, i) => `
+                <div class="collab-member-item">
+                    <div class="collab-member-avatar" style="background:${colors[i % colors.length]}">${(m.displayName || '?')[0].toUpperCase()}</div>
+                    <span class="collab-member-name">${this._escHtml(m.displayName)}</span>
+                    <span class="collab-member-role">${i === 0 ? 'Host' : 'Guest'}</span>
+                </div>
+            `).join('');
+        } else {
+            joinSection.classList.remove('hidden');
+            activeSection.classList.add('hidden');
+            document.getElementById('collab-code-input').value = '';
+        }
+    }
+
+    _updatePresenceBar() {
+        const bar = document.getElementById('collab-presence-bar');
+        if (!this._collabRoom || this._collabMembers.length <= 1) {
+            bar.classList.add('hidden');
+            return;
+        }
+        bar.classList.remove('hidden');
+        const colors = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6'];
+        bar.innerHTML = this._collabMembers.map((m, i) => `
+            <div class="collab-presence-dot" style="background:${colors[i % colors.length]}" title="${this._escHtml(m.displayName)}">${(m.displayName || '?')[0].toUpperCase()}</div>
+        `).join('');
     }
 
     // ===== Toast =====

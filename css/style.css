@@ -4916,3 +4916,213 @@ kbd {
         width: 100%;
     }
 }
+
+/* ===== Collab / Multiplayer Party ===== */
+
+.collab-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 12px 0;
+    color: var(--text-dim);
+    font-size: 12px;
+}
+.collab-divider::before, .collab-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+.collab-join-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.collab-code-input {
+    flex: 1;
+    background: var(--bg-medium);
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-bright);
+    padding: 10px 14px;
+    font-size: 20px;
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    text-align: center;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.collab-code-input:focus {
+    border-color: var(--accent);
+}
+.collab-code-input::placeholder {
+    font-size: 14px;
+    letter-spacing: 2px;
+    font-weight: 400;
+    color: var(--text-dim);
+}
+
+.collab-room-info {
+    background: var(--bg-medium);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 16px;
+}
+.collab-room-code-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+.collab-room-code {
+    font-size: 32px;
+    font-weight: 800;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 6px;
+    color: var(--accent);
+    margin-bottom: 8px;
+    user-select: all;
+}
+.collab-role-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.collab-role-badge.host {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+    border: 1px solid rgba(46, 204, 113, 0.3);
+}
+.collab-role-badge.guest {
+    background: rgba(76, 151, 255, 0.2);
+    color: #4c97ff;
+    border: 1px solid rgba(76, 151, 255, 0.3);
+}
+
+.collab-member-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+.collab-member-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-light);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+.collab-member-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: white;
+    flex-shrink: 0;
+}
+.collab-member-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    flex: 1;
+}
+.collab-member-role {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.collab-leave-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 10px;
+    color: var(--danger) !important;
+    border-color: rgba(231, 76, 60, 0.3) !important;
+}
+.collab-leave-btn:hover {
+    background: rgba(231, 76, 60, 0.15) !important;
+}
+
+/* Presence bar in viewport */
+.collab-presence-bar {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    z-index: 10;
+    padding: 4px 10px;
+    background: rgba(26, 26, 46, 0.7);
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+}
+.collab-presence-bar.hidden {
+    display: none;
+}
+.collab-presence-dot {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    color: white;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    cursor: default;
+    position: relative;
+}
+.collab-presence-dot[title]::after {
+    content: attr(title);
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 2px 6px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 10px;
+    white-space: nowrap;
+    display: none;
+    margin-top: 4px;
+    font-weight: 400;
+    color: var(--text);
+}
+.collab-presence-dot:hover::after {
+    display: block;
+}
+
+/* Party button active state when in room */
+#btn-party.in-room {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+    border-color: rgba(46, 204, 113, 0.4);
+}
+
+/* Guest save button disabled look */
+#btn-save.guest-disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
