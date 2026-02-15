@@ -1326,6 +1326,88 @@
         </div>
     </div>
 
+    <!-- Project Page (Scratch-style) -->
+    <div id="project-page" class="hidden">
+        <div class="pp-header">
+            <button class="pp-back-btn" id="pp-back">
+                <span class="material-icons-round">arrow_back</span>
+                <span>Back to Explore</span>
+            </button>
+            <div class="pp-header-info">
+                <span class="pp-title" id="pp-title"></span>
+                <span class="pp-creator" id="pp-creator"></span>
+            </div>
+        </div>
+        <div class="pp-body">
+            <div class="pp-main">
+                <div class="pp-viewport-wrapper">
+                    <div class="pp-viewport" id="pp-viewport-container">
+                        <canvas id="pp-canvas"></canvas>
+                        <!-- Play overlay for viewer -->
+                        <div id="pp-play-overlay" class="hidden">
+                            <div class="play-hud">
+                                <div class="play-info">
+                                    <span>WASD to move | Arrows to look | Space to jump | ESC to stop</span>
+                                </div>
+                                <div class="game-hud" id="pp-game-hud"></div>
+                            </div>
+                        </div>
+                        <!-- Crosshair for viewer -->
+                        <div id="pp-crosshair" class="hidden">
+                            <svg width="24" height="24" viewBox="0 0 24 24">
+                                <line x1="12" y1="4" x2="12" y2="10" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                                <line x1="12" y1="14" x2="12" y2="20" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                                <line x1="4" y1="12" x2="10" y2="12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                                <line x1="14" y1="12" x2="20" y2="12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                                <circle cx="12" cy="12" r="2" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="pp-controls">
+                        <button class="pp-ctrl-btn" id="pp-btn-play" title="Play">
+                            <span class="material-icons-round">play_arrow</span>
+                        </button>
+                        <button class="pp-ctrl-btn hidden" id="pp-btn-stop" title="Stop">
+                            <span class="material-icons-round">stop</span>
+                        </button>
+                        <button class="pp-ctrl-btn" id="pp-btn-fullscreen" title="Fullscreen">
+                            <span class="material-icons-round">fullscreen</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- Comments Section -->
+                <div class="pp-comments" id="pp-comments-section">
+                    <h3 class="pp-comments-title">Comments</h3>
+                    <div class="pp-comment-form" id="pp-comment-form">
+                        <textarea id="pp-comment-input" placeholder="Write a comment..." maxlength="500" rows="2"></textarea>
+                        <button class="pp-comment-post-btn" id="pp-comment-post">Post</button>
+                    </div>
+                    <div class="pp-comment-list" id="pp-comment-list"></div>
+                </div>
+            </div>
+            <div class="pp-sidebar">
+                <div class="pp-desc-section">
+                    <h4>Description</h4>
+                    <p id="pp-description" class="pp-desc-text">No description provided.</p>
+                </div>
+                <div class="pp-tags-section" id="pp-tags-section">
+                    <div class="pp-tags" id="pp-tags"></div>
+                </div>
+                <div class="pp-creator-card">
+                    <div class="pp-creator-avatar" id="pp-creator-avatar"></div>
+                    <div class="pp-creator-info">
+                        <span class="pp-creator-name" id="pp-creator-name"></span>
+                        <span class="pp-creator-label">Creator</span>
+                    </div>
+                </div>
+                <button class="pp-remix-btn" id="pp-remix-btn">
+                    <span class="material-icons-round">content_copy</span>
+                    Remix
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="js/three.min.js"></script>
     <script src="js/OrbitControls.js"></script>

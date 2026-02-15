@@ -86,6 +86,18 @@ async function initDb() {
             data BYTEA NOT NULL
         )
     `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS comments (
+            id SERIAL PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES shared_projects(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            username TEXT NOT NULL,
+            avatar TEXT DEFAULT 'default',
+            body TEXT NOT NULL,
+            created_at BIGINT NOT NULL
+        )
+    `);
 }
 
 const AVATAR_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63', '#00bcd4'];
@@ -384,6 +396,68 @@ app.get('/api/projects/check/:id', authenticate, async (req, res) => {
     );
     if (rows.length === 0) return res.json({ published: false });
     res.json({ published: true, name: rows[0].name, description: rows[0].description, tags: JSON.parse(rows[0].tags) });
+});
+
+// ===== Comments Endpoints =====
+
+// GET /api/projects/:id/comments
+app.get('/api/projects/:id/comments', async (req, res) => {
+    const { rows } = await pool.query(
+        'SELECT id, project_id, user_id, username, avatar, body, created_at FROM comments WHERE project_id = $1 ORDER BY created_at DESC LIMIT 100',
+        [req.params.id]
+    );
+    res.json(rows.map(r => ({
+        id: r.id,
+        projectId: r.project_id,
+        userId: r.user_id,
+        username: r.username,
+        avatar: r.avatar,
+        body: r.body,
+        createdAt: r.created_at
+    })));
+});
+
+// POST /api/projects/:id/comments
+app.post('/api/projects/:id/comments', authenticate, async (req, res) => {
+    const { body } = req.body;
+    if (!body || typeof body !== 'string' || !body.trim()) {
+        return res.status(400).json({ error: 'Comment body is required' });
+    }
+    if (body.length > 500) {
+        return res.status(400).json({ error: 'Comment must be 500 characters or less' });
+    }
+    // Verify project exists
+    const { rows: proj } = await pool.query('SELECT id FROM shared_projects WHERE id = $1', [req.params.id]);
+    if (proj.length === 0) return res.status(404).json({ error: 'Project not found' });
+
+    // Get user info
+    const { rows: userRows } = await pool.query('SELECT display_name, avatar FROM users WHERE id = $1', [req.user.id]);
+    const username = userRows.length > 0 ? userRows[0].display_name : req.user.username;
+    const avatar = userRows.length > 0 ? userRows[0].avatar : 'default';
+
+    const { rows } = await pool.query(
+        'INSERT INTO comments (project_id, user_id, username, avatar, body, created_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+        [req.params.id, req.user.id, username, avatar, body.trim(), Date.now()]
+    );
+
+    res.json({
+        id: rows[0].id,
+        projectId: req.params.id,
+        userId: req.user.id,
+        username,
+        avatar,
+        body: body.trim(),
+        createdAt: Date.now()
+    });
+});
+
+// DELETE /api/projects/:id/comments/:commentId
+app.delete('/api/projects/:id/comments/:commentId', authenticate, async (req, res) => {
+    const { rows } = await pool.query('SELECT user_id FROM comments WHERE id = $1 AND project_id = $2', [req.params.commentId, req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Comment not found' });
+    if (rows[0].user_id !== req.user.id) return res.status(403).json({ error: 'Not your comment' });
+    await pool.query('DELETE FROM comments WHERE id = $1', [req.params.commentId]);
+    res.json({ ok: true });
 });
 
 // Initialize DB and start server

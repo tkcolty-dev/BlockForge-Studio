@@ -3,7 +3,7 @@
  * Handles rendering, objects, selection, and camera
  */
 class Scene3D {
-    constructor(canvas) {
+    constructor(canvas, options = {}) {
         this.canvas = canvas;
         this.objects = [];
         this.selectedObject = null;
@@ -13,17 +13,24 @@ class Scene3D {
         this.snapSize = 0.5;
         this.currentTool = 'select';
         this.isPlaying = false;
+        this.viewerMode = !!options.viewerMode;
 
         this.initRenderer();
         this.initScene();
         this.initCamera();
         this.initLights();
-        this.initGrid();
-        this.initSky();
-        this.initControls();
-        this.initRaycaster();
-        this.initViewCube();
-        this.initDefaultScene();
+
+        if (!this.viewerMode) {
+            this.initGrid();
+            this.initSky();
+            this.initControls();
+            this.initRaycaster();
+            this.initViewCube();
+            this.initDefaultScene();
+        } else {
+            this.initSky();
+            this.initViewerControls();
+        }
 
         this.onObjectSelected = null;
         this.onObjectDeselected = null;
@@ -36,6 +43,16 @@ class Scene3D {
         this.animate();
         window.addEventListener('resize', () => { this.onResize(); this._needsRender = true; });
         this.onResize();
+    }
+
+    initViewerControls() {
+        this.orbitControls = new THREE.OrbitControls(this.camera, this.canvas);
+        this.orbitControls.enableDamping = true;
+        this.orbitControls.dampingFactor = 0.08;
+        this.orbitControls.target.set(0, 0, 0);
+
+        this.canvas.addEventListener('pointerdown', () => { this._needsRender = true; });
+        this.canvas.addEventListener('wheel', () => { this._needsRender = true; });
     }
 
     initRenderer() {
@@ -123,9 +140,9 @@ class Scene3D {
     }
 
     setGridVisible(visible) {
-        this.gridHelper.visible = visible;
-        this.axisLineX.visible = visible;
-        this.axisLineZ.visible = visible;
+        if (this.gridHelper) this.gridHelper.visible = visible;
+        if (this.axisLineX) this.axisLineX.visible = visible;
+        if (this.axisLineZ) this.axisLineZ.visible = visible;
         this._needsRender = true;
     }
 
@@ -862,7 +879,7 @@ class Scene3D {
         this.deselect();
 
         this.selectedObject = obj;
-        this.transformControls.attach(obj);
+        if (this.transformControls) this.transformControls.attach(obj);
         this._needsRender = true;
 
         // Highlight
@@ -877,7 +894,7 @@ class Scene3D {
         if (this.selectedObject) {
             this.removeSelectionOutline(this.selectedObject);
             this.selectedObject = null;
-            this.transformControls.detach();
+            if (this.transformControls) this.transformControls.detach();
             this._needsRender = true;
 
             if (this.onObjectDeselected) {
@@ -1479,10 +1496,10 @@ class Scene3D {
 
         if (!this.isPlaying) {
             // OrbitControls.update() returns true when damping causes movement
-            if (this.orbitControls.update()) {
+            if (this.orbitControls && this.orbitControls.update()) {
                 this._needsRender = true;
             }
-            this._updateViewCube();
+            if (!this.viewerMode) this._updateViewCube();
         }
 
         // Update weather particles

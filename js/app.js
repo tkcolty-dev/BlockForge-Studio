@@ -943,6 +943,27 @@ class App {
     // ===== Keyboard Shortcuts =====
 
     initKeyboard() {
+        // Global ESC handler for project page viewer
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (!this._ppScene3d) return;
+
+            // If viewer runtime is running, stop it
+            if (this._ppRuntime && this._ppRuntime.isRunning) {
+                e.preventDefault();
+                this._ppStopPlay();
+                return;
+            }
+
+            // If viewer is fullscreen, exit fullscreen
+            const ppContainer = document.getElementById('pp-viewport-container');
+            if (ppContainer && ppContainer.classList.contains('pp-fullscreen')) {
+                e.preventDefault();
+                this._ppToggleFullscreen();
+                return;
+            }
+        });
+
         document.addEventListener('keydown', (e) => {
             if (!this.currentProjectId) return;
             if (this.runtime.isRunning) return;
@@ -4102,8 +4123,8 @@ class App {
 
         const openBtn = document.createElement('button');
         openBtn.className = 'explore-card-open-btn';
-        openBtn.innerHTML = '<span class="material-icons-round">file_copy</span> Open Copy';
-        openBtn.addEventListener('click', () => this.openExploreCopy(project));
+        openBtn.innerHTML = '<span class="material-icons-round">visibility</span> See Inside';
+        openBtn.addEventListener('click', () => this.openProjectPage(project));
 
         card.appendChild(thumb);
         card.appendChild(info);
@@ -4314,6 +4335,387 @@ class App {
         } catch (e) {
             document.getElementById('publish-link-input').value = 'Project too large for link sharing';
         }
+    }
+
+    // ===== Project Page (Scratch-style) =====
+
+    async openProjectPage(project) {
+        this._ppProject = project;
+        this._ppProjectId = project.id;
+
+        // Fetch full project data
+        let data = project.projectData;
+        if (!data && project.id) {
+            try {
+                const res = await fetch('/api/projects/' + project.id);
+                if (res.ok) {
+                    const full = await res.json();
+                    data = full.projectData;
+                    this._ppProject = full;
+                }
+            } catch (e) { /* offline */ }
+        }
+
+        if (!data) {
+            this.toast('Project data not available', 'error');
+            return;
+        }
+
+        this._ppProjectData = data;
+
+        // Populate metadata
+        document.getElementById('pp-title').textContent = project.name || 'Untitled';
+        document.getElementById('pp-creator').textContent = 'by ' + (project.creator || 'Unknown');
+        document.getElementById('pp-description').textContent = project.description || 'No description provided.';
+        document.getElementById('pp-creator-name').textContent = project.creator || 'Unknown';
+
+        // Creator avatar
+        const avatarEl = document.getElementById('pp-creator-avatar');
+        const creatorName = project.creator || 'U';
+        avatarEl.textContent = creatorName.charAt(0).toUpperCase();
+
+        // Tags
+        const tags = project.tags || (this._ppProject.tags) || [];
+        const tagsSection = document.getElementById('pp-tags-section');
+        const tagsContainer = document.getElementById('pp-tags');
+        tagsContainer.innerHTML = '';
+        if (tags.length > 0) {
+            tagsSection.classList.add('has-tags');
+            tags.forEach(tag => {
+                const el = document.createElement('span');
+                el.className = 'pp-tag';
+                el.textContent = tag;
+                tagsContainer.appendChild(el);
+            });
+        } else {
+            tagsSection.classList.remove('has-tags');
+        }
+
+        // Show page
+        document.getElementById('project-page').classList.remove('hidden');
+
+        // Init viewer scene
+        this._initViewerScene();
+        this._loadProjectIntoViewer(data);
+
+        // Wire buttons
+        document.getElementById('pp-back').onclick = () => this.closeProjectPage();
+        document.getElementById('pp-btn-play').onclick = () => this._ppStartPlay();
+        document.getElementById('pp-btn-stop').onclick = () => this._ppStopPlay();
+        document.getElementById('pp-btn-fullscreen').onclick = () => this._ppToggleFullscreen();
+        document.getElementById('pp-remix-btn').onclick = () => this._ppRemix();
+
+        // Comment form
+        document.getElementById('pp-comment-post').onclick = () => this._submitComment();
+        document.getElementById('pp-comment-input').addEventListener('keydown', (e) => e.stopPropagation());
+
+        // Load comments
+        this._loadComments();
+    }
+
+    _initViewerScene() {
+        // Clean up previous viewer if any
+        if (this._ppScene3d) {
+            this._ppScene3d.renderer.dispose();
+            this._ppScene3d = null;
+        }
+        if (this._ppRuntime) {
+            if (this._ppRuntime.isRunning) this._ppRuntime.stop();
+            this._ppRuntime = null;
+        }
+
+        const canvas = document.getElementById('pp-canvas');
+
+        // Create viewer-mode Scene3D
+        this._ppScene3d = new Scene3D(canvas, { viewerMode: true });
+
+        // Create a minimal blockCode for runtime
+        this._ppBlockCode = {
+            customVariables: [],
+            customMessages: [],
+            compileScripts: (obj) => {
+                if (!obj.userData.scripts || obj.userData.scripts.length === 0) return [];
+                const results = [];
+                obj.userData.scripts.forEach(script => {
+                    if (!script.trigger) return;
+                    results.push({
+                        trigger: script.trigger,
+                        triggerValues: script.triggerValues || {},
+                        commands: script.commands || []
+                    });
+                });
+                return results;
+            }
+        };
+
+        // Create runtime with domMap pointing to viewer DOM
+        this._ppRuntime = new Runtime(this._ppScene3d, this._ppBlockCode, {
+            crosshair: document.getElementById('pp-crosshair'),
+            playOverlay: document.getElementById('pp-play-overlay'),
+            btnPlay: document.getElementById('pp-btn-play'),
+            btnStop: document.getElementById('pp-btn-stop'),
+            statusMode: null,
+            gameHud: document.getElementById('pp-game-hud')
+        });
+
+        this._ppRuntime.onStop = () => {
+            document.getElementById('pp-btn-play').classList.remove('hidden');
+            document.getElementById('pp-btn-stop').classList.add('hidden');
+        };
+    }
+
+    _loadProjectIntoViewer(data) {
+        if (!this._ppScene3d) return;
+
+        // Deserialize scene objects
+        if (data.scene) {
+            this._ppScene3d.deserialize(data.scene);
+        }
+
+        // Apply environment settings
+        if (data.environment) {
+            const env = data.environment;
+            if (env.skyColor) this._ppScene3d.setSkyColor(env.skyColor);
+            if (env.skybox) this._ppScene3d.setSkybox(env.skybox);
+            if (env.ambientLight) this._ppScene3d.setAmbientIntensity(env.ambientLight / 100);
+            if (env.fogDensity) this._ppScene3d.setFog(parseInt(env.fogDensity));
+            if (env.shadows !== undefined) this._ppScene3d.setShadows(env.shadows);
+            if (env.weather) this._ppScene3d.setWeather(env.weather);
+        }
+
+        // Store game settings for play mode
+        this._ppGameSettings = {
+            controlScheme: data.environment?.controlScheme || 'first-person',
+            speed: 6,
+            jumpForce: 8,
+            sensitivity: 5,
+            keyBindings: {
+                moveForward: 'KeyW',
+                moveBack: 'KeyS',
+                moveLeft: 'KeyA',
+                moveRight: 'KeyD',
+                lookUp: 'ArrowUp',
+                lookDown: 'ArrowDown',
+                lookLeft: 'ArrowLeft',
+                lookRight: 'ArrowRight',
+                jump: 'Space'
+            },
+            playerColors: data.environment?.playerColors || { body: '#4c97ff', head: '#f5cba7', detail: '#e0b090' },
+            bgMusic: data.environment?.bgMusic || 'none',
+            musicVolume: data.environment?.musicVolume || 30
+        };
+
+        // Store custom variables/messages for the blockcode stub
+        if (data.customVariables) this._ppBlockCode.customVariables = data.customVariables;
+        if (data.customMessages) this._ppBlockCode.customMessages = data.customMessages;
+        if (data.uiScreens) this._ppRuntime._uiScreens = data.uiScreens;
+
+        // Force a render
+        this._ppScene3d._needsRender = true;
+
+        // Resize after showing
+        setTimeout(() => this._ppScene3d.onResize(), 100);
+    }
+
+    _ppStartPlay() {
+        if (!this._ppRuntime || this._ppRuntime.isRunning) return;
+        this._ppRuntime.playerColors = this._ppGameSettings.playerColors;
+        this._ppRuntime._uiScreens = this._ppRuntime._uiScreens || [];
+        this._ppRuntime.start(this._ppGameSettings);
+    }
+
+    _ppStopPlay() {
+        if (!this._ppRuntime || !this._ppRuntime.isRunning) return;
+        this._ppRuntime.stop();
+    }
+
+    _ppToggleFullscreen() {
+        const container = document.getElementById('pp-viewport-container');
+        const icon = document.querySelector('#pp-btn-fullscreen .material-icons-round');
+
+        if (container.classList.contains('pp-fullscreen')) {
+            container.classList.remove('pp-fullscreen');
+            icon.textContent = 'fullscreen';
+        } else {
+            container.classList.add('pp-fullscreen');
+            icon.textContent = 'fullscreen_exit';
+        }
+
+        setTimeout(() => {
+            if (this._ppScene3d) this._ppScene3d.onResize();
+        }, 50);
+    }
+
+    _ppRemix() {
+        if (!this._ppProjectData) return;
+        this.closeProjectPage();
+
+        const id = this.generateProjectId();
+        const now = Date.now();
+        const name = (this._ppProject.name || 'Untitled') + ' (Remix)';
+        const projectData = JSON.parse(JSON.stringify(this._ppProjectData));
+        projectData.name = name;
+
+        this.saveProjectData(id, projectData);
+        const index = this.getProjectIndex();
+        index[id] = {
+            name: name,
+            createdAt: now,
+            modifiedAt: now,
+            thumbnail: null
+        };
+        this.saveProjectIndex(index);
+
+        this.loadProjectById(id);
+        this.toast('Opened remix: ' + name, 'success');
+    }
+
+    closeProjectPage() {
+        // Stop viewer runtime
+        if (this._ppRuntime && this._ppRuntime.isRunning) {
+            this._ppRuntime.stop();
+        }
+
+        // Exit fullscreen
+        const container = document.getElementById('pp-viewport-container');
+        if (container) container.classList.remove('pp-fullscreen');
+
+        // Dispose viewer
+        if (this._ppScene3d) {
+            this._ppScene3d.renderer.dispose();
+            this._ppScene3d = null;
+        }
+        this._ppRuntime = null;
+        this._ppBlockCode = null;
+        this._ppProjectData = null;
+
+        // Hide page
+        document.getElementById('project-page').classList.add('hidden');
+
+        // Clear comments
+        document.getElementById('pp-comment-list').innerHTML = '';
+        document.getElementById('pp-comment-input').value = '';
+    }
+
+    async _loadComments() {
+        if (!this._ppProjectId) return;
+        const list = document.getElementById('pp-comment-list');
+        list.innerHTML = '';
+
+        try {
+            const res = await fetch('/api/projects/' + this._ppProjectId + '/comments');
+            if (!res.ok) return;
+            const comments = await res.json();
+
+            if (comments.length === 0) {
+                list.innerHTML = '<div class="pp-comment-empty">No comments yet. Be the first!</div>';
+                return;
+            }
+
+            comments.forEach(c => {
+                list.appendChild(this._createCommentEl(c));
+            });
+        } catch (e) { /* offline */ }
+    }
+
+    async _submitComment() {
+        const input = document.getElementById('pp-comment-input');
+        const body = input.value.trim();
+        if (!body || !this._ppProjectId) return;
+
+        try {
+            const res = await fetch('/api/projects/' + this._ppProjectId + '/comments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ body })
+            });
+
+            if (res.status === 401) {
+                this.toast('Log in to comment', 'error');
+                return;
+            }
+
+            if (!res.ok) {
+                const err = await res.json();
+                this.toast(err.error || 'Failed to post comment', 'error');
+                return;
+            }
+
+            input.value = '';
+            this._loadComments();
+        } catch (e) {
+            this.toast('Failed to post comment', 'error');
+        }
+    }
+
+    async _deleteComment(commentId) {
+        if (!this._ppProjectId) return;
+        try {
+            const res = await fetch('/api/projects/' + this._ppProjectId + '/comments/' + commentId, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                this._loadComments();
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    _createCommentEl(comment) {
+        const el = document.createElement('div');
+        el.className = 'pp-comment';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'pp-comment-avatar';
+        avatar.textContent = (comment.username || 'U').charAt(0).toUpperCase();
+
+        const content = document.createElement('div');
+        content.className = 'pp-comment-content';
+
+        const header = document.createElement('div');
+        header.className = 'pp-comment-header';
+
+        const username = document.createElement('span');
+        username.className = 'pp-comment-username';
+        username.textContent = comment.username || 'Unknown';
+
+        const time = document.createElement('span');
+        time.className = 'pp-comment-time';
+        time.textContent = this._formatCommentTime(comment.createdAt);
+
+        header.appendChild(username);
+        header.appendChild(time);
+
+        // Delete button for own comments
+        if (this._cachedUser && this._cachedUser.username === (comment.username || '').toLowerCase()) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'pp-comment-delete';
+            deleteBtn.innerHTML = '<span class="material-icons-round">delete</span>';
+            deleteBtn.addEventListener('click', () => this._deleteComment(comment.id));
+            header.appendChild(deleteBtn);
+        }
+
+        const body = document.createElement('div');
+        body.className = 'pp-comment-body';
+        body.textContent = comment.body;
+
+        content.appendChild(header);
+        content.appendChild(body);
+
+        el.appendChild(avatar);
+        el.appendChild(content);
+        return el;
+    }
+
+    _formatCommentTime(timestamp) {
+        const diff = Date.now() - timestamp;
+        const minutes = Math.floor(diff / 60000);
+        if (minutes < 1) return 'just now';
+        if (minutes < 60) return minutes + 'm ago';
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return hours + 'h ago';
+        const days = Math.floor(hours / 24);
+        if (days < 30) return days + 'd ago';
+        return new Date(timestamp).toLocaleDateString();
     }
 
     // ===== Toast =====

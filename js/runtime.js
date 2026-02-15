@@ -3,9 +3,10 @@
  * Handles player controller, physics, script execution, and game logic
  */
 class Runtime {
-    constructor(scene3d, blockCode) {
+    constructor(scene3d, blockCode, domMap = {}) {
         this.scene3d = scene3d;
         this.blockCode = blockCode;
+        this._domMap = domMap;
         this.isRunning = false;
         this.keys = {};
         this.variables = {};
@@ -76,6 +77,11 @@ class Runtime {
 
         this._boundKeyDown = (e) => this.onKeyDown(e);
         this._boundKeyUp = (e) => this.onKeyUp(e);
+    }
+
+    _getElement(key, fallbackId) {
+        if (this._domMap[key]) return this._domMap[key];
+        return document.getElementById(fallbackId);
     }
 
     // ===== Start/Stop =====
@@ -189,13 +195,15 @@ class Runtime {
         // Save editor camera state
         this._savedCameraPos = this.scene3d.camera.position.clone();
         this._savedCameraRot = this.scene3d.camera.quaternion.clone();
-        this._savedOrbitTarget = this.scene3d.orbitControls.target.clone();
+        this._savedOrbitTarget = this.scene3d.orbitControls ? this.scene3d.orbitControls.target.clone() : new THREE.Vector3();
 
         // Disable editor controls
         this.scene3d.isPlaying = true;
-        this.scene3d.orbitControls.enabled = false;
-        this.scene3d.transformControls.detach();
-        this.scene3d.transformControls.visible = false;
+        if (this.scene3d.orbitControls) this.scene3d.orbitControls.enabled = false;
+        if (this.scene3d.transformControls) {
+            this.scene3d.transformControls.detach();
+            this.scene3d.transformControls.visible = false;
+        }
         this.scene3d.deselect();
 
         // Setup player
@@ -235,7 +243,7 @@ class Runtime {
         document.addEventListener('mousemove', this._boundMouseMove);
 
         // Show custom crosshair, hide system cursor on viewport
-        this._gameCrosshair = document.getElementById('game-crosshair');
+        this._gameCrosshair = this._getElement('crosshair', 'game-crosshair');
         if (this._gameCrosshair) this._gameCrosshair.classList.remove('hidden');
         viewportContainer.style.cursor = 'none';
 
@@ -266,10 +274,14 @@ class Runtime {
         requestAnimationFrame(this._gameLoop);
 
         // Show play overlay with controls hint
-        document.getElementById('play-overlay').classList.remove('hidden');
-        document.getElementById('btn-play').classList.add('hidden');
-        document.getElementById('btn-stop').classList.remove('hidden');
-        document.getElementById('status-mode').textContent = 'Play Mode';
+        const playOverlay = this._getElement('playOverlay', 'play-overlay');
+        if (playOverlay) playOverlay.classList.remove('hidden');
+        const btnPlay = this._getElement('btnPlay', 'btn-play');
+        if (btnPlay) btnPlay.classList.add('hidden');
+        const btnStop = this._getElement('btnStop', 'btn-stop');
+        if (btnStop) btnStop.classList.remove('hidden');
+        const statusMode = this._getElement('statusMode', 'status-mode');
+        if (statusMode) statusMode.textContent = 'Play Mode';
         const viewcube = document.querySelector('.viewcube-wrapper');
         if (viewcube) viewcube.classList.add('hidden');
 
@@ -283,7 +295,8 @@ class Runtime {
             'top-down': 'WASD to move | Space to jump | Click objects | ESC to stop',
             'point-click': 'Click to move | Space to jump | Click objects | ESC to stop'
         };
-        document.querySelector('.play-info span').textContent = hints[this.controlScheme] || hints['first-person'];
+        const hintEl = (playOverlay || document).querySelector('.play-info span');
+        if (hintEl) hintEl.textContent = hints[this.controlScheme] || hints['first-person'];
     }
 
     stop() {
@@ -380,7 +393,7 @@ class Runtime {
 
         // Clean up
         this.scene3d.isPlaying = false;
-        this.scene3d.orbitControls.enabled = true;
+        if (this.scene3d.orbitControls) this.scene3d.orbitControls.enabled = true;
         this.activeAnimations = [];
         this.runningScripts = [];
 
@@ -391,8 +404,10 @@ class Runtime {
             cam.up.set(0, 1, 0);
             cam.position.copy(this._savedCameraPos);
             cam.quaternion.copy(this._savedCameraRot);
-            this.scene3d.orbitControls.target.copy(this._savedOrbitTarget);
-            this.scene3d.orbitControls.update();
+            if (this.scene3d.orbitControls) {
+                this.scene3d.orbitControls.target.copy(this._savedOrbitTarget);
+                this.scene3d.orbitControls.update();
+            }
         }
 
         const viewportContainer = this.scene3d.canvas.parentElement;
@@ -432,17 +447,21 @@ class Runtime {
         }
 
         // Clean up HUD
-        const hud = document.getElementById('game-hud');
-        hud.innerHTML = '';
+        const hud = this._getElement('gameHud', 'game-hud');
+        if (hud) hud.innerHTML = '';
 
         // Remove speech bubbles
         document.querySelectorAll('.speech-bubble-3d').forEach(el => el.remove());
 
         // Hide play overlay
-        document.getElementById('play-overlay').classList.add('hidden');
-        document.getElementById('btn-play').classList.remove('hidden');
-        document.getElementById('btn-stop').classList.add('hidden');
-        document.getElementById('status-mode').textContent = 'Edit Mode';
+        const playOverlay = this._getElement('playOverlay', 'play-overlay');
+        if (playOverlay) playOverlay.classList.add('hidden');
+        const btnPlay = this._getElement('btnPlay', 'btn-play');
+        if (btnPlay) btnPlay.classList.remove('hidden');
+        const btnStop = this._getElement('btnStop', 'btn-stop');
+        if (btnStop) btnStop.classList.add('hidden');
+        const statusMode = this._getElement('statusMode', 'status-mode');
+        if (statusMode) statusMode.textContent = 'Edit Mode';
         const viewcube = document.querySelector('.viewcube-wrapper');
         if (viewcube) viewcube.classList.remove('hidden');
 
@@ -2637,7 +2656,7 @@ class Runtime {
                 overlay.appendChild(title);
                 overlay.appendChild(sub);
                 overlay.appendChild(btn);
-                (document.getElementById('play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(overlay);
+                (this._getElement('playOverlay', 'play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(overlay);
                 btn.addEventListener('click', () => {
                     overlay.remove();
                     this.stop();
@@ -3025,7 +3044,7 @@ class Runtime {
                 `;
                 box.appendChild(btn);
                 overlay.appendChild(box);
-                (document.getElementById('play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(overlay);
+                (this._getElement('playOverlay', 'play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(overlay);
                 await new Promise(resolve => {
                     btn.addEventListener('click', () => { overlay.remove(); resolve(); });
                 });
@@ -3202,7 +3221,7 @@ class Runtime {
                     }
                     overlay.appendChild(div);
                 });
-                (document.getElementById('play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(overlay);
+                (this._getElement('playOverlay', 'play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(overlay);
                 this._activeScreens.set(screenName, overlay);
                 break;
             }
@@ -3293,7 +3312,7 @@ class Runtime {
                 txtEl.style.cssText = 'font-size:48px;color:#fff;font-weight:700;text-shadow:0 2px 12px rgba(0,0,0,0.6);font-family:Inter,sans-serif;text-align:center;';
                 txtEl.textContent = v.text || 'Text';
                 txtOverlay.appendChild(txtEl);
-                (document.getElementById('play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(txtOverlay);
+                (this._getElement('playOverlay', 'play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(txtOverlay);
                 const dur = (parseFloat(v.time) || 2) * 1000;
                 setTimeout(() => {
                     txtEl.style.opacity = '0';
@@ -3333,7 +3352,8 @@ class Runtime {
     }
 
     updateHUD() {
-        const hud = document.getElementById('game-hud');
+        const hud = this._getElement('gameHud', 'game-hud');
+        if (!hud) return;
         hud.innerHTML = '';
 
         this.hudElements.forEach(varName => {
