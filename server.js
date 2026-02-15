@@ -149,7 +149,7 @@ function setAuthCookie(res, user) {
 
 // ===== Chat Moderation =====
 
-const ADMIN_IDS = [1]; // user IDs that can delete any comment
+const ADMIN_IDS = [2]; // user IDs that can delete any comment
 
 const BLOCKED_WORDS = [
     // profanity
