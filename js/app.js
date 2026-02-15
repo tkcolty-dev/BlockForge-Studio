@@ -4442,10 +4442,6 @@ class App {
         document.getElementById('pp-exit-fullscreen').onclick = () => this._ppToggleFullscreen();
         document.getElementById('pp-remix-btn').onclick = () => this._ppRemix();
 
-        // Comment form
-        document.getElementById('pp-comment-post').onclick = () => this._submitComment();
-        document.getElementById('pp-comment-input').onkeydown = (e) => e.stopPropagation();
-
         // Init viewer scene (wrapped in try-catch so page stays navigable)
         try {
             this._initViewerScene();
@@ -4453,9 +4449,6 @@ class App {
         } catch (e) {
             console.error('Failed to init viewer:', e);
         }
-
-        // Load comments
-        this._loadComments();
     }
 
     _initViewerScene() {
@@ -4638,134 +4631,6 @@ class App {
         // Hide page
         document.getElementById('project-page').classList.add('hidden');
 
-        // Clear comments
-        document.getElementById('pp-comment-list').innerHTML = '';
-        document.getElementById('pp-comment-input').value = '';
-    }
-
-    async _loadComments() {
-        if (!this._ppProjectId) return;
-        const list = document.getElementById('pp-comment-list');
-        list.innerHTML = '';
-
-        try {
-            const res = await fetch('/api/projects/' + this._ppProjectId + '/comments');
-            if (!res.ok) return;
-            const comments = await res.json();
-
-            if (comments.length === 0) {
-                list.innerHTML = '<div class="pp-comment-empty">No comments yet. Be the first!</div>';
-                return;
-            }
-
-            comments.forEach(c => {
-                list.appendChild(this._createCommentEl(c));
-            });
-        } catch (e) { /* offline */ }
-    }
-
-    async _submitComment() {
-        const input = document.getElementById('pp-comment-input');
-        const body = input.value.trim();
-        if (!body || !this._ppProjectId) return;
-
-        try {
-            const res = await fetch('/api/projects/' + this._ppProjectId + '/comments', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ body })
-            });
-
-            if (res.status === 401) {
-                this.toast('Log in to comment', 'error');
-                return;
-            }
-
-            if (!res.ok) {
-                const err = await res.json();
-                this.toast(err.error || 'Failed to post comment', 'error');
-                return;
-            }
-
-            input.value = '';
-            this._loadComments();
-        } catch (e) {
-            this.toast('Failed to post comment', 'error');
-        }
-    }
-
-    async _deleteComment(commentId) {
-        if (!this._ppProjectId) return;
-        try {
-            const res = await fetch('/api/projects/' + this._ppProjectId + '/comments/' + commentId, {
-                method: 'DELETE',
-                credentials: 'same-origin'
-            });
-            if (res.ok) {
-                this._loadComments();
-            }
-        } catch (e) { /* ignore */ }
-    }
-
-    _createCommentEl(comment) {
-        const el = document.createElement('div');
-        el.className = 'pp-comment';
-
-        const avatar = document.createElement('div');
-        avatar.className = 'pp-comment-avatar';
-        avatar.textContent = (comment.username || 'U').charAt(0).toUpperCase();
-
-        const content = document.createElement('div');
-        content.className = 'pp-comment-content';
-
-        const header = document.createElement('div');
-        header.className = 'pp-comment-header';
-
-        const username = document.createElement('span');
-        username.className = 'pp-comment-username';
-        username.textContent = comment.username || 'Unknown';
-
-        const time = document.createElement('span');
-        time.className = 'pp-comment-time';
-        time.textContent = this._formatCommentTime(comment.createdAt);
-
-        header.appendChild(username);
-        header.appendChild(time);
-
-        // Delete button for own comments or admins
-        const isOwn = this._cachedUser && this._cachedUser.username === (comment.username || '').toLowerCase();
-        const isAdmin = this._cachedUser && this._cachedUser.isAdmin;
-        if (isOwn || isAdmin) {
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'pp-comment-delete';
-            deleteBtn.innerHTML = '<span class="material-icons-round">delete</span>';
-            deleteBtn.addEventListener('click', () => this._deleteComment(comment.id));
-            header.appendChild(deleteBtn);
-        }
-
-        const body = document.createElement('div');
-        body.className = 'pp-comment-body';
-        body.textContent = comment.body;
-
-        content.appendChild(header);
-        content.appendChild(body);
-
-        el.appendChild(avatar);
-        el.appendChild(content);
-        return el;
-    }
-
-    _formatCommentTime(timestamp) {
-        const diff = Date.now() - timestamp;
-        const minutes = Math.floor(diff / 60000);
-        if (minutes < 1) return 'just now';
-        if (minutes < 60) return minutes + 'm ago';
-        const hours = Math.floor(minutes / 60);
-        if (hours < 24) return hours + 'h ago';
-        const days = Math.floor(hours / 24);
-        if (days < 30) return days + 'd ago';
-        return new Date(timestamp).toLocaleDateString();
     }
 
     // ===== Toast =====
