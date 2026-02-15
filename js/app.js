@@ -4681,7 +4681,6 @@ class App {
                 feed.innerHTML = '<div class="pp-emoji-feed-empty">No messages yet</div>';
             } else {
                 messages.forEach(msg => feed.appendChild(this._createEmojiMsg(msg)));
-                feed.scrollTop = feed.scrollHeight;
             }
         } catch {}
     }
@@ -4703,8 +4702,7 @@ class App {
                 const feed = document.getElementById('pp-emoji-feed');
                 const empty = feed.querySelector('.pp-emoji-feed-empty');
                 if (empty) empty.remove();
-                feed.appendChild(this._createEmojiMsg(data));
-                feed.scrollTop = feed.scrollHeight;
+                feed.prepend(this._createEmojiMsg(data));
             } else {
                 this.toast(data.error || 'Failed to send', 'error');
             }

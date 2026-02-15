@@ -475,7 +475,7 @@ const emojiCooldowns = new Map();
 // GET /api/projects/:id/emojis — get emoji chat messages
 app.get('/api/projects/:id/emojis', async (req, res) => {
     const { rows } = await pool.query(
-        'SELECT id, username, emoji, created_at FROM emoji_chats WHERE project_id = $1 ORDER BY created_at ASC LIMIT 50',
+        'SELECT id, username, emoji, created_at FROM emoji_chats WHERE project_id = $1 ORDER BY created_at DESC LIMIT 50',
         [req.params.id]
     );
     res.json(rows);
