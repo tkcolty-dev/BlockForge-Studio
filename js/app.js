@@ -4085,6 +4085,8 @@ class App {
     createExploreCard(project, isFeatured) {
         const card = document.createElement('div');
         card.className = 'explore-card';
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', () => this.openProjectPage(project));
 
         const thumb = document.createElement('div');
         thumb.className = 'explore-card-thumb';
@@ -4121,14 +4123,8 @@ class App {
         info.appendChild(creatorEl);
         if (project.description) info.appendChild(descEl);
 
-        const openBtn = document.createElement('button');
-        openBtn.className = 'explore-card-open-btn';
-        openBtn.innerHTML = '<span class="material-icons-round">visibility</span> See Inside';
-        openBtn.addEventListener('click', () => this.openProjectPage(project));
-
         card.appendChild(thumb);
         card.appendChild(info);
-        card.appendChild(openBtn);
         return card;
     }
 
