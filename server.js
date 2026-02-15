@@ -10,7 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 const COOKIE_NAME = 'cobalt_session';
-const ADMIN_IDS = [2];
+const ADMIN_IDS = [1, 2];
 
 // Valid avatar IDs (SVG avatars rendered on frontend)
 const VALID_AVATARS = ['default','fox','cat','robot','bear','panda','owl','penguin','astronaut','ninja','wizard','dragon','bunny','alien','pirate','ghost'];
