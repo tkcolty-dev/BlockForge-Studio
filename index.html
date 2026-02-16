@@ -231,7 +231,7 @@
                 <span class="material-icons-round">home</span>
             </button>
             <div class="toolbar-divider"></div>
-            <div class="toolbar-group">
+            <div class="toolbar-group toolbar-3d-tools" id="toolbar-3d-tools">
                 <button class="tool-btn" id="btn-select" title="Select (V)" data-tool="select">
                     <span class="material-icons-round">near_me</span>
                 </button>
@@ -254,8 +254,8 @@
                     <span class="angle-unit">°</span>
                 </div>
             </div>
-            <div class="toolbar-divider"></div>
-            <div class="toolbar-group">
+            <div class="toolbar-divider toolbar-3d-tools"></div>
+            <div class="toolbar-group toolbar-3d-tools">
                 <button class="tool-btn" id="btn-snap" title="Toggle Snap">
                     <span class="material-icons-round">grid_on</span>
                 </button>
@@ -326,6 +326,58 @@
                 <button class="panel-tab active" data-tab="explorer">Explorer</button>
                 <button class="panel-tab" data-tab="library">Toolbox</button>
                 <button class="panel-tab" data-tab="terrain">Terrain</button>
+                <button class="panel-tab" data-tab="sprites">Sprites</button>
+            </div>
+
+            <!-- 2D Sprite List (shown in 2D mode) -->
+            <div class="tab-content" id="tab-sprites">
+                <div class="panel-section">
+                    <div class="section-header">
+                        <span>Sprites</span>
+                        <button class="small-btn" id="btn-add-sprite" title="Add Sprite">
+                            <span class="material-icons-round">add_circle</span>
+                        </button>
+                    </div>
+                    <div class="sprite-grid" id="sprite-grid">
+                        <!-- Populated dynamically -->
+                    </div>
+                    <div class="sprite-picker hidden" id="sprite-picker">
+                        <div class="sprite-picker-title">Choose a Sprite</div>
+                        <div class="sprite-picker-options">
+                            <button class="sprite-pick-btn" data-sprite-type="cat" title="Cat">
+                                <div class="sprite-pick-preview sprite-preview-cat"></div>
+                                <span>Cat</span>
+                            </button>
+                            <button class="sprite-pick-btn" data-sprite-type="ball" title="Ball">
+                                <div class="sprite-pick-preview sprite-preview-ball"></div>
+                                <span>Ball</span>
+                            </button>
+                            <button class="sprite-pick-btn" data-sprite-type="star" title="Star">
+                                <div class="sprite-pick-preview sprite-preview-star"></div>
+                                <span>Star</span>
+                            </button>
+                            <button class="sprite-pick-btn" data-sprite-type="arrow" title="Arrow">
+                                <div class="sprite-pick-preview sprite-preview-arrow"></div>
+                                <span>Arrow</span>
+                            </button>
+                            <button class="sprite-pick-btn" data-sprite-type="square" title="Square">
+                                <div class="sprite-pick-preview sprite-preview-square"></div>
+                                <span>Square</span>
+                            </button>
+                            <button class="sprite-pick-btn" data-sprite-type="triangle" title="Triangle">
+                                <div class="sprite-pick-preview sprite-preview-triangle"></div>
+                                <span>Triangle</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-section" id="sprite-backdrop-section">
+                    <div class="section-header"><span>Backdrop</span></div>
+                    <div class="prop-row">
+                        <label>Color</label>
+                        <input type="color" id="backdrop-color" value="#ffffff" class="color-picker">
+                    </div>
+                </div>
             </div>
 
             <!-- Explorer Tab -->
@@ -615,6 +667,66 @@
             <div class="panel-tabs">
                 <button class="panel-tab active" data-tab="properties">Properties</button>
                 <button class="panel-tab" data-tab="materials">Material</button>
+                <button class="panel-tab" data-tab="sprite-properties">Sprite</button>
+            </div>
+
+            <!-- 2D Sprite Properties (shown in 2D mode) -->
+            <div class="tab-content" id="tab-sprite-properties">
+                <div id="no-sprite-selection" class="empty-state">
+                    <span class="material-icons-round">touch_app</span>
+                    <p>Select a sprite to edit its properties</p>
+                </div>
+                <div id="sprite-properties-content" class="hidden">
+                    <div class="panel-section">
+                        <div class="section-header"><span>Sprite</span></div>
+                        <div class="prop-row">
+                            <label>Name</label>
+                            <input type="text" id="sprite-prop-name" class="prop-input">
+                        </div>
+                    </div>
+                    <div class="panel-section">
+                        <div class="section-header"><span>Position</span></div>
+                        <div class="prop-row">
+                            <label>X</label>
+                            <input type="number" id="sprite-prop-x" step="1" class="prop-input">
+                        </div>
+                        <div class="prop-row">
+                            <label>Y</label>
+                            <input type="number" id="sprite-prop-y" step="1" class="prop-input">
+                        </div>
+                    </div>
+                    <div class="panel-section">
+                        <div class="section-header"><span>Appearance</span></div>
+                        <div class="prop-row">
+                            <label>Direction</label>
+                            <input type="number" id="sprite-prop-direction" step="1" class="prop-input">
+                            <span style="color:var(--text-dim);font-size:11px">°</span>
+                        </div>
+                        <div class="prop-row">
+                            <label>Size</label>
+                            <input type="number" id="sprite-prop-size" step="1" min="1" class="prop-input">
+                            <span style="color:var(--text-dim);font-size:11px">%</span>
+                        </div>
+                        <div class="prop-row">
+                            <label>Visible</label>
+                            <input type="checkbox" id="sprite-prop-visible" checked>
+                        </div>
+                    </div>
+                    <div class="panel-section">
+                        <div class="section-header"><span>Actions</span></div>
+                        <div class="action-buttons">
+                            <button class="action-btn" id="btn-duplicate-sprite">
+                                <span class="material-icons-round">content_copy</span> Duplicate
+                            </button>
+                            <button class="action-btn danger" id="btn-delete-sprite">
+                                <span class="material-icons-round">delete</span> Delete
+                            </button>
+                            <button class="action-btn primary" id="btn-edit-sprite-script">
+                                <span class="material-icons-round">code</span> Edit Script
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Properties Tab -->
@@ -848,7 +960,7 @@
                     <span class="cat-color" style="background:#9966FF"></span>
                     Looks
                 </div>
-                <div class="palette-category" data-category="physics">
+                <div class="palette-category palette-3d-only" data-category="physics">
                     <span class="cat-color" style="background:#59C059"></span>
                     Physics
                 </div>
@@ -864,27 +976,31 @@
                     <span class="cat-color" style="background:#FF8C1A"></span>
                     Variables
                 </div>
-                <div class="palette-category" data-category="shooting">
+                <div class="palette-category palette-2d-only" data-category="pen">
+                    <span class="cat-color" style="background:#0fBD8C"></span>
+                    Pen
+                </div>
+                <div class="palette-category palette-3d-only" data-category="shooting">
                     <span class="cat-color" style="background:#E03030"></span>
                     Shooting
                 </div>
-                <div class="palette-category" data-category="enemies">
+                <div class="palette-category palette-3d-only" data-category="enemies">
                     <span class="cat-color" style="background:#CC3333"></span>
                     Enemies
                 </div>
-                <div class="palette-category" data-category="items">
+                <div class="palette-category palette-3d-only" data-category="items">
                     <span class="cat-color" style="background:#44BB44"></span>
                     Items
                 </div>
-                <div class="palette-category" data-category="effects">
+                <div class="palette-category palette-3d-only" data-category="effects">
                     <span class="cat-color" style="background:#E67E22"></span>
                     Effects
                 </div>
-                <div class="palette-category" data-category="camera">
+                <div class="palette-category palette-3d-only" data-category="camera">
                     <span class="cat-color" style="background:#8E44AD"></span>
                     Camera
                 </div>
-                <div class="palette-category" data-category="ui">
+                <div class="palette-category palette-3d-only" data-category="ui">
                     <span class="cat-color" style="background:#E91E63"></span>
                     UI
                 </div>
@@ -1531,10 +1647,10 @@
     <script src="js/OrbitControls.js"></script>
     <script src="js/TransformControls.js"></script>
     <script src="js/scene3d.js"></script>
-    <script src="js/blockcode.js"></script>
+    <script src="js/blockcode.js?v=3"></script>
     <script src="js/runtime.js"></script>
     <script src="js/guided-tutorial.js"></script>
     <script src="js/textures.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=3"></script>
 </body>
 </html>

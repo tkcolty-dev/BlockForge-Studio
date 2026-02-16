@@ -1357,6 +1357,7 @@ class App {
     _gatherProjectData() {
         return {
             version: 1,
+            type: '3d',
             name: this.projectName || 'My Game',
             scene: this.scene3d.serialize(),
             customVariables: this.blockCode.customVariables,
@@ -1863,8 +1864,8 @@ class App {
         const isGuest = this._offlineMode;
         const joinPartyBtn = document.getElementById('btn-title-join-party');
         if (joinPartyBtn) joinPartyBtn.style.display = isGuest ? 'none' : '';
-        document.getElementById('btn-new-project').style.display = isGuest ? 'none' : '';
-        document.getElementById('btn-import-project').style.display = isGuest ? 'none' : '';
+        document.getElementById('btn-new-project').style.display = '';
+        document.getElementById('btn-import-project').style.display = '';
         this.renderProjectGrid();
     }
 
@@ -2770,10 +2771,6 @@ class App {
 
     saveProject(silent) {
         if (!this.currentProjectId) return;
-        if (this._offlineMode) {
-            if (!silent) this.toast('Sign in to save projects');
-            return;
-        }
         if (this._collabGuest()) {
             if (!silent) this.toast('Only the host can save the project');
             return;

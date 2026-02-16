@@ -14,7 +14,6 @@ class BlockCode {
         this.customVariables = []; // user-created variable names
         this.customMessages = []; // user-created message names
         this.onScriptsChanged = null; // collab callback
-
         this.drawer = document.getElementById('block-drawer');
         this.workspace = document.getElementById('workspace-canvas');
         this.palette = document.getElementById('block-palette');
@@ -262,7 +261,8 @@ class BlockCode {
             'ui_add_text': { category: 'ui', type: 'command', label: 'Add label {text} at {x} {y}', inputs: { text: { type: 'text', default: 'Hello' }, x: { type: 'number', default: 50 }, y: { type: 'number', default: 50 } }, code: 'uiAddText' },
             'ui_add_button': { category: 'ui', type: 'command', label: 'Add btn {text} msg {msg}', inputs: { text: { type: 'text', default: 'Click' }, msg: { type: 'text', default: 'clicked' } }, code: 'uiAddButton' },
             'ui_clear_screen': { category: 'ui', type: 'command', label: 'Clear {screen}', inputs: { screen: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'uiClearScreen' },
-            'ui_show_text_overlay': { category: 'ui', type: 'command', label: 'Flash text {text} for {time}s', inputs: { text: { type: 'text', default: 'Level 1' }, time: { type: 'number', default: 2 } }, code: 'uiTextOverlay' }
+            'ui_show_text_overlay': { category: 'ui', type: 'command', label: 'Flash text {text} for {time}s', inputs: { text: { type: 'text', default: 'Level 1' }, time: { type: 'number', default: 2 } }, code: 'uiTextOverlay' },
+
         };
     }
 
