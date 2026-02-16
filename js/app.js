@@ -4248,8 +4248,8 @@ class App {
                 if (res.ok) {
                     const data = await res.json();
                     if (document.getElementById('auth-signup-username').value.trim() === username) {
-                        hint.textContent = data.available ? 'Available' : 'Already taken';
-                        hint.className = 'auth-field-hint ' + (data.available ? 'hint-success' : 'hint-error');
+                        hint.textContent = data.inappropriate ? 'That username is not allowed' : (data.available ? 'Available' : 'Already taken');
+                        hint.className = 'auth-field-hint ' + (data.available && !data.inappropriate ? 'hint-success' : 'hint-error');
                         this._validateSignupForm();
                     }
                 }

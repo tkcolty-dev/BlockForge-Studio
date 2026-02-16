@@ -19,6 +19,20 @@ function isAdmin(user) { return ADMIN_IDS.includes(user.id) || ADMIN_USERNAMES.i
 // Valid avatar IDs (SVG avatars rendered on frontend)
 const VALID_AVATARS = ['default','fox','cat','robot','bear','panda','owl','penguin','astronaut','ninja','wizard','dragon','bunny','alien','pirate','ghost'];
 
+// Profanity filter for usernames
+const BANNED_WORDS = [
+    'fuck','shit','ass','damn','bitch','bastard','dick','cock','pussy','cunt',
+    'whore','slut','fag','faggot','nigger','nigga','retard','rape','penis',
+    'vagina','boob','tits','porn','sex','nude','naked','hentai','milf',
+    'dildo','anal','oral','cum','jizz','erect','orgasm','fetish','bondage',
+    'nazi','hitler','kkk','jihad','terrorist','kill','murder','suicide',
+    'pedo','molest','incest','bestiality','zoophil','necro','gore','torture'
+];
+function containsProfanity(text) {
+    const lower = text.toLowerCase().replace(/[_0-9]/g, '');
+    return BANNED_WORDS.some(w => lower.includes(w));
+}
+
 // Middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(cookieParser());
@@ -240,6 +254,7 @@ app.get('/api/captcha', (req, res) => {
 app.get('/api/check-username/:username', async (req, res) => {
     const username = (req.params.username || '').toLowerCase();
     if (!username || username.length < 3) return res.json({ available: false });
+    if (containsProfanity(username)) return res.json({ available: false, inappropriate: true });
     const { rows } = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
     res.json({ available: rows.length === 0 });
 });
@@ -270,6 +285,9 @@ app.post('/api/signup', async (req, res) => {
     }
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
         return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
+    }
+    if (containsProfanity(username)) {
+        return res.status(400).json({ error: 'That username is not allowed' });
     }
     if (!password || typeof password !== 'string' || password.length < 4) {
         return res.status(400).json({ error: 'Password must be at least 4 characters' });
@@ -386,6 +404,43 @@ app.post('/api/me/avatar', authenticate, async (req, res) => {
     // Limit to 500KB
     if (buffer.length > 512000) {
         return res.status(400).json({ error: 'Image too large (max 500KB)' });
+    }
+
+    // AI-based image moderation
+    const config = getGenaiConfig();
+    if (config.apiBase) {
+        try {
+            const moderationUrl = config.apiBase.replace(/\/+$/, '') + '/v1/chat/completions';
+            const moderationBody = JSON.stringify({
+                model: config.model || undefined,
+                messages: [
+                    { role: 'system', content: 'You are a content moderator for a kids game platform. Respond with ONLY "safe" or "unsafe". An image is unsafe if it contains: nudity, sexual content, gore, violence, hate symbols, drug use, or any content inappropriate for children.' },
+                    { role: 'user', content: [
+                        { type: 'text', text: 'Is this profile picture safe for a kids platform? Reply only "safe" or "unsafe".' },
+                        { type: 'image_url', image_url: { url: image } }
+                    ]}
+                ],
+                max_tokens: 10
+            });
+            const modRes = await fetch(moderationUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(config.apiKey ? { 'Authorization': 'Bearer ' + config.apiKey } : {})
+                },
+                body: moderationBody
+            });
+            if (modRes.ok) {
+                const modData = await modRes.json();
+                const verdict = modData.choices?.[0]?.message?.content?.trim().toLowerCase() || '';
+                if (verdict.includes('unsafe')) {
+                    return res.status(400).json({ error: 'This image is not appropriate. Please choose a different picture.' });
+                }
+            }
+        } catch (e) {
+            console.error('Image moderation error:', e.message);
+            // Allow upload if moderation service fails — don't block users
+        }
     }
 
     const filename = `${req.user.id}.${ext}`;
