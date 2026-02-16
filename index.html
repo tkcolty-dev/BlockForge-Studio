@@ -123,6 +123,10 @@
                     <span class="material-icons-round">explore</span>
                     Explore
                 </button>
+                <button class="title-tab-btn" data-title-tab="favorites">
+                    <span class="material-icons-round">favorite</span>
+                    Favorites
+                </button>
             </div>
             <!-- My Projects Tab -->
             <div id="tab-my-projects" class="title-tab-content active">
@@ -173,6 +177,19 @@
                 <div class="explore-empty" id="explore-empty" style="display:none">
                     <span class="material-icons-round">explore_off</span>
                     <p>No projects found</p>
+                </div>
+            </div>
+            <!-- Favorites Tab -->
+            <div id="tab-favorites" class="title-tab-content">
+                <div class="explore-section-header">
+                    <span class="material-icons-round">favorite</span>
+                    <span>My Favorites</span>
+                </div>
+                <div class="explore-grid" id="favorites-grid"></div>
+                <div class="explore-empty" id="favorites-empty" style="display:none">
+                    <span class="material-icons-round">favorite_border</span>
+                    <p>No favorites yet</p>
+                    <span class="empty-hint">Favorite projects from the Explore tab to see them here</span>
                 </div>
             </div>
         </div>
@@ -1485,6 +1502,16 @@
                         <span class="pp-creator-name" id="pp-creator-name"></span>
                         <span class="pp-creator-label">Creator</span>
                     </div>
+                </div>
+                <div class="pp-actions-row">
+                    <button class="pp-like-btn" id="pp-like-btn" title="Like">
+                        <span class="material-icons-round">favorite_border</span>
+                        <span class="pp-action-count" id="pp-like-count">0</span>
+                    </button>
+                    <button class="pp-fav-btn" id="pp-fav-btn" title="Favorite">
+                        <span class="material-icons-round">star_border</span>
+                        <span class="pp-action-count" id="pp-fav-count">0</span>
+                    </button>
                 </div>
                 <button class="pp-remix-btn" id="pp-remix-btn">
                     <span class="material-icons-round">content_copy</span>

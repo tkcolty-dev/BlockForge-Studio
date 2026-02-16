@@ -151,6 +151,16 @@ async function initDb() {
             PRIMARY KEY (id, user_id)
         )
     `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS project_interactions (
+            project_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('like', 'favorite')),
+            created_at BIGINT NOT NULL,
+            PRIMARY KEY (project_id, user_id, type)
+        )
+    `);
 }
 
 const AVATAR_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63', '#00bcd4'];
@@ -417,7 +427,9 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/projects', async (req, res) => {
     const { rows } = await pool.query(
         `SELECT sp.id, sp.name, sp.description, sp.creator, sp.tags, sp.thumbnail, sp.published_at,
-                u.avatar, u.avatar_color
+                u.avatar, u.avatar_color,
+                (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'like') as like_count,
+                (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'favorite') as fav_count
          FROM shared_projects sp
          LEFT JOIN users u ON sp.user_id = u.id
          ORDER BY sp.published_at DESC`
@@ -431,7 +443,9 @@ app.get('/api/projects', async (req, res) => {
             tags: JSON.parse(row.tags),
             thumbnail: row.thumbnail,
             publishedAt: row.published_at,
-            creatorAvatarColor: row.avatar_color
+            creatorAvatarColor: row.avatar_color,
+            likeCount: parseInt(row.like_count),
+            favoriteCount: parseInt(row.fav_count)
         };
         if (row.avatar && row.avatar.startsWith('custom:')) {
             proj.creatorAvatarUrl = '/api/avatars/' + row.avatar.replace('custom:', '');
@@ -498,8 +512,111 @@ app.delete('/api/projects/:id', authenticate, async (req, res) => {
     const { rows } = await pool.query('SELECT user_id FROM shared_projects WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Project not found' });
     if (rows[0].user_id !== req.user.id) return res.status(403).json({ error: 'Not your project' });
+    await pool.query('DELETE FROM project_interactions WHERE project_id = $1', [req.params.id]);
     await pool.query('DELETE FROM shared_projects WHERE id = $1', [req.params.id]);
     res.json({ ok: true });
+});
+
+// PATCH /api/projects/:id — rename shared project
+app.patch('/api/projects/:id', authenticate, async (req, res) => {
+    const { name } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'Name is required' });
+    }
+    const { rows } = await pool.query('SELECT user_id FROM shared_projects WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    if (rows[0].user_id !== req.user.id) return res.status(403).json({ error: 'Not your project' });
+    await pool.query('UPDATE shared_projects SET name = $1 WHERE id = $2', [name.trim(), req.params.id]);
+    await pool.query('UPDATE user_projects SET name = $1 WHERE id = $2 AND user_id = $3', [name.trim(), req.params.id, req.user.id]);
+    res.json({ ok: true });
+});
+
+// POST /api/projects/:id/like — toggle like
+app.post('/api/projects/:id/like', authenticate, async (req, res) => {
+    const projectId = req.params.id;
+    const { rows: proj } = await pool.query('SELECT id FROM shared_projects WHERE id = $1', [projectId]);
+    if (proj.length === 0) return res.status(404).json({ error: 'Project not found' });
+    const { rows: existing } = await pool.query(
+        "SELECT project_id FROM project_interactions WHERE project_id = $1 AND user_id = $2 AND type = 'like'",
+        [projectId, req.user.id]
+    );
+    if (existing.length > 0) {
+        await pool.query("DELETE FROM project_interactions WHERE project_id = $1 AND user_id = $2 AND type = 'like'", [projectId, req.user.id]);
+        res.json({ liked: false });
+    } else {
+        await pool.query("INSERT INTO project_interactions (project_id, user_id, type, created_at) VALUES ($1, $2, 'like', $3)", [projectId, req.user.id, Date.now()]);
+        res.json({ liked: true });
+    }
+});
+
+// POST /api/projects/:id/favorite — toggle favorite
+app.post('/api/projects/:id/favorite', authenticate, async (req, res) => {
+    const projectId = req.params.id;
+    const { rows: proj } = await pool.query('SELECT id FROM shared_projects WHERE id = $1', [projectId]);
+    if (proj.length === 0) return res.status(404).json({ error: 'Project not found' });
+    const { rows: existing } = await pool.query(
+        "SELECT project_id FROM project_interactions WHERE project_id = $1 AND user_id = $2 AND type = 'favorite'",
+        [projectId, req.user.id]
+    );
+    if (existing.length > 0) {
+        await pool.query("DELETE FROM project_interactions WHERE project_id = $1 AND user_id = $2 AND type = 'favorite'", [projectId, req.user.id]);
+        res.json({ favorited: false });
+    } else {
+        await pool.query("INSERT INTO project_interactions (project_id, user_id, type, created_at) VALUES ($1, $2, 'favorite', $3)", [projectId, req.user.id, Date.now()]);
+        res.json({ favorited: true });
+    }
+});
+
+// GET /api/projects/:id/stats — get like/favorite counts + user status
+app.get('/api/projects/:id/stats', async (req, res) => {
+    const projectId = req.params.id;
+    const { rows: likesRow } = await pool.query("SELECT COUNT(*) as count FROM project_interactions WHERE project_id = $1 AND type = 'like'", [projectId]);
+    const { rows: favsRow } = await pool.query("SELECT COUNT(*) as count FROM project_interactions WHERE project_id = $1 AND type = 'favorite'", [projectId]);
+    const likes = parseInt(likesRow[0].count);
+    const favorites = parseInt(favsRow[0].count);
+    let userLiked = false, userFavorited = false;
+    // Check user status from JWT cookie (optional auth)
+    const token = req.cookies[COOKIE_NAME];
+    if (token) {
+        try {
+            const user = jwt.verify(token, JWT_SECRET);
+            const { rows: ul } = await pool.query("SELECT project_id FROM project_interactions WHERE project_id = $1 AND user_id = $2 AND type = 'like'", [projectId, user.id]);
+            const { rows: uf } = await pool.query("SELECT project_id FROM project_interactions WHERE project_id = $1 AND user_id = $2 AND type = 'favorite'", [projectId, user.id]);
+            userLiked = ul.length > 0;
+            userFavorited = uf.length > 0;
+        } catch { /* invalid token, ignore */ }
+    }
+    res.json({ likes, favorites, userLiked, userFavorited });
+});
+
+// GET /api/user/favorites — get user's favorited community projects
+app.get('/api/user/favorites', authenticate, async (req, res) => {
+    const { rows } = await pool.query(`
+        SELECT sp.id, sp.name, sp.description, sp.creator, sp.tags, sp.thumbnail, sp.published_at,
+               u.avatar, u.avatar_color,
+               (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'like') as like_count,
+               (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'favorite') as fav_count
+        FROM project_interactions pi
+        JOIN shared_projects sp ON sp.id = pi.project_id
+        LEFT JOIN users u ON sp.user_id = u.id
+        WHERE pi.user_id = $1 AND pi.type = 'favorite'
+        ORDER BY pi.created_at DESC
+    `, [req.user.id]);
+    const projects = rows.map(row => {
+        const proj = {
+            id: row.id, name: row.name, description: row.description,
+            creator: row.creator, tags: JSON.parse(row.tags),
+            thumbnail: row.thumbnail, publishedAt: row.published_at,
+            creatorAvatarColor: row.avatar_color,
+            likeCount: parseInt(row.like_count),
+            favoriteCount: parseInt(row.fav_count)
+        };
+        if (row.avatar && row.avatar.startsWith('custom:')) {
+            proj.creatorAvatarUrl = '/api/avatars/' + row.avatar.replace('custom:', '');
+        }
+        return proj;
+    });
+    res.json(projects);
 });
 
 // GET /api/projects/check/:id

@@ -2024,6 +2024,16 @@ class App {
             this.projectName = newName;
             this.updateToolbarProjectName();
         }
+        // Sync rename to server if project is shared
+        if (meta.shared) {
+            try {
+                await fetch('/api/projects/' + id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+            } catch (e) { /* offline, ignore */ }
+        }
         this.renderProjectGrid();
     }
 
@@ -4442,6 +4452,7 @@ class App {
                 const tab = btn.dataset.titleTab;
                 document.getElementById('tab-' + tab).classList.add('active');
                 if (tab === 'explore') this.renderExploreGrid();
+                if (tab === 'favorites') this.renderFavoritesGrid();
             });
         });
 
@@ -4577,6 +4588,28 @@ class App {
 
         info.appendChild(nameEl);
         info.appendChild(creatorEl);
+
+        // Stats row (likes/favorites)
+        const likes = project.likeCount || 0;
+        const favs = project.favoriteCount || 0;
+        if (likes > 0 || favs > 0) {
+            const statsEl = document.createElement('div');
+            statsEl.className = 'explore-card-stats';
+            if (likes > 0) {
+                const likeStat = document.createElement('span');
+                likeStat.className = 'explore-card-stat';
+                likeStat.innerHTML = '<span class="material-icons-round">favorite</span>' + likes;
+                statsEl.appendChild(likeStat);
+            }
+            if (favs > 0) {
+                const favStat = document.createElement('span');
+                favStat.className = 'explore-card-stat';
+                favStat.innerHTML = '<span class="material-icons-round">star</span>' + favs;
+                statsEl.appendChild(favStat);
+            }
+            info.appendChild(statsEl);
+        }
+
         if (project.description) info.appendChild(descEl);
 
         card.appendChild(thumb);
@@ -4869,6 +4902,9 @@ class App {
         document.getElementById('pp-exit-fullscreen').onclick = () => this._ppToggleFullscreen();
         document.getElementById('pp-remix-btn').onclick = () => this._ppRemix();
         document.getElementById('pp-report-btn').onclick = () => this._ppReport();
+        document.getElementById('pp-like-btn').onclick = () => this._ppToggleLike();
+        document.getElementById('pp-fav-btn').onclick = () => this._ppToggleFavorite();
+        this._ppLoadStats();
         const creatorCard = document.querySelector('.pp-creator-card');
         if (creatorCard) {
             creatorCard.style.cursor = 'pointer';
@@ -4995,6 +5031,116 @@ class App {
         this._ppRuntime.stop();
         document.getElementById('pp-btn-play').classList.remove('active');
         document.getElementById('pp-btn-stop').classList.remove('active');
+    }
+
+    async _ppLoadStats() {
+        if (!this._ppProject) return;
+        try {
+            const res = await fetch('/api/projects/' + this._ppProject.id + '/stats');
+            if (!res.ok) return;
+            const stats = await res.json();
+            document.getElementById('pp-like-count').textContent = stats.likes || 0;
+            document.getElementById('pp-fav-count').textContent = stats.favorites || 0;
+            const likeBtn = document.getElementById('pp-like-btn');
+            const favBtn = document.getElementById('pp-fav-btn');
+            const likeIcon = likeBtn.querySelector('.material-icons-round');
+            const favIcon = favBtn.querySelector('.material-icons-round');
+            if (stats.userLiked) {
+                likeBtn.classList.add('active');
+                likeIcon.textContent = 'favorite';
+            } else {
+                likeBtn.classList.remove('active');
+                likeIcon.textContent = 'favorite_border';
+            }
+            if (stats.userFavorited) {
+                favBtn.classList.add('active');
+                favIcon.textContent = 'star';
+            } else {
+                favBtn.classList.remove('active');
+                favIcon.textContent = 'star_border';
+            }
+        } catch (e) { /* offline */ }
+    }
+
+    async _ppToggleLike() {
+        if (!this._cachedUser) { this.toast('Sign in to like projects', 'info'); return; }
+        if (!this._ppProject) return;
+        const btn = document.getElementById('pp-like-btn');
+        const icon = btn.querySelector('.material-icons-round');
+        const countEl = document.getElementById('pp-like-count');
+        const wasActive = btn.classList.contains('active');
+        // Optimistic update
+        btn.classList.toggle('active');
+        icon.textContent = wasActive ? 'favorite_border' : 'favorite';
+        countEl.textContent = Math.max(0, parseInt(countEl.textContent || 0) + (wasActive ? -1 : 1));
+        try {
+            const res = await fetch('/api/projects/' + this._ppProject.id + '/like', { method: 'POST' });
+            if (!res.ok) {
+                // Revert
+                btn.classList.toggle('active');
+                icon.textContent = wasActive ? 'favorite' : 'favorite_border';
+                countEl.textContent = Math.max(0, parseInt(countEl.textContent || 0) + (wasActive ? 1 : -1));
+            }
+        } catch (e) {
+            btn.classList.toggle('active');
+            icon.textContent = wasActive ? 'favorite' : 'favorite_border';
+            countEl.textContent = Math.max(0, parseInt(countEl.textContent || 0) + (wasActive ? 1 : -1));
+        }
+    }
+
+    async _ppToggleFavorite() {
+        if (!this._cachedUser) { this.toast('Sign in to favorite projects', 'info'); return; }
+        if (!this._ppProject) return;
+        const btn = document.getElementById('pp-fav-btn');
+        const icon = btn.querySelector('.material-icons-round');
+        const countEl = document.getElementById('pp-fav-count');
+        const wasActive = btn.classList.contains('active');
+        // Optimistic update
+        btn.classList.toggle('active');
+        icon.textContent = wasActive ? 'star_border' : 'star';
+        countEl.textContent = Math.max(0, parseInt(countEl.textContent || 0) + (wasActive ? -1 : 1));
+        try {
+            const res = await fetch('/api/projects/' + this._ppProject.id + '/favorite', { method: 'POST' });
+            if (!res.ok) {
+                btn.classList.toggle('active');
+                icon.textContent = wasActive ? 'star' : 'star_border';
+                countEl.textContent = Math.max(0, parseInt(countEl.textContent || 0) + (wasActive ? 1 : -1));
+            }
+        } catch (e) {
+            btn.classList.toggle('active');
+            icon.textContent = wasActive ? 'star' : 'star_border';
+            countEl.textContent = Math.max(0, parseInt(countEl.textContent || 0) + (wasActive ? 1 : -1));
+        }
+    }
+
+    async renderFavoritesGrid() {
+        const grid = document.getElementById('favorites-grid');
+        const emptyEl = document.getElementById('favorites-empty');
+        grid.innerHTML = '';
+
+        if (!this._cachedUser) {
+            emptyEl.style.display = '';
+            emptyEl.querySelector('p').textContent = 'Sign in to see favorites';
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/user/favorites');
+            if (!res.ok) throw new Error();
+            const projects = await res.json();
+            if (projects.length > 0) {
+                emptyEl.style.display = 'none';
+                projects.forEach(proj => {
+                    grid.appendChild(this.createExploreCard(proj, false));
+                });
+            } else {
+                emptyEl.style.display = '';
+                emptyEl.querySelector('p').textContent = 'No favorites yet';
+            }
+        } catch (e) {
+            emptyEl.style.display = '';
+            emptyEl.querySelector('p').textContent = 'Could not load favorites';
+        }
     }
 
     _ppToggleFullscreen() {

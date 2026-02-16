@@ -3860,6 +3860,33 @@ kbd {
     overflow: hidden;
 }
 
+.explore-card-stats {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+    margin-bottom: 2px;
+}
+
+.explore-card-stat {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.explore-card-stat .material-icons-round {
+    font-size: 13px;
+}
+
+.explore-card-stat:first-child .material-icons-round {
+    color: #e74c3c;
+}
+
+.explore-card-stat:nth-child(2) .material-icons-round {
+    color: #f1c40f;
+}
+
 .explore-card-open-btn {
     display: flex;
     align-items: center;
@@ -4567,6 +4594,75 @@ kbd {
 .pp-creator-label {
     font-size: 11px;
     color: var(--text-dim);
+}
+
+/* ===== Like/Favorite Action Row ===== */
+.pp-actions-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.pp-like-btn,
+.pp-fav-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: var(--bg-medium);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-dim);
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pp-like-btn .material-icons-round,
+.pp-fav-btn .material-icons-round {
+    font-size: 20px;
+    transition: all 0.2s;
+}
+
+.pp-like-btn:hover {
+    border-color: #e74c3c;
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.08);
+}
+
+.pp-like-btn.active {
+    border-color: #e74c3c;
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.12);
+}
+
+.pp-like-btn.active .material-icons-round {
+    color: #e74c3c;
+}
+
+.pp-fav-btn:hover {
+    border-color: #f1c40f;
+    color: #f1c40f;
+    background: rgba(241, 196, 15, 0.08);
+}
+
+.pp-fav-btn.active {
+    border-color: #f1c40f;
+    color: #f1c40f;
+    background: rgba(241, 196, 15, 0.12);
+}
+
+.pp-fav-btn.active .material-icons-round {
+    color: #f1c40f;
+}
+
+.pp-action-count {
+    font-size: 13px;
+    min-width: 12px;
 }
 
 .pp-remix-btn {
