@@ -1319,7 +1319,7 @@ input[type="checkbox"] {
     background-color: #2a2a48;
     position: relative;
     overflow: auto;
-    padding-bottom: 30px;
+    padding-bottom: 24px;
     background-image:
         linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
@@ -1574,13 +1574,13 @@ input[type="checkbox"] {
 #backpack-header {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 12px;
+    gap: 5px;
+    padding: 3px 10px;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--text-dim);
-    background: linear-gradient(180deg, var(--bg-lighter), var(--bg-dark));
+    background: var(--bg-dark);
     user-select: none;
     transition: background 0.15s;
 }
@@ -1591,11 +1591,12 @@ input[type="checkbox"] {
 }
 
 #backpack-header .material-icons-round {
-    font-size: 16px;
+    font-size: 14px;
 }
 
 .backpack-toggle-icon {
     margin-left: auto;
+    font-size: 12px !important;
     transition: transform 0.2s;
 }
 
@@ -1606,13 +1607,14 @@ input[type="checkbox"] {
 #backpack-count {
     background: var(--accent);
     color: #fff;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
-    padding: 1px 6px;
-    border-radius: 8px;
-    min-width: 16px;
+    padding: 0 5px;
+    border-radius: 6px;
+    min-width: 14px;
     text-align: center;
     display: none;
+    line-height: 15px;
 }
 
 #backpack-count.has-items {
@@ -1622,12 +1624,12 @@ input[type="checkbox"] {
 #backpack-content {
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 8px;
-    height: 90px;
+    padding: 6px 8px;
+    height: 66px;
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    background: rgba(0,0,0,0.15);
+    gap: 6px;
+    background: rgba(0,0,0,0.12);
 }
 
 .backpack-collapsed #backpack-content {
@@ -1635,8 +1637,8 @@ input[type="checkbox"] {
 }
 
 #backpack-empty {
-    color: rgba(255,255,255,0.2);
-    font-size: 12px;
+    color: rgba(255,255,255,0.18);
+    font-size: 11px;
     font-weight: 500;
     margin: auto;
     white-space: nowrap;
@@ -1649,18 +1651,18 @@ input[type="checkbox"] {
 
 #backpack-items {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: flex-start;
-    min-height: 74px;
+    min-height: 54px;
 }
 
 .backpack-item {
     background: var(--bg-medium);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    min-width: 120px;
-    max-width: 160px;
+    border-radius: 6px;
+    padding: 4px 24px 4px 6px;
+    min-width: 90px;
+    max-width: 140px;
     cursor: grab;
     position: relative;
     transition: transform 0.12s, box-shadow 0.12s;
@@ -1668,8 +1670,8 @@ input[type="checkbox"] {
 }
 
 .backpack-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.3);
     border-color: var(--accent);
 }
 
@@ -1678,55 +1680,52 @@ input[type="checkbox"] {
 }
 
 .backpack-item-label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--text-bright);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .backpack-item-count {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text-dim);
 }
 
 .backpack-item-color {
     width: 100%;
-    height: 4px;
+    height: 3px;
     border-radius: 2px;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 .backpack-delete {
     position: absolute;
-    top: 3px;
-    right: 3px;
-    width: 18px;
-    height: 18px;
+    top: 4px;
+    right: 4px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.08);
+    background: rgba(255,60,60,0.15);
     border: none;
-    color: var(--text-dim);
-    font-size: 14px;
+    color: #ff6666;
+    font-size: 13px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0;
+    opacity: 0.7;
     transition: opacity 0.12s, background 0.12s;
     padding: 0;
     line-height: 1;
 }
 
-.backpack-item:hover .backpack-delete {
-    opacity: 1;
-}
-
 .backpack-delete:hover {
-    background: rgba(255,60,60,0.3);
-    color: #ff6666;
+    opacity: 1;
+    background: rgba(255,60,60,0.35);
+    color: #ff4444;
 }
 
 #backpack-tray.backpack-drop-active {
