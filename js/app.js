@@ -4449,6 +4449,15 @@ class App {
         this.exploreCategoryFilter = 'all';
         this.exploreSortMode = 'popular';
 
+        // Trending row arrow buttons
+        const trendingGrid = document.getElementById('explore-trending-grid');
+        document.getElementById('trending-arrow-left')?.addEventListener('click', () => {
+            trendingGrid.scrollBy({ left: -270, behavior: 'smooth' });
+        });
+        document.getElementById('trending-arrow-right')?.addEventListener('click', () => {
+            trendingGrid.scrollBy({ left: 270, behavior: 'smooth' });
+        });
+
         // Tab switching
         document.querySelectorAll('.title-tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
