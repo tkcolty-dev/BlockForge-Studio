@@ -1314,12 +1314,18 @@ input[type="checkbox"] {
 .block.c-block-container.block-effects .c-block-body { background-color: rgba(180,100,20,0.3); border-color: rgba(230,126,34,0.25); }
 
 /* ===== Script Workspace ===== */
+#script-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
 #script-workspace {
     flex: 1;
     background-color: #2a2a48;
     position: relative;
     overflow: auto;
-    padding-bottom: 24px;
     background-image:
         linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
@@ -1560,10 +1566,7 @@ input[type="checkbox"] {
 
 /* ===== Backpack Tray ===== */
 #backpack-tray {
-    position: sticky;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    flex-shrink: 0;
     z-index: 70;
     background: var(--bg-darkest);
     border-top: 1px solid var(--border);
