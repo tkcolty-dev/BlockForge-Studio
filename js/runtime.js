@@ -65,6 +65,9 @@ class Runtime {
         this._activeScreens = new Map();
         this._uiScreens = [];
 
+        // Number displays
+        this._numberDisplays = new Map();
+
         // Reusable temp objects to reduce allocations in hot loops
         this._tempVec3 = new THREE.Vector3();
         this._tempBox3 = new THREE.Box3();
@@ -146,6 +149,9 @@ class Runtime {
         // UI Screens
         this._activeScreens.forEach(el => el.remove());
         this._activeScreens.clear();
+
+        // Number displays
+        this._numberDisplays.clear();
 
         // Music system
         this._stopMusic();
@@ -380,6 +386,9 @@ class Runtime {
         // Clean up UI screens
         this._activeScreens.forEach(el => el.remove());
         this._activeScreens.clear();
+
+        // Clean up number displays
+        this._numberDisplays.clear();
 
         // Reset camera overrides
         this._cameraOverride = false;
@@ -2313,7 +2322,7 @@ class Runtime {
                     color: #333;
                     padding: 8px 14px;
                     border-radius: 12px;
-                    font-size: 13px;
+                    font-size: 13px !important;
                     font-weight: 500;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
                     pointer-events: none;
@@ -2613,7 +2622,7 @@ class Runtime {
                     color: white;
                     padding: 24px 48px;
                     border-radius: 16px;
-                    font-size: 28px;
+                    font-size: 28px !important;
                     font-weight: 700;
                     z-index: 10000;
                     pointer-events: none;
@@ -2649,13 +2658,13 @@ class Runtime {
                     backdrop-filter: blur(4px);
                 `;
                 const title = document.createElement('div');
-                title.style.cssText = 'color:white;font-size:56px;font-weight:800;margin-bottom:16px;text-shadow:0 4px 12px rgba(0,0,0,0.4);';
+                title.style.cssText = 'color:white;font-size:56px !important;font-weight:800;margin-bottom:16px;text-shadow:0 4px 12px rgba(0,0,0,0.4);';
                 title.textContent = result === 'win' ? 'YOU WIN!' : 'GAME OVER';
                 const sub = document.createElement('div');
-                sub.style.cssText = 'color:rgba(255,255,255,0.8);font-size:20px;font-weight:500;margin-bottom:32px;';
+                sub.style.cssText = 'color:rgba(255,255,255,0.8);font-size:20px !important;font-weight:500;margin-bottom:32px;';
                 sub.textContent = `Score: ${this.variables.score || 0}`;
                 const btn = document.createElement('button');
-                btn.style.cssText = 'background:white;color:#333;border:none;padding:12px 36px;border-radius:12px;font-size:18px;font-weight:600;cursor:pointer;';
+                btn.style.cssText = 'background:white;color:#333;border:none;padding:12px 36px;border-radius:12px;font-size:18px !important;font-weight:600;cursor:pointer;';
                 btn.textContent = 'Press ESC to exit';
                 overlay.appendChild(title);
                 overlay.appendChild(sub);
@@ -3035,7 +3044,7 @@ class Runtime {
                 const box = document.createElement('div');
                 box.style.cssText = `
                     background:white;color:#333;padding:32px 48px;border-radius:16px;
-                    font-size:20px;font-weight:500;text-align:center;max-width:400px;
+                    font-size:20px !important;font-weight:500;text-align:center;max-width:400px;
                     box-shadow:0 8px 32px rgba(0,0,0,0.3);
                 `;
                 box.textContent = dialogText;
@@ -3043,7 +3052,7 @@ class Runtime {
                 btn.textContent = 'OK';
                 btn.style.cssText = `
                     display:block;margin:20px auto 0;padding:10px 32px;border:none;
-                    background:#4C97FF;color:white;border-radius:8px;font-size:16px;
+                    background:#4C97FF;color:white;border-radius:8px;font-size:16px !important;
                     font-weight:600;cursor:pointer;
                 `;
                 box.appendChild(btn);
@@ -3207,7 +3216,7 @@ class Runtime {
                     }
                     div.style.cssText = `
                         left:${el.x}%;top:${el.y}%;width:${el.width}%;height:${el.height}%;
-                        font-size:${el.fontSize}px;color:${el.color};
+                        font-size:${el.fontSize}px !important;color:${el.color};
                         background:${el.bgColor === 'transparent' ? 'transparent' : el.bgColor};
                         text-align:${el.align};display:flex;align-items:center;padding:0 12px;
                         justify-content:${el.align === 'center' ? 'center' : el.align === 'right' ? 'flex-end' : 'flex-start'};
@@ -3280,7 +3289,7 @@ class Runtime {
                 if (!lastScr) break;
                 const newEl = document.createElement('div');
                 newEl.className = 'game-ui-element';
-                newEl.style.cssText = `left:${v.x||50}%;top:${v.y||50}%;font-size:24px;color:#ffffff;display:flex;align-items:center;justify-content:center;`;
+                newEl.style.cssText = `left:${v.x||50}%;top:${v.y||50}%;font-size:24px !important;color:#ffffff;display:flex;align-items:center;justify-content:center;`;
                 newEl.textContent = v.text || 'Hello';
                 lastScr.appendChild(newEl);
                 break;
@@ -3291,7 +3300,7 @@ class Runtime {
                 if (!lastScr2) break;
                 const btnEl = document.createElement('div');
                 btnEl.className = 'game-ui-element game-ui-button';
-                btnEl.style.cssText = `left:50%;top:80%;width:25%;height:7%;font-size:18px;color:#fff;background:#4C97FF;display:flex;align-items:center;justify-content:center;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,0.3);font-weight:600;cursor:pointer;padding:0 12px;`;
+                btnEl.style.cssText = `left:50%;top:80%;width:25%;height:7%;font-size:18px !important;color:#fff;background:#4C97FF;display:flex;align-items:center;justify-content:center;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,0.3);font-weight:600;cursor:pointer;padding:0 12px;`;
                 btnEl.textContent = v.text || 'Click';
                 const runtime2 = this;
                 const btnMsg = v.msg || 'clicked';
@@ -3308,12 +3317,34 @@ class Runtime {
                 scrOverlay6.innerHTML = '';
                 break;
             }
+            case 'uiShowNumber': {
+                const nlabel = v.label || 'Score';
+                this._numberDisplays.set(nlabel, parseFloat(v.value) || 0);
+                this.updateHUD();
+                break;
+            }
+            case 'uiSetNumber': {
+                const nlabel2 = v.label || 'Score';
+                if (this._numberDisplays.has(nlabel2)) {
+                    this._numberDisplays.set(nlabel2, parseFloat(v.value) || 0);
+                    this.updateHUD();
+                }
+                break;
+            }
+            case 'uiChangeNumber': {
+                const nlabel3 = v.label || 'Score';
+                if (this._numberDisplays.has(nlabel3)) {
+                    this._numberDisplays.set(nlabel3, (this._numberDisplays.get(nlabel3) || 0) + (parseFloat(v.value) || 1));
+                    this.updateHUD();
+                }
+                break;
+            }
             case 'uiTextOverlay': {
                 const txtOverlay = document.createElement('div');
                 txtOverlay.className = 'game-ui-screen';
                 txtOverlay.style.cssText = 'display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:85;';
                 const txtEl = document.createElement('div');
-                txtEl.style.cssText = 'font-size:48px;color:#fff;font-weight:700;text-shadow:0 2px 12px rgba(0,0,0,0.6);font-family:Inter,sans-serif;text-align:center;';
+                txtEl.style.cssText = 'font-size:48px !important;color:#fff;font-weight:700;text-shadow:0 2px 12px rgba(0,0,0,0.6);font-family:Inter,sans-serif;text-align:center;';
                 txtEl.textContent = v.text || 'Text';
                 txtOverlay.appendChild(txtEl);
                 (this._getElement('playOverlay', 'play-overlay') || document.getElementById('viewport-container') || document.body).appendChild(txtOverlay);
@@ -3362,7 +3393,7 @@ class Runtime {
 
         this.hudElements.forEach(varName => {
             const el = document.createElement('div');
-            el.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;backdrop-filter:blur(8px);';
+            el.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:8px 16px;border-radius:8px;font-size:14px !important;font-weight:600;backdrop-filter:blur(8px);';
             el.textContent = `${varName}: ${this.variables[varName] ?? 0}`;
             hud.appendChild(el);
         });
@@ -3372,7 +3403,7 @@ class Runtime {
             const barContainer = document.createElement('div');
             barContainer.style.cssText = 'background:rgba(0,0,0,0.6);padding:8px 16px;border-radius:8px;backdrop-filter:blur(8px);min-width:150px;';
             const label = document.createElement('div');
-            label.style.cssText = 'color:white;font-size:11px;font-weight:600;margin-bottom:4px;';
+            label.style.cssText = 'color:white;font-size:11px !important;font-weight:600;margin-bottom:4px;';
             label.textContent = `Health: ${Math.max(0, Math.round(this.variables.health))} / ${this.maxHealth}`;
             const barBg = document.createElement('div');
             barBg.style.cssText = 'background:rgba(255,255,255,0.2);border-radius:4px;height:10px;overflow:hidden;';
@@ -3391,12 +3422,12 @@ class Runtime {
             const invContainer = document.createElement('div');
             invContainer.style.cssText = 'background:rgba(0,0,0,0.6);padding:8px 12px;border-radius:8px;backdrop-filter:blur(8px);';
             const invTitle = document.createElement('div');
-            invTitle.style.cssText = 'color:white;font-size:11px;font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;';
+            invTitle.style.cssText = 'color:white;font-size:11px !important;font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;';
             invTitle.textContent = 'Inventory';
             invContainer.appendChild(invTitle);
             this.inventory.forEach(item => {
                 const row = document.createElement('div');
-                row.style.cssText = 'color:rgba(255,255,255,0.9);font-size:12px;padding:2px 0;';
+                row.style.cssText = 'color:rgba(255,255,255,0.9);font-size:12px !important;padding:2px 0;';
                 const icon = item.type === 'key' ? '🔑' : item.type === 'potion' ? '🧪' : item.type === 'powerup' ? '⚡' : item.type === 'gem' ? '💎' : item.type === 'coin' ? '🪙' : '📦';
                 row.textContent = `${icon} ${item.name}${item.count > 1 ? ' x' + item.count : ''}`;
                 invContainer.appendChild(row);
@@ -3407,7 +3438,7 @@ class Runtime {
         // Lives display
         if (this._showingLives) {
             const livesEl = document.createElement('div');
-            livesEl.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:8px 16px;border-radius:8px;font-size:16px;font-weight:600;backdrop-filter:blur(8px);';
+            livesEl.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:8px 16px;border-radius:8px;font-size:16px !important;font-weight:600;backdrop-filter:blur(8px);';
             livesEl.textContent = '❤'.repeat(Math.max(0, this._lives)) + (this._lives <= 0 ? ' 0' : '');
             hud.appendChild(livesEl);
         }
@@ -3415,12 +3446,29 @@ class Runtime {
         // Countdown timer display
         if (this._showingTimer && this._countdown !== null) {
             const timerEl = document.createElement('div');
-            timerEl.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:8px 16px;border-radius:8px;font-size:16px;font-weight:700;backdrop-filter:blur(8px);font-variant-numeric:tabular-nums;';
+            timerEl.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:8px 16px;border-radius:8px;font-size:16px !important;font-weight:700;backdrop-filter:blur(8px);font-variant-numeric:tabular-nums;';
             const mins = Math.floor(this._countdown / 60);
             const secs = Math.floor(this._countdown % 60);
             timerEl.textContent = `⏱ ${mins}:${secs.toString().padStart(2, '0')}`;
             if (this._countdown <= 10) timerEl.style.color = '#e74c3c';
             hud.appendChild(timerEl);
+        }
+
+        // Number displays
+        if (this._numberDisplays.size > 0) {
+            this._numberDisplays.forEach((value, label) => {
+                const numEl = document.createElement('div');
+                numEl.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:8px 16px;border-radius:8px;font-size:16px !important;font-weight:600;backdrop-filter:blur(8px);display:flex;align-items:center;gap:8px;';
+                const labelSpan = document.createElement('span');
+                labelSpan.style.cssText = 'color:rgba(255,255,255,0.7);font-size:12px !important;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;';
+                labelSpan.textContent = label;
+                const valueSpan = document.createElement('span');
+                valueSpan.style.cssText = 'font-size:18px !important;font-weight:700;font-variant-numeric:tabular-nums;';
+                valueSpan.textContent = Number.isInteger(value) ? value : value.toFixed(1);
+                numEl.appendChild(labelSpan);
+                numEl.appendChild(valueSpan);
+                hud.appendChild(numEl);
+            });
         }
     }
 
@@ -3437,7 +3485,7 @@ class Runtime {
             color: #333;
             padding: 8px 14px;
             border-radius: 12px;
-            font-size: 13px;
+            font-size: 13px !important;
             font-weight: 500;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             pointer-events: none;
@@ -3899,6 +3947,170 @@ class Runtime {
                     osc.start(now + i * 0.08);
                     osc.stop(now + i * 0.08 + 0.2);
                 }
+                break;
+            }
+            case 'laser': {
+                const osc = ctx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(1200, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.15);
+                osc.connect(gain);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+                break;
+            }
+            case 'explosion': {
+                // Noise burst + low rumble
+                const bufSize = ctx.sampleRate * 0.5;
+                const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+                const d = buf.getChannelData(0);
+                for (let i = 0; i < bufSize; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 2);
+                const src = ctx.createBufferSource();
+                src.buffer = buf;
+                src.connect(gain);
+                gain.gain.setValueAtTime(this.soundVolume * 0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                src.start(now);
+                const rumble = ctx.createOscillator();
+                rumble.type = 'sine';
+                rumble.frequency.setValueAtTime(60, now);
+                rumble.frequency.exponentialRampToValueAtTime(20, now + 0.4);
+                const rg = ctx.createGain();
+                rg.connect(ctx.destination);
+                rg.gain.value = this.soundVolume * 0.4;
+                rg.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                rumble.connect(rg);
+                rumble.start(now);
+                rumble.stop(now + 0.5);
+                break;
+            }
+            case 'splash': {
+                const bufSize2 = ctx.sampleRate * 0.4;
+                const buf2 = ctx.createBuffer(1, bufSize2, ctx.sampleRate);
+                const d2 = buf2.getChannelData(0);
+                for (let i = 0; i < bufSize2; i++) d2[i] = (Math.random() * 2 - 1) * (1 - i / bufSize2);
+                const src2 = ctx.createBufferSource();
+                src2.buffer = buf2;
+                const bp = ctx.createBiquadFilter();
+                bp.type = 'bandpass';
+                bp.frequency.setValueAtTime(600, now);
+                bp.Q.value = 2;
+                src2.connect(bp);
+                bp.connect(gain);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                src2.start(now);
+                break;
+            }
+            case 'click': {
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1500, now);
+                osc.connect(gain);
+                gain.gain.setValueAtTime(this.soundVolume * 0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+                osc.start(now);
+                osc.stop(now + 0.03);
+                break;
+            }
+            case 'bell': {
+                const osc1 = ctx.createOscillator();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(830, now);
+                osc1.connect(gain);
+                const osc2 = ctx.createOscillator();
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(1245, now);
+                const g2 = ctx.createGain();
+                g2.connect(ctx.destination);
+                g2.gain.value = this.soundVolume * 0.15;
+                g2.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+                osc2.connect(g2);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+                osc1.start(now);
+                osc1.stop(now + 1.0);
+                osc2.start(now);
+                osc2.stop(now + 1.0);
+                break;
+            }
+            case 'alarm': {
+                const osc1 = ctx.createOscillator();
+                osc1.type = 'square';
+                osc1.frequency.setValueAtTime(800, now);
+                osc1.connect(gain);
+                gain.gain.setValueAtTime(this.soundVolume * 0.2, now);
+                // Alternate between two tones
+                for (let i = 0; i < 6; i++) {
+                    osc1.frequency.setValueAtTime(i % 2 === 0 ? 800 : 600, now + i * 0.1);
+                }
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+                osc1.start(now);
+                osc1.stop(now + 0.6);
+                break;
+            }
+            case 'magic': {
+                // Ascending sparkle arpeggio
+                const notes = [523, 659, 784, 1047, 1319];
+                notes.forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.06);
+                    const g = ctx.createGain();
+                    g.connect(ctx.destination);
+                    g.gain.value = this.soundVolume * 0.2;
+                    g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.3);
+                    osc.connect(g);
+                    osc.start(now + i * 0.06);
+                    osc.stop(now + i * 0.06 + 0.3);
+                });
+                break;
+            }
+            case 'swoosh': {
+                const bufSize3 = ctx.sampleRate * 0.15;
+                const buf3 = ctx.createBuffer(1, bufSize3, ctx.sampleRate);
+                const d3 = buf3.getChannelData(0);
+                for (let i = 0; i < bufSize3; i++) d3[i] = (Math.random() * 2 - 1) * (1 - i / bufSize3);
+                const src3 = ctx.createBufferSource();
+                src3.buffer = buf3;
+                const hp = ctx.createBiquadFilter();
+                hp.type = 'highpass';
+                hp.frequency.setValueAtTime(2000, now);
+                hp.frequency.exponentialRampToValueAtTime(500, now + 0.15);
+                src3.connect(hp);
+                hp.connect(gain);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                src3.start(now);
+                break;
+            }
+            case 'beep': {
+                const osc = ctx.createOscillator();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(880, now);
+                osc.connect(gain);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+                break;
+            }
+            case 'chime': {
+                // Two-note doorbell
+                const osc1 = ctx.createOscillator();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(659, now);
+                osc1.connect(gain);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+                osc1.start(now);
+                osc1.stop(now + 0.3);
+                const osc2 = ctx.createOscillator();
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(523, now + 0.3);
+                const g2 = ctx.createGain();
+                g2.connect(ctx.destination);
+                g2.gain.value = this.soundVolume * 0.3;
+                g2.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+                osc2.connect(g2);
+                osc2.start(now + 0.3);
+                osc2.stop(now + 0.6);
                 break;
             }
         }

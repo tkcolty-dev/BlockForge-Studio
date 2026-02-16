@@ -109,7 +109,7 @@ class BlockCode {
             'sensing_timer': { category: 'sensing', type: 'reporter', label: 'Game timer', code: 'getTimer' },
             'sensing_player_grounded': { category: 'sensing', type: 'reporter', label: 'Player on ground?', code: 'playerGrounded' },
             'sensing_random': { category: 'sensing', type: 'reporter', label: 'Random {min} to {max}', inputs: { min: { type: 'number', default: 1 }, max: { type: 'number', default: 10 } }, code: 'random' },
-            'sound_play': { category: 'sound', type: 'command', label: 'Play sound {sound}', inputs: { sound: { type: 'select', options: ['pop','ding','whoosh','boom','jump','coin','hurt','powerup'], default: 'pop' } }, code: 'playSound' },
+            'sound_play': { category: 'sound', type: 'command', label: 'Play sound {sound}', inputs: { sound: { type: 'select', options: ['pop','ding','whoosh','boom','jump','coin','hurt','powerup','laser','explosion','splash','click','bell','alarm','magic','swoosh','beep','chime'], default: 'pop' } }, code: 'playSound' },
             'sound_volume': { category: 'sound', type: 'command', label: 'Set volume to {percent}%', inputs: { percent: { type: 'number', default: 100 } }, code: 'setVolume' },
             'sound_pitch': { category: 'sound', type: 'command', label: 'Tone {freq}hz for {dur}s', inputs: { freq: { type: 'number', default: 440 }, dur: { type: 'number', default: 0.3 } }, code: 'playTone' },
             'var_set': { category: 'variables', type: 'command', label: 'Set {var} to {value}', inputs: { var: { type: 'select', options: ['score','health','coins','speed','level','custom'], default: 'score' }, value: { type: 'number', default: 0 } }, code: 'setVar' },
@@ -262,6 +262,9 @@ class BlockCode {
             'ui_add_button': { category: 'ui', type: 'command', label: 'Add btn {text} msg {msg}', inputs: { text: { type: 'text', default: 'Click' }, msg: { type: 'text', default: 'clicked' } }, code: 'uiAddButton' },
             'ui_clear_screen': { category: 'ui', type: 'command', label: 'Clear {screen}', inputs: { screen: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'uiClearScreen' },
             'ui_show_text_overlay': { category: 'ui', type: 'command', label: 'Flash text {text} for {time}s', inputs: { text: { type: 'text', default: 'Level 1' }, time: { type: 'number', default: 2 } }, code: 'uiTextOverlay' },
+            'ui_show_number': { category: 'ui', type: 'command', label: 'Show number {label} value {value}', inputs: { label: { type: 'text', default: 'Score' }, value: { type: 'number', default: 0 } }, code: 'uiShowNumber' },
+            'ui_set_number': { category: 'ui', type: 'command', label: 'Set {label} to {value}', inputs: { label: { type: 'text', default: 'Score' }, value: { type: 'number', default: 0 } }, code: 'uiSetNumber' },
+            'ui_change_number': { category: 'ui', type: 'command', label: 'Change {label} by {value}', inputs: { label: { type: 'text', default: 'Score' }, value: { type: 'number', default: 1 } }, code: 'uiChangeNumber' },
 
         };
     }
