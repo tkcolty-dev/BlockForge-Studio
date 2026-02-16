@@ -3300,7 +3300,7 @@ class Runtime {
                 if (!lastScr2) break;
                 const btnEl = document.createElement('div');
                 btnEl.className = 'game-ui-element game-ui-button';
-                btnEl.style.cssText = `left:50%;top:80%;width:25%;height:7%;font-size:18px !important;color:#fff;background:#4C97FF;display:flex;align-items:center;justify-content:center;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,0.3);font-weight:600;cursor:pointer;padding:0 12px;`;
+                btnEl.style.cssText = `left:50%;top:80%;width:25%;height:7%;font-size:18px !important;color:#fff;background:#4C97FF;display:flex;align-items:center;justify-content:center;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,0.3);font-weight:600;cursor:pointer;padding:0 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
                 btnEl.textContent = v.text || 'Click';
                 const runtime2 = this;
                 const btnMsg = v.msg || 'clicked';

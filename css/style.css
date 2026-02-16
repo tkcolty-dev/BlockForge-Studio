@@ -2428,7 +2428,7 @@ input[type="checkbox"] {
     z-index: 80; pointer-events: none; overflow: hidden; }
 .game-ui-element { position: absolute; transform: translate(-50%, -50%);
     box-sizing: border-box; font-family: 'Inter', sans-serif;
-    pointer-events: none; user-select: none; }
+    pointer-events: none; user-select: none; overflow: hidden; text-overflow: ellipsis; }
 .game-ui-button { pointer-events: auto; cursor: pointer; border: none;
     font-family: 'Inter', sans-serif; font-weight: 600; user-select: none;
     transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease; }
