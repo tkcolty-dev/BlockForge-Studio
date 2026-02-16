@@ -161,11 +161,23 @@
                     <span class="material-icons-round">search</span>
                     <input type="text" id="explore-search" placeholder="Search community projects..." autocomplete="off" spellcheck="false">
                 </div>
-                <div class="explore-categories">
-                    <button class="explore-cat-btn active" data-explore-cat="all">All</button>
-                    <button class="explore-cat-btn" data-explore-cat="games">Games</button>
-                    <button class="explore-cat-btn" data-explore-cat="art">Art</button>
-                    <button class="explore-cat-btn" data-explore-cat="my-shared">My Shared</button>
+                <div class="explore-filter-row">
+                    <div class="explore-categories">
+                        <button class="explore-cat-btn active" data-explore-cat="all">All</button>
+                        <button class="explore-cat-btn" data-explore-cat="games">Games</button>
+                        <button class="explore-cat-btn" data-explore-cat="art">Art</button>
+                        <button class="explore-cat-btn" data-explore-cat="my-shared">My Shared</button>
+                    </div>
+                    <div class="explore-sort">
+                        <button class="explore-sort-btn active" data-explore-sort="popular">
+                            <span class="material-icons-round">trending_up</span>
+                            Popular
+                        </button>
+                        <button class="explore-sort-btn" data-explore-sort="newest">
+                            <span class="material-icons-round">schedule</span>
+                            Newest
+                        </button>
+                    </div>
                 </div>
                 <div id="explore-community-section">
                     <div class="explore-section-header">
@@ -1512,6 +1524,10 @@
                         <span class="material-icons-round">star_border</span>
                         <span class="pp-action-count" id="pp-fav-count">0</span>
                     </button>
+                </div>
+                <div class="pp-views-row" id="pp-views-row">
+                    <span class="material-icons-round">visibility</span>
+                    <span id="pp-view-count">0</span> views
                 </div>
                 <button class="pp-remix-btn" id="pp-remix-btn">
                     <span class="material-icons-round">content_copy</span>

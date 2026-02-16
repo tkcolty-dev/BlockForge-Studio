@@ -4447,6 +4447,7 @@ class App {
 
     initExplore() {
         this.exploreCategoryFilter = 'all';
+        this.exploreSortMode = 'popular';
 
         // Tab switching
         document.querySelectorAll('.title-tab-btn').forEach(btn => {
@@ -4467,6 +4468,16 @@ class App {
                 document.querySelectorAll('.explore-cat-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.exploreCategoryFilter = btn.dataset.exploreCat;
+                this.renderExploreGrid();
+            });
+        });
+
+        // Sort buttons
+        document.querySelectorAll('.explore-sort-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.explore-sort-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.exploreSortMode = btn.dataset.exploreSort;
                 this.renderExploreGrid();
             });
         });
@@ -4496,7 +4507,7 @@ class App {
         // Get community projects from server
         let projects = [];
         try {
-            const res = await fetch('/api/projects');
+            const res = await fetch('/api/projects?sort=' + (this.exploreSortMode || 'popular'));
             if (res.ok) {
                 projects = await res.json();
             }
@@ -4594,10 +4605,11 @@ class App {
         info.appendChild(nameEl);
         info.appendChild(creatorEl);
 
-        // Stats row (likes/favorites)
+        // Stats row (likes/favorites/views)
         const likes = project.likeCount || 0;
         const favs = project.favoriteCount || 0;
-        if (likes > 0 || favs > 0) {
+        const views = project.viewCount || 0;
+        if (likes > 0 || favs > 0 || views > 0) {
             const statsEl = document.createElement('div');
             statsEl.className = 'explore-card-stats';
             if (likes > 0) {
@@ -4611,6 +4623,12 @@ class App {
                 favStat.className = 'explore-card-stat';
                 favStat.innerHTML = '<span class="material-icons-round">star</span>' + favs;
                 statsEl.appendChild(favStat);
+            }
+            if (views > 0) {
+                const viewStat = document.createElement('span');
+                viewStat.className = 'explore-card-stat';
+                viewStat.innerHTML = '<span class="material-icons-round">visibility</span>' + views;
+                statsEl.appendChild(viewStat);
             }
             info.appendChild(statsEl);
         }
@@ -4910,6 +4928,8 @@ class App {
         document.getElementById('pp-like-btn').onclick = () => this._ppToggleLike();
         document.getElementById('pp-fav-btn').onclick = () => this._ppToggleFavorite();
         this._ppLoadStats();
+        // Record view (fire-and-forget)
+        if (this._ppProject?.id) fetch('/api/projects/' + this._ppProject.id + '/view', { method: 'POST' }).catch(() => {});
         const creatorCard = document.querySelector('.pp-creator-card');
         if (creatorCard) {
             creatorCard.style.cursor = 'pointer';
@@ -5046,6 +5066,7 @@ class App {
             const stats = await res.json();
             document.getElementById('pp-like-count').textContent = stats.likes || 0;
             document.getElementById('pp-fav-count').textContent = stats.favorites || 0;
+            document.getElementById('pp-view-count').textContent = stats.viewCount || 0;
             const likeBtn = document.getElementById('pp-like-btn');
             const favBtn = document.getElementById('pp-fav-btn');
             const likeIcon = likeBtn.querySelector('.material-icons-round');

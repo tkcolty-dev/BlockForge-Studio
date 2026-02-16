@@ -161,6 +161,9 @@ async function initDb() {
             PRIMARY KEY (project_id, user_id, type)
         )
     `);
+
+    // Migration: add view_count column to shared_projects
+    await pool.query(`ALTER TABLE shared_projects ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0`);
 }
 
 const AVATAR_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63', '#00bcd4'];
@@ -425,14 +428,25 @@ app.post('/api/logout', (req, res) => {
 
 // GET /api/projects
 app.get('/api/projects', async (req, res) => {
+    const sort = req.query.sort || 'popular';
+    const orderClause = sort === 'newest'
+        ? 'ORDER BY sp.published_at DESC'
+        : `ORDER BY (
+            (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'like') * 3 +
+            (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'favorite') * 5 +
+            (SELECT COUNT(*) FROM emoji_chats WHERE project_id = sp.id) * 1 +
+            COALESCE(sp.view_count, 0) * 0.1
+          ) DESC, sp.published_at DESC`;
     const { rows } = await pool.query(
         `SELECT sp.id, sp.name, sp.description, sp.creator, sp.tags, sp.thumbnail, sp.published_at,
                 u.avatar, u.avatar_color,
+                COALESCE(sp.view_count, 0) as view_count,
                 (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'like') as like_count,
-                (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'favorite') as fav_count
+                (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'favorite') as fav_count,
+                (SELECT COUNT(*) FROM emoji_chats WHERE project_id = sp.id) as comment_count
          FROM shared_projects sp
          LEFT JOIN users u ON sp.user_id = u.id
-         ORDER BY sp.published_at DESC`
+         ${orderClause}`
     );
     const projects = rows.map(row => {
         const proj = {
@@ -445,7 +459,9 @@ app.get('/api/projects', async (req, res) => {
             publishedAt: row.published_at,
             creatorAvatarColor: row.avatar_color,
             likeCount: parseInt(row.like_count),
-            favoriteCount: parseInt(row.fav_count)
+            favoriteCount: parseInt(row.fav_count),
+            commentCount: parseInt(row.comment_count),
+            viewCount: parseInt(row.view_count)
         };
         if (row.avatar && row.avatar.startsWith('custom:')) {
             proj.creatorAvatarUrl = '/api/avatars/' + row.avatar.replace('custom:', '');
@@ -572,8 +588,10 @@ app.get('/api/projects/:id/stats', async (req, res) => {
     const projectId = req.params.id;
     const { rows: likesRow } = await pool.query("SELECT COUNT(*) as count FROM project_interactions WHERE project_id = $1 AND type = 'like'", [projectId]);
     const { rows: favsRow } = await pool.query("SELECT COUNT(*) as count FROM project_interactions WHERE project_id = $1 AND type = 'favorite'", [projectId]);
+    const { rows: viewRow } = await pool.query("SELECT COALESCE(view_count, 0) as count FROM shared_projects WHERE id = $1", [projectId]);
     const likes = parseInt(likesRow[0].count);
     const favorites = parseInt(favsRow[0].count);
+    const viewCount = viewRow.length > 0 ? parseInt(viewRow[0].count) : 0;
     let userLiked = false, userFavorited = false;
     // Check user status from JWT cookie (optional auth)
     const token = req.cookies[COOKIE_NAME];
@@ -586,7 +604,7 @@ app.get('/api/projects/:id/stats', async (req, res) => {
             userFavorited = uf.length > 0;
         } catch { /* invalid token, ignore */ }
     }
-    res.json({ likes, favorites, userLiked, userFavorited });
+    res.json({ likes, favorites, viewCount, userLiked, userFavorited });
 });
 
 // GET /api/user/favorites — get user's favorited community projects
@@ -594,8 +612,10 @@ app.get('/api/user/favorites', authenticate, async (req, res) => {
     const { rows } = await pool.query(`
         SELECT sp.id, sp.name, sp.description, sp.creator, sp.tags, sp.thumbnail, sp.published_at,
                u.avatar, u.avatar_color,
+               COALESCE(sp.view_count, 0) as view_count,
                (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'like') as like_count,
-               (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'favorite') as fav_count
+               (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'favorite') as fav_count,
+               (SELECT COUNT(*) FROM emoji_chats WHERE project_id = sp.id) as comment_count
         FROM project_interactions pi
         JOIN shared_projects sp ON sp.id = pi.project_id
         LEFT JOIN users u ON sp.user_id = u.id
@@ -609,7 +629,9 @@ app.get('/api/user/favorites', authenticate, async (req, res) => {
             thumbnail: row.thumbnail, publishedAt: row.published_at,
             creatorAvatarColor: row.avatar_color,
             likeCount: parseInt(row.like_count),
-            favoriteCount: parseInt(row.fav_count)
+            favoriteCount: parseInt(row.fav_count),
+            commentCount: parseInt(row.comment_count),
+            viewCount: parseInt(row.view_count)
         };
         if (row.avatar && row.avatar.startsWith('custom:')) {
             proj.creatorAvatarUrl = '/api/avatars/' + row.avatar.replace('custom:', '');
@@ -689,6 +711,7 @@ app.delete('/api/reports/:id/project', authenticate, async (req, res) => {
 
 const ALLOWED_EMOJIS = ['👍','❤️','🔥','⭐','😂','😮','🎮','🎨','💎','🏆','👏','🚀','💯','🤩','😎','👾'];
 const emojiCooldowns = new Map();
+const viewCooldowns = new Map();
 
 // GET /api/projects/:id/emojis — get emoji chat messages
 app.get('/api/projects/:id/emojis', async (req, res) => {
@@ -727,6 +750,21 @@ app.post('/api/projects/:id/emojis', authenticate, async (req, res) => {
         [req.params.id, req.user.id, username, emoji, now]
     );
     res.json({ ok: true, username, emoji, created_at: now });
+});
+
+// POST /api/projects/:id/view — record a view
+app.post('/api/projects/:id/view', async (req, res) => {
+    const projectId = req.params.id;
+    const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+    const key = ip + ':' + projectId;
+    const now = Date.now();
+    const lastView = viewCooldowns.get(key) || 0;
+    if (now - lastView < 300000) {
+        return res.json({ ok: true, throttled: true });
+    }
+    viewCooldowns.set(key, now);
+    await pool.query('UPDATE shared_projects SET view_count = view_count + 1 WHERE id = $1', [projectId]);
+    res.json({ ok: true });
 });
 
 // --- User project cloud sync ---

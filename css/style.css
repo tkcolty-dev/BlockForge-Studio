@@ -3732,11 +3732,56 @@ kbd {
 
 .explore-search-bar input::placeholder { color: var(--text-dim); opacity: 0.5; }
 
+.explore-filter-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
 .explore-categories {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    margin-bottom: 24px;
+}
+
+.explore-sort {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.explore-sort-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--text-dim);
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.explore-sort-btn .material-icons-round {
+    font-size: 14px;
+}
+
+.explore-sort-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+.explore-sort-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
 }
 
 .explore-cat-btn {
@@ -4670,6 +4715,21 @@ kbd {
 .pp-action-count {
     font-size: 13px;
     min-width: 12px;
+}
+
+.pp-views-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.pp-views-row .material-icons-round {
+    font-size: 16px;
+    opacity: 0.7;
 }
 
 .pp-remix-btn {
