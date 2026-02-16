@@ -4494,7 +4494,27 @@ class App {
     }
 
 
+    async renderTrendingSection() {
+        const section = document.getElementById('explore-trending-section');
+        const grid = document.getElementById('explore-trending-grid');
+        if (!section || !grid) return;
+        grid.innerHTML = '';
+        try {
+            const res = await fetch('/api/projects/trending');
+            if (!res.ok) { section.style.display = 'none'; return; }
+            const projects = await res.json();
+            if (projects.length === 0) { section.style.display = 'none'; return; }
+            section.style.display = '';
+            projects.forEach(proj => {
+                grid.appendChild(this.createExploreCard(proj, false));
+            });
+        } catch {
+            section.style.display = 'none';
+        }
+    }
+
     async renderExploreGrid() {
+        this.renderTrendingSection();
         const communityGrid = document.getElementById('explore-community-grid');
         const communitySection = document.getElementById('explore-community-section');
         const emptyEl = document.getElementById('explore-empty');

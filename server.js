@@ -164,6 +164,15 @@ async function initDb() {
 
     // Migration: add view_count column to shared_projects
     await pool.query(`ALTER TABLE shared_projects ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0`);
+
+    // Table for timestamped view events (for trending algorithm)
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS project_views (
+            id SERIAL PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            viewed_at TIMESTAMP DEFAULT NOW()
+        )
+    `);
 }
 
 const AVATAR_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63', '#00bcd4'];
@@ -471,6 +480,59 @@ app.get('/api/projects', async (req, res) => {
     res.json(projects);
 });
 
+// GET /api/projects/trending — projects with most recent engagement
+app.get('/api/projects/trending', async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            `SELECT * FROM (
+                SELECT sp.id, sp.name, sp.description, sp.creator, sp.tags, sp.thumbnail, sp.published_at,
+                    u.avatar, u.avatar_color,
+                    COALESCE(sp.view_count, 0) as view_count,
+                    (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'like') as like_count,
+                    (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'favorite') as fav_count,
+                    (SELECT COUNT(*) FROM emoji_chats WHERE project_id = sp.id) as comment_count,
+                    (
+                        (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'like' AND created_at > $1) * 3 +
+                        (SELECT COUNT(*) FROM project_interactions WHERE project_id = sp.id AND type = 'favorite' AND created_at > $1) * 5 +
+                        (SELECT COUNT(*) FROM emoji_chats WHERE project_id = sp.id AND created_at > $1) * 1 +
+                        (SELECT COUNT(*) FROM project_views WHERE project_id = sp.id AND viewed_at > NOW() - INTERVAL '24 hours') * 0.5
+                    ) as trending_score
+                FROM shared_projects sp
+                LEFT JOIN users u ON sp.user_id = u.id
+             ) sub
+             WHERE trending_score > 0
+             ORDER BY trending_score DESC, published_at DESC
+             LIMIT 6`,
+            [Date.now() - 86400000] // 24 hours ago in ms
+        );
+        const projects = rows.map(row => {
+            const proj = {
+                id: row.id,
+                name: row.name,
+                description: row.description,
+                creator: row.creator,
+                tags: JSON.parse(row.tags),
+                thumbnail: row.thumbnail,
+                publishedAt: row.published_at,
+                creatorAvatarColor: row.avatar_color,
+                likeCount: parseInt(row.like_count),
+                favoriteCount: parseInt(row.fav_count),
+                commentCount: parseInt(row.comment_count),
+                viewCount: parseInt(row.view_count),
+                trendingScore: parseFloat(row.trending_score)
+            };
+            if (row.avatar && row.avatar.startsWith('custom:')) {
+                proj.creatorAvatarUrl = '/api/avatars/' + row.avatar.replace('custom:', '');
+            }
+            return proj;
+        });
+        res.json(projects);
+    } catch (e) {
+        console.error('Trending error:', e);
+        res.json([]);
+    }
+});
+
 // GET /api/projects/:id
 app.get('/api/projects/:id', async (req, res) => {
     const { rows } = await pool.query(
@@ -712,6 +774,7 @@ app.delete('/api/reports/:id/project', authenticate, async (req, res) => {
 const ALLOWED_EMOJIS = ['👍','❤️','🔥','⭐','😂','😮','🎮','🎨','💎','🏆','👏','🚀','💯','🤩','😎','👾'];
 const emojiCooldowns = new Map();
 const viewCooldowns = new Map();
+let viewCleanupCounter = 0;
 
 // GET /api/projects/:id/emojis — get emoji chat messages
 app.get('/api/projects/:id/emojis', async (req, res) => {
@@ -764,6 +827,13 @@ app.post('/api/projects/:id/view', async (req, res) => {
     }
     viewCooldowns.set(key, now);
     await pool.query('UPDATE shared_projects SET view_count = view_count + 1 WHERE id = $1', [projectId]);
+    pool.query('INSERT INTO project_views (project_id) VALUES ($1)', [projectId]).catch(() => {});
+    // Periodic cleanup: delete view records older than 48 hours every ~100 views
+    viewCleanupCounter++;
+    if (viewCleanupCounter >= 100) {
+        viewCleanupCounter = 0;
+        pool.query("DELETE FROM project_views WHERE viewed_at < NOW() - INTERVAL '48 hours'").catch(() => {});
+    }
     res.json({ ok: true });
 });
 

@@ -3823,6 +3823,29 @@ kbd {
     color: var(--accent);
 }
 
+.explore-trending-row {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    margin-bottom: 28px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+.explore-trending-row::-webkit-scrollbar { height: 6px; }
+.explore-trending-row::-webkit-scrollbar-track { background: transparent; }
+.explore-trending-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.explore-trending-row .explore-card {
+    min-width: 240px;
+    max-width: 260px;
+    flex-shrink: 0;
+    scroll-snap-align: start;
+}
+.trending-header .material-icons-round {
+    color: #ff6b35 !important;
+}
+
 .explore-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
