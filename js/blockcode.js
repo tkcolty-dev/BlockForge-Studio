@@ -29,6 +29,12 @@ class BlockCode {
         this._excludeStackIdx = null;
         this._draggedBlocks = null;
         this._dragStackData = null;
+        this._activeMoveHandler = null;
+        this._activeUpHandler = null;
+
+        // Backpack
+        this.backpackItems = [];
+        this.onBackpackChanged = null;
 
         this.initPalette();
         this.renderDrawer();
@@ -532,6 +538,36 @@ class BlockCode {
 
     // ===== Drag & Drop System =====
 
+    _cleanupDrag() {
+        if (this._ghost) { this._ghost.remove(); this._ghost = null; }
+        if (this._snapIndicator) { this._snapIndicator.remove(); this._snapIndicator = null; }
+        // Remove any stale ghost elements from document.body
+        document.querySelectorAll('.block-ghost').forEach(el => el.remove());
+        document.querySelectorAll('.block-ghost-stack').forEach(el => el.remove());
+        document.querySelectorAll('.snap-indicator').forEach(el => el.remove());
+        // Remove stored document-level listeners
+        if (this._activeMoveHandler) {
+            document.removeEventListener('pointermove', this._activeMoveHandler);
+            this._activeMoveHandler = null;
+        }
+        if (this._activeUpHandler) {
+            document.removeEventListener('pointerup', this._activeUpHandler);
+            this._activeUpHandler = null;
+        }
+        this._dragBlockId = null;
+        this._dragBlockDef = null;
+        this._dragSource = null;
+        this._dragSourceEl = null;
+        this._draggedBlocks = null;
+        this._dragStackData = null;
+        this._excludeStackIdx = null;
+        this._currentSnapTarget = null;
+        this._currentCBlockTarget = null;
+        this._highlightCBlockBody(null, false);
+        const tray = document.getElementById('backpack-tray');
+        if (tray) tray.classList.remove('backpack-drop-active');
+    }
+
     _startDrag(e, blockId, blockDef, source, sourceEl) {
         // Create ghost element
         const ghost = sourceEl.cloneNode(true);
@@ -558,8 +594,12 @@ class BlockCode {
         const onUp = (ev) => {
             document.removeEventListener('pointermove', onMove);
             document.removeEventListener('pointerup', onUp);
+            this._activeMoveHandler = null;
+            this._activeUpHandler = null;
             this._endDrag(ev);
         };
+        this._activeMoveHandler = onMove;
+        this._activeUpHandler = onUp;
         document.addEventListener('pointermove', onMove);
         document.addEventListener('pointerup', onUp);
     }
@@ -571,6 +611,11 @@ class BlockCode {
 
         const overDeleteZone = this._isOverDeleteZone(e);
         this._ghost.classList.toggle('ghost-deleting', overDeleteZone);
+
+        // Backpack hover highlight
+        const overBackpack = this._isOverBackpack(e);
+        const tray = document.getElementById('backpack-tray');
+        if (tray) tray.classList.toggle('backpack-drop-active', overBackpack && !overDeleteZone);
 
         // Check if dragging a hat block (can't go in c-blocks)
         let isHat = false;
@@ -742,6 +787,9 @@ class BlockCode {
         if (this._snapIndicator) this._snapIndicator.style.display = 'none';
         // Clear c-block highlight
         this._highlightCBlockBody(null, false);
+        // Clear backpack highlight
+        const tray = document.getElementById('backpack-tray');
+        if (tray) tray.classList.remove('backpack-drop-active');
 
         // Restore dimmed source
         if (this._dragSourceEl) {
@@ -750,10 +798,29 @@ class BlockCode {
         }
 
         const overDelete = this._isOverDeleteZone(e);
+        const overBackpack = this._isOverBackpack(e);
 
         if (!this.targetObject) {
             this._currentSnapTarget = null;
             this._currentCBlockTarget = null;
+            return;
+        }
+
+        // Drop single block into backpack from drawer
+        if (overBackpack && this._dragSource === 'drawer') {
+            const blockDef = this._dragBlockDef;
+            const blockData = {
+                instanceId: this.nextBlockId++,
+                blockId: this._dragBlockId,
+                values: this._getDefaults(blockDef),
+                children: []
+            };
+            this.addToBackpack([blockData]);
+            this._currentSnapTarget = null;
+            this._currentCBlockTarget = null;
+            this._dragSource = null;
+            this._dragBlockId = null;
+            this._dragBlockDef = null;
             return;
         }
 
@@ -908,8 +975,12 @@ class BlockCode {
         const onUp = (ev) => {
             document.removeEventListener('pointermove', onMove);
             document.removeEventListener('pointerup', onUp);
+            this._activeMoveHandler = null;
+            this._activeUpHandler = null;
             this._endSplitDrag(ev);
         };
+        this._activeMoveHandler = onMove;
+        this._activeUpHandler = onUp;
         document.addEventListener('pointermove', onMove);
         document.addEventListener('pointerup', onUp);
     }
@@ -923,6 +994,9 @@ class BlockCode {
         if (this._snapIndicator) this._snapIndicator.style.display = 'none';
         // Clear c-block highlight
         this._highlightCBlockBody(null, false);
+        // Clear backpack highlight
+        const tray = document.getElementById('backpack-tray');
+        if (tray) tray.classList.remove('backpack-drop-active');
 
         const blocks = this._draggedBlocks;
         const snapTarget = this._currentSnapTarget;
@@ -933,6 +1007,25 @@ class BlockCode {
 
         // Delete zone
         if (this._isOverDeleteZone(e)) {
+            this.renderWorkspace();
+            this.saveScriptsToObject();
+            return;
+        }
+
+        // Backpack zone — save blocks to backpack and also put them back in workspace
+        if (this._isOverBackpack(e)) {
+            this.addToBackpack(blocks);
+            // Put the blocks back as a new stack (don't remove them from workspace)
+            const wsRect = this.workspace.getBoundingClientRect();
+            const newStack = {
+                id: this.nextBlockId++,
+                x: Math.max(10, (e.clientX - wsRect.left) - 20),
+                y: Math.max(10, (e.clientY - wsRect.top) - 60),
+                blocks: blocks
+            };
+            this.workspaceScripts.push(newStack);
+            this._currentSnapTarget = null;
+            this._currentCBlockTarget = null;
             this.renderWorkspace();
             this.saveScriptsToObject();
             return;
@@ -1112,7 +1205,12 @@ class BlockCode {
                 }
 
                 const overDelete = this._isOverDeleteZone(ev);
-                const cBlockTarget = !overDelete && !isHat ? this._findCBlockBodyAt(ev) : null;
+                const overBackpack = this._isOverBackpack(ev);
+                const cBlockTarget = !overDelete && !isHat && !overBackpack ? this._findCBlockBodyAt(ev) : null;
+
+                // Backpack hover feedback
+                const bpTray = document.getElementById('backpack-tray');
+                if (bpTray) bpTray.classList.toggle('backpack-drop-active', overBackpack && !overDelete);
 
                 if (overDelete) {
                     stackEl.style.opacity = '0.4';
@@ -1143,9 +1241,23 @@ class BlockCode {
                 this._dragStackData = null;
                 document.removeEventListener('pointermove', onMove);
                 document.removeEventListener('pointerup', onUp);
+                this._activeMoveHandler = null;
+                this._activeUpHandler = null;
                 // Hide indicator but preserve snap target for drop logic
                 if (this._snapIndicator) this._snapIndicator.style.display = 'none';
                 this._highlightCBlockBody(null, false);
+                // Clear backpack highlight
+                const bpTray = document.getElementById('backpack-tray');
+                if (bpTray) bpTray.classList.remove('backpack-drop-active');
+
+                // Add to backpack (copy, don't remove from workspace)
+                if (this._isOverBackpack(ev)) {
+                    this.addToBackpack(stackData.blocks);
+                    this._currentSnapTarget = null;
+                    this._currentCBlockTarget = null;
+                    this.saveScriptsToObject();
+                    return;
+                }
 
                 // Delete stack
                 if (this._isOverDeleteZone(ev)) {
@@ -1197,6 +1309,8 @@ class BlockCode {
                 this._currentCBlockTarget = null;
             };
 
+            this._activeMoveHandler = onMove;
+            this._activeUpHandler = onUp;
             document.addEventListener('pointermove', onMove);
             document.addEventListener('pointerup', onUp);
         });
@@ -1234,6 +1348,7 @@ class BlockCode {
     // ===== Target Object =====
 
     setTarget(obj) {
+        this._cleanupDrag();
         this.saveScriptsToObject();
         this.targetObject = obj;
         if (obj) {
@@ -1283,6 +1398,199 @@ class BlockCode {
             this.targetObject.userData.scripts = [];
         }
         this.renderWorkspace();
+    }
+
+    // ===== Backpack =====
+
+    addToBackpack(blocks) {
+        if (!blocks || blocks.length === 0) return;
+        const cloned = JSON.parse(JSON.stringify(blocks));
+        const firstDef = this.blocks[cloned[0].blockId];
+        const label = firstDef ? (firstDef.icon || '') + ' ' + firstDef.label.replace(/\{[^}]+\}/g, '...').trim() : 'Script';
+        const category = firstDef ? firstDef.category : 'control';
+        const color = this.categories[category]?.color || '#888';
+        this.backpackItems.push({
+            id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            label,
+            color,
+            blockCount: cloned.length,
+            blocks: cloned
+        });
+        this.renderBackpack();
+        if (this.onBackpackChanged) this.onBackpackChanged(this.backpackItems);
+    }
+
+    removeFromBackpack(index) {
+        this.backpackItems.splice(index, 1);
+        this.renderBackpack();
+        if (this.onBackpackChanged) this.onBackpackChanged(this.backpackItems);
+    }
+
+    renderBackpack() {
+        const container = document.getElementById('backpack-items');
+        const countEl = document.getElementById('backpack-count');
+        if (!container || !countEl) return;
+
+        container.innerHTML = '';
+
+        if (this.backpackItems.length > 0) {
+            countEl.textContent = this.backpackItems.length;
+            countEl.classList.add('has-items');
+        } else {
+            countEl.classList.remove('has-items');
+        }
+
+        this.backpackItems.forEach((item, idx) => {
+            const el = document.createElement('div');
+            el.className = 'backpack-item';
+            el.draggable = false;
+            el.innerHTML = `
+                <div class="backpack-item-color" style="background:${item.color}"></div>
+                <div class="backpack-item-label">${item.label}</div>
+                <div class="backpack-item-count">${item.blockCount} block${item.blockCount !== 1 ? 's' : ''}</div>
+                <button class="backpack-delete" title="Remove">&times;</button>
+            `;
+
+            el.querySelector('.backpack-delete').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.removeFromBackpack(idx);
+            });
+
+            // Drag from backpack to workspace
+            el.addEventListener('pointerdown', (e) => {
+                if (e.target.closest('.backpack-delete')) return;
+                e.preventDefault();
+                this._startBackpackDrag(e, item, el);
+            });
+
+            container.appendChild(el);
+        });
+    }
+
+    _startBackpackDrag(e, item, sourceEl) {
+        // Deep clone blocks and assign new instanceIds
+        const clonedBlocks = JSON.parse(JSON.stringify(item.blocks));
+        this._reassignInstanceIds(clonedBlocks);
+
+        // Build ghost from cloned blocks
+        const ghost = document.createElement('div');
+        ghost.className = 'block-ghost-stack';
+        ghost.style.position = 'fixed';
+        ghost.style.pointerEvents = 'none';
+        ghost.style.zIndex = '10000';
+        ghost.style.opacity = '0.85';
+
+        clonedBlocks.forEach(blockData => {
+            const blockDef = this.blocks[blockData.blockId];
+            if (!blockDef) return;
+            const blockEl = this._createBlockEl(blockDef, blockData);
+            ghost.appendChild(blockEl);
+        });
+
+        document.body.appendChild(ghost);
+
+        this._ghost = ghost;
+        this._draggedBlocks = clonedBlocks;
+        this._ghostOffsetX = e.clientX - sourceEl.getBoundingClientRect().left;
+        this._ghostOffsetY = e.clientY - sourceEl.getBoundingClientRect().top;
+
+        this._moveGhost(e);
+
+        const onMove = (ev) => this._moveGhost(ev);
+        const onUp = (ev) => {
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            this._activeMoveHandler = null;
+            this._activeUpHandler = null;
+            this._endBackpackDrag(ev);
+        };
+        this._activeMoveHandler = onMove;
+        this._activeUpHandler = onUp;
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+    }
+
+    _endBackpackDrag(e) {
+        if (this._ghost) {
+            this._ghost.remove();
+            this._ghost = null;
+        }
+        if (this._snapIndicator) this._snapIndicator.style.display = 'none';
+        this._highlightCBlockBody(null, false);
+
+        const blocks = this._draggedBlocks;
+        const snapTarget = this._currentSnapTarget;
+        const cBlockTarget = this._currentCBlockTarget || this._findCBlockBodyAt(e);
+        this._draggedBlocks = null;
+
+        if (!blocks || blocks.length === 0) return;
+
+        // Only place in workspace if dropped over workspace area
+        if (!this._isOverWorkspace(e)) {
+            this._currentSnapTarget = null;
+            this._currentCBlockTarget = null;
+            return;
+        }
+
+        // Check c-block body target
+        if (cBlockTarget) {
+            const firstDef = this.blocks[blocks[0].blockId];
+            if (firstDef?.type !== 'hat') {
+                const parent = this.workspaceScripts[cBlockTarget.stackIdx]?.blocks[cBlockTarget.blockIdx];
+                if (parent) {
+                    if (!parent.children) parent.children = [];
+                    parent.children.push(...blocks);
+                    this._currentSnapTarget = null;
+                    this._currentCBlockTarget = null;
+                    this.renderWorkspace();
+                    this.saveScriptsToObject();
+                    return;
+                }
+            }
+        }
+
+        // Snap to existing stack
+        if (snapTarget) {
+            const { stackIdx, insertIdx } = snapTarget;
+            this.workspaceScripts[stackIdx].blocks.splice(insertIdx, 0, ...blocks);
+            this._currentSnapTarget = null;
+            this._currentCBlockTarget = null;
+            this.renderWorkspace();
+            this.saveScriptsToObject();
+            return;
+        }
+
+        this._currentSnapTarget = null;
+        this._currentCBlockTarget = null;
+
+        // Create new stack
+        const wsRect = this.workspace.getBoundingClientRect();
+        const newStack = {
+            id: this.nextBlockId++,
+            x: Math.max(10, (e.clientX - wsRect.left) - 20),
+            y: Math.max(10, (e.clientY - wsRect.top) - 10),
+            blocks: blocks
+        };
+        this.workspaceScripts.push(newStack);
+        this.renderWorkspace();
+        this.saveScriptsToObject();
+    }
+
+    _reassignInstanceIds(blocks) {
+        for (const block of blocks) {
+            block.instanceId = this.nextBlockId++;
+            if (block.children) {
+                this._reassignInstanceIds(block.children);
+            }
+        }
+    }
+
+    _isOverBackpack(e) {
+        const tray = document.getElementById('backpack-tray');
+        if (!tray) return false;
+        const rect = tray.getBoundingClientRect();
+        return e.clientX >= rect.left && e.clientX <= rect.right &&
+               e.clientY >= rect.top && e.clientY <= rect.bottom;
     }
 
     // ===== Script Compilation =====

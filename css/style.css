@@ -1319,6 +1319,7 @@ input[type="checkbox"] {
     background-color: #2a2a48;
     position: relative;
     overflow: auto;
+    padding-bottom: 30px;
     background-image:
         linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
@@ -1555,6 +1556,186 @@ input[type="checkbox"] {
     opacity: 0.4;
     transform: scale(0.85);
     filter: drop-shadow(0 8px 20px rgba(0,0,0,0.4)) saturate(0.3) brightness(0.7);
+}
+
+/* ===== Backpack Tray ===== */
+#backpack-tray {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 70;
+    background: var(--bg-darkest);
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+}
+
+#backpack-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: linear-gradient(180deg, var(--bg-lighter), var(--bg-dark));
+    user-select: none;
+    transition: background 0.15s;
+}
+
+#backpack-header:hover {
+    background: var(--bg-lighter);
+    color: var(--text);
+}
+
+#backpack-header .material-icons-round {
+    font-size: 16px;
+}
+
+.backpack-toggle-icon {
+    margin-left: auto;
+    transition: transform 0.2s;
+}
+
+.backpack-collapsed .backpack-toggle-icon {
+    transform: rotate(180deg);
+}
+
+#backpack-count {
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 8px;
+    min-width: 16px;
+    text-align: center;
+    display: none;
+}
+
+#backpack-count.has-items {
+    display: inline-block;
+}
+
+#backpack-content {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px;
+    height: 90px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: rgba(0,0,0,0.15);
+}
+
+.backpack-collapsed #backpack-content {
+    display: none;
+}
+
+#backpack-empty {
+    color: rgba(255,255,255,0.2);
+    font-size: 12px;
+    font-weight: 500;
+    margin: auto;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+#backpack-items:not(:empty) + #backpack-empty {
+    display: none;
+}
+
+#backpack-items {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    min-height: 74px;
+}
+
+.backpack-item {
+    background: var(--bg-medium);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 120px;
+    max-width: 160px;
+    cursor: grab;
+    position: relative;
+    transition: transform 0.12s, box-shadow 0.12s;
+    user-select: none;
+}
+
+.backpack-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border-color: var(--accent);
+}
+
+.backpack-item:active {
+    cursor: grabbing;
+}
+
+.backpack-item-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-bright);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+
+.backpack-item-count {
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+.backpack-item-color {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    margin-bottom: 6px;
+}
+
+.backpack-delete {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: none;
+    color: var(--text-dim);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.12s, background 0.12s;
+    padding: 0;
+    line-height: 1;
+}
+
+.backpack-item:hover .backpack-delete {
+    opacity: 1;
+}
+
+.backpack-delete:hover {
+    background: rgba(255,60,60,0.3);
+    color: #ff6666;
+}
+
+#backpack-tray.backpack-drop-active {
+    border-top-color: var(--accent);
+    background: rgba(76,151,255,0.08);
+}
+
+#backpack-tray.backpack-drop-active #backpack-header {
+    color: var(--accent);
 }
 
 /* Blocks in the drawer get a subtle hover lift */

@@ -890,6 +890,31 @@ class App {
             e.stopPropagation();
             this.toggleFullscreenEditor();
         });
+
+        // Backpack toggle
+        const backpackHeader = document.getElementById('backpack-header');
+        if (backpackHeader) {
+            backpackHeader.addEventListener('click', () => {
+                const tray = document.getElementById('backpack-tray');
+                tray.classList.toggle('backpack-collapsed');
+            });
+        }
+
+        // Load backpack from localStorage
+        try {
+            const saved = localStorage.getItem('cobalt_backpack');
+            if (saved) {
+                this.blockCode.backpackItems = JSON.parse(saved);
+            }
+        } catch (e) { /* ignore */ }
+        this.blockCode.renderBackpack();
+
+        // Save backpack on change
+        this.blockCode.onBackpackChanged = (items) => {
+            try {
+                localStorage.setItem('cobalt_backpack', JSON.stringify(items));
+            } catch (e) { /* ignore */ }
+        };
     }
 
     toggleBlockEditor() {
@@ -901,6 +926,7 @@ class App {
             editor.classList.add('collapsed');
             document.body.classList.remove('editor-expanded');
             icon.textContent = 'expand_less';
+            this.blockCode._cleanupDrag();
         } else {
             editor.classList.remove('collapsed');
             editor.classList.add('expanded');
