@@ -4448,6 +4448,7 @@ class App {
     initExplore() {
         this.exploreCategoryFilter = 'all';
         this.exploreSortMode = 'popular';
+        this._trendingCallId = 0;
 
         // Trending row arrow buttons
         const trendingGrid = document.getElementById('explore-trending-grid');
@@ -4507,27 +4508,37 @@ class App {
         const section = document.getElementById('explore-trending-section');
         const grid = document.getElementById('explore-trending-grid');
         if (!section || !grid) return;
-        grid.innerHTML = '';
+        const callId = ++this._trendingCallId;
         try {
             const res = await fetch('/api/projects/trending');
+            if (callId !== this._trendingCallId) return; // stale call
             if (!res.ok) { section.style.display = 'none'; return; }
             const projects = await res.json();
+            if (callId !== this._trendingCallId) return; // stale call
+            grid.innerHTML = '';
             if (projects.length === 0) { section.style.display = 'none'; return; }
             section.style.display = '';
             projects.forEach(proj => {
                 grid.appendChild(this.createExploreCard(proj, false));
             });
         } catch {
-            section.style.display = 'none';
+            if (callId === this._trendingCallId) section.style.display = 'none';
         }
     }
 
     async renderExploreGrid() {
-        this.renderTrendingSection();
         const communityGrid = document.getElementById('explore-community-grid');
         const communitySection = document.getElementById('explore-community-section');
         const emptyEl = document.getElementById('explore-empty');
         const query = (document.getElementById('explore-search').value || '').trim().toLowerCase();
+
+        // Show trending only when not searching
+        const trendingSection = document.getElementById('explore-trending-section');
+        if (query) {
+            if (trendingSection) trendingSection.style.display = 'none';
+        } else {
+            this.renderTrendingSection();
+        }
         const filter = this.exploreCategoryFilter;
         const currentUser = this._cachedUser?.displayName || '';
 
