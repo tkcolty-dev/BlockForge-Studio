@@ -3014,6 +3014,13 @@ input[type="checkbox"] {
     padding: 0 8px;
     max-width: 200px;
     overflow: hidden;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.toolbar-project-name:hover {
+    background: var(--bg-hover);
 }
 
 .toolbar-project-name .project-name-text {

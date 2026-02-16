@@ -205,6 +205,11 @@ class App {
         document.getElementById('btn-fullscreen-viewport').addEventListener('click', () => {
             this.toggleFullscreenViewport();
         });
+
+        // Click project name to rename
+        document.getElementById('toolbar-project-name').addEventListener('click', () => {
+            if (this.currentProjectId) this.renameProject(this.currentProjectId);
+        });
     }
 
     toggleFullscreenViewport() {
