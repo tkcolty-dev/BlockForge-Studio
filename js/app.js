@@ -6361,7 +6361,7 @@ class App {
             this.saveUndoState();
 
             for (const obj of objects) {
-                this.scene3d.addObject(obj.type, {
+                const opts = {
                     name: obj.name,
                     position: {
                         x: obj.position.x + offsetX,
@@ -6370,7 +6370,10 @@ class App {
                     },
                     scale: obj.scale,
                     color: obj.color
-                });
+                };
+                if (obj.rotation) opts.rotation = obj.rotation;
+                if (obj.customParts) opts.customParts = obj.customParts;
+                this.scene3d.addObject(obj.type, opts);
             }
 
             this.refreshExplorer();

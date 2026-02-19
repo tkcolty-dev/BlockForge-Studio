@@ -938,12 +938,21 @@ app.delete('/api/user/projects/:id', authenticate, async (req, res) => {
 const AI_SYSTEM_PROMPT = `You are the AI build engine for Cobalt Studio, a 3D block-building game editor. You translate natural language descriptions into precise 3D object placements. Respond with ONLY a JSON array — no text, no markdown fences, no explanation.
 
 # Object Schema
-Each object: {"type","position":{"x","y","z"},"scale":{"x","y","z"},"color":"#hex6","name":"string"}
+Each object: {"type","position":{"x","y","z"},"rotation":{"x","y","z"},"scale":{"x","y","z"},"color":"#hex6","name":"string"}
+- rotation is in DEGREES (0-360). Optional — omit if no rotation needed.
 
 # Available Types
-Primitives: box, sphere, cylinder, cone, plane, wedge, torus
+Primitives: box, sphere, cylinder, cone, plane, wedge, torus, tube
 Architecture: stairs (5-step prefab), pyramid (4-sided cone), dome (half-sphere), arch (2 pillars + curved top), wall (4×2×0.3 slab), corner (L-shaped wall)
-Prefabs: tree (trunk+foliage), house (walls+roof+door), platform (3×0.3×3 pad), bridge (planked walkway), crate (wooden box), gem (octahedron)
+Prefabs: tree (trunk+foliage), house (walls+roof+door), platform (3×0.3×3 pad), bridge (planked walkway), crate (wooden box), gem (glowing octahedron), coin (flat disc), light-point (glowing light source)
+
+## Custom Multi-Part Objects
+For detailed objects that need sub-parts combined into one unit, use type "custom" with a "customParts" array:
+{"type":"custom","position":{"x","y","z"},"scale":{"x","y","z"},"name":"string","customParts":[
+  {"shape":"box|sphere|cylinder|cone|pyramid|dome|wedge","offset":{"x","y","z"},"scale":{"x","y","z"},"color":"#hex6"},
+  ...
+]}
+Each part's offset is relative to the custom object's center. Use custom objects for detailed items like furniture, vehicles, lamps, statues, etc.
 
 # Coordinate System
 - Y is UP. Ground plane is Y=0.
@@ -960,6 +969,14 @@ Prefabs: tree (trunk+foliage), house (walls+roof+door), platform (3×0.3×3 pad)
 7. SYMMETRY: Mirror structures across axes for balanced builds. If left tower is at x=-5, right tower is at x=5.
 8. GROUND CONTACT: Unless floating is intentional (e.g., floating island), ensure every object chain connects down to y=0.
 9. PREFAB ORIGIN: tree, house, bridge, arch, stairs, crate, gem have their own internal geometry. Position is their center; scale uniformly to resize them.
+
+# Rotation Tips
+- Use rotation to angle roofs, create sloped surfaces, tilt objects realistically.
+- A wedge rotated 180° on Z makes a downward slope. Rotate Y to point it in different directions.
+- Cylinder rotated 90° on X or Z becomes a horizontal log, pipe, or beam.
+- Use Y rotation to orient walls, bridges, and stairs in any direction (e.g., rotation.y=90 for an east-west wall).
+- Slight random rotations (1-5°) on decorative objects like crates, rocks, and trees make scenes look natural instead of grid-like.
+- For angled roofs: use box with rotation.x or rotation.z of 20-35° instead of only using pyramid.
 
 # Composition Guidelines
 - Use 8-50 objects depending on complexity. Simple items: 5-15. Buildings: 15-30. Scenes: 30-50.
@@ -996,10 +1013,16 @@ When the user asks to modify, add to, or extend a previous build, place NEW obje
 # Examples
 
 "a medieval castle":
-[{"type":"box","position":{"x":0,"y":2.5,"z":0},"scale":{"x":10,"y":5,"z":8},"color":"#808080","name":"Main Keep"},{"type":"box","position":{"x":0,"y":5.1,"z":0},"scale":{"x":10.5,"y":0.2,"z":8.5},"color":"#696969","name":"Keep Roof"},{"type":"cylinder","position":{"x":-5.5,"y":3,"z":-4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Left Back Tower"},{"type":"cone","position":{"x":-5.5,"y":6.5,"z":-4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Left Back Tower Roof"},{"type":"cylinder","position":{"x":5.5,"y":3,"z":-4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Right Back Tower"},{"type":"cone","position":{"x":5.5,"y":6.5,"z":-4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Right Back Tower Roof"},{"type":"cylinder","position":{"x":-5.5,"y":3,"z":4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Left Front Tower"},{"type":"cone","position":{"x":-5.5,"y":6.5,"z":4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Left Front Tower Roof"},{"type":"cylinder","position":{"x":5.5,"y":3,"z":4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Right Front Tower"},{"type":"cone","position":{"x":5.5,"y":6.5,"z":4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Right Front Tower Roof"},{"type":"box","position":{"x":0,"y":1.5,"z":4.15},"scale":{"x":3,"y":3,"z":0.3},"color":"#696969","name":"Gate Wall"},{"type":"box","position":{"x":0,"y":0.75,"z":4.2},"scale":{"x":1.5,"y":2.5,"z":0.2},"color":"#654321","name":"Gate Door"},{"type":"box","position":{"x":-5.5,"y":6.2,"z":-4.5},"scale":{"x":2.5,"y":0.4,"z":2.5},"color":"#696969","name":"Left Tower Battlement"},{"type":"box","position":{"x":5.5,"y":6.2,"z":-4.5},"scale":{"x":2.5,"y":0.4,"z":2.5},"color":"#696969","name":"Right Tower Battlement"}]
+[{"type":"box","position":{"x":0,"y":2.5,"z":0},"scale":{"x":10,"y":5,"z":8},"color":"#808080","name":"Main Keep"},{"type":"box","position":{"x":0,"y":5.1,"z":0},"scale":{"x":10.5,"y":0.2,"z":8.5},"color":"#696969","name":"Keep Roof Edge"},{"type":"cylinder","position":{"x":-5.5,"y":3,"z":-4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Left Back Tower"},{"type":"cone","position":{"x":-5.5,"y":6.5,"z":-4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Left Back Roof"},{"type":"cylinder","position":{"x":5.5,"y":3,"z":-4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Right Back Tower"},{"type":"cone","position":{"x":5.5,"y":6.5,"z":-4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Right Back Roof"},{"type":"cylinder","position":{"x":-5.5,"y":3,"z":4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Left Front Tower"},{"type":"cone","position":{"x":-5.5,"y":6.5,"z":4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Left Front Roof"},{"type":"cylinder","position":{"x":5.5,"y":3,"z":4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Right Front Tower"},{"type":"cone","position":{"x":5.5,"y":6.5,"z":4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Right Front Roof"},{"type":"arch","position":{"x":0,"y":0,"z":4.5},"scale":{"x":1.5,"y":1.8,"z":1},"color":"#696969","name":"Castle Gate"},{"type":"box","position":{"x":0,"y":0.75,"z":4.6},"scale":{"x":1.5,"y":2.5,"z":0.15},"color":"#654321","name":"Gate Door"},{"type":"cylinder","position":{"x":-5.5,"y":0.4,"z":6},"scale":{"x":0.15,"y":0.8,"z":0.15},"color":"#8B4513","name":"Left Torch Post"},{"type":"gem","position":{"x":-5.5,"y":0.9,"z":6},"scale":{"x":0.6,"y":0.6,"z":0.6},"color":"#FF6347","name":"Left Torch Flame"},{"type":"cylinder","position":{"x":5.5,"y":0.4,"z":6},"scale":{"x":0.15,"y":0.8,"z":0.15},"color":"#8B4513","name":"Right Torch Post"},{"type":"gem","position":{"x":5.5,"y":0.9,"z":6},"scale":{"x":0.6,"y":0.6,"z":0.6},"color":"#FF6347","name":"Right Torch Flame"}]
+
+"a street lamp" (custom multi-part example):
+[{"type":"custom","position":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"name":"Street Lamp","customParts":[{"shape":"cylinder","offset":{"x":0,"y":1.5,"z":0},"scale":{"x":0.12,"y":3,"z":0.12},"color":"#2C2C2C"},{"shape":"sphere","offset":{"x":0,"y":3.2,"z":0},"scale":{"x":0.5,"y":0.5,"z":0.5},"color":"#FFD700"},{"shape":"dome","offset":{"x":0,"y":3.5,"z":0},"scale":{"x":0.7,"y":0.3,"z":0.7},"color":"#2C2C2C"},{"shape":"cylinder","offset":{"x":0,"y":0.05,"z":0},"scale":{"x":0.4,"y":0.1,"z":0.4},"color":"#2C2C2C"}]}]
+
+"a wooden fence":
+[{"type":"cylinder","position":{"x":-2,"y":0.5,"z":0},"scale":{"x":0.12,"y":1,"z":0.12},"color":"#8B4513","name":"Post 1"},{"type":"cylinder","position":{"x":-1,"y":0.5,"z":0},"scale":{"x":0.12,"y":1,"z":0.12},"color":"#8B4513","name":"Post 2"},{"type":"cylinder","position":{"x":0,"y":0.5,"z":0},"scale":{"x":0.12,"y":1,"z":0.12},"color":"#8B4513","name":"Post 3"},{"type":"cylinder","position":{"x":1,"y":0.5,"z":0},"scale":{"x":0.12,"y":1,"z":0.12},"color":"#8B4513","name":"Post 4"},{"type":"cylinder","position":{"x":2,"y":0.5,"z":0},"scale":{"x":0.12,"y":1,"z":0.12},"color":"#8B4513","name":"Post 5"},{"type":"box","position":{"x":0,"y":0.7,"z":0},"scale":{"x":4.2,"y":0.08,"z":0.06},"color":"#A0522D","name":"Top Rail"},{"type":"box","position":{"x":0,"y":0.35,"z":0},"scale":{"x":4.2,"y":0.08,"z":0.06},"color":"#A0522D","name":"Bottom Rail"}]
 
 "a park bench":
-[{"type":"box","position":{"x":0,"y":0.45,"z":0},"scale":{"x":2,"y":0.1,"z":0.5},"color":"#8B4513","name":"Seat"},{"type":"box","position":{"x":0,"y":0.85,"z":-0.2},"scale":{"x":2,"y":0.6,"z":0.08},"color":"#8B4513","name":"Backrest"},{"type":"box","position":{"x":-0.85,"y":0.2,"z":0},"scale":{"x":0.08,"y":0.4,"z":0.5},"color":"#654321","name":"Left Leg Front"},{"type":"box","position":{"x":0.85,"y":0.2,"z":0},"scale":{"x":0.08,"y":0.4,"z":0.5},"color":"#654321","name":"Right Leg Front"}]`;
+[{"type":"custom","position":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"name":"Park Bench","customParts":[{"shape":"box","offset":{"x":0,"y":0.45,"z":0},"scale":{"x":2,"y":0.08,"z":0.5},"color":"#8B4513"},{"shape":"box","offset":{"x":0,"y":0.8,"z":-0.22},"scale":{"x":2,"y":0.5,"z":0.06},"color":"#8B4513"},{"shape":"box","offset":{"x":-0.85,"y":0.2,"z":0.15},"scale":{"x":0.06,"y":0.4,"z":0.06},"color":"#3E3E3E"},{"shape":"box","offset":{"x":0.85,"y":0.2,"z":0.15},"scale":{"x":0.06,"y":0.4,"z":0.06},"color":"#3E3E3E"},{"shape":"box","offset":{"x":-0.85,"y":0.2,"z":-0.15},"scale":{"x":0.06,"y":0.4,"z":0.06},"color":"#3E3E3E"},{"shape":"box","offset":{"x":0.85,"y":0.2,"z":-0.15},"scale":{"x":0.06,"y":0.4,"z":0.06},"color":"#3E3E3E"},{"shape":"box","offset":{"x":-0.85,"y":0.55,"z":-0.22},"scale":{"x":0.06,"y":0.2,"z":0.06},"color":"#3E3E3E"},{"shape":"box","offset":{"x":0.85,"y":0.55,"z":-0.22},"scale":{"x":0.06,"y":0.2,"z":0.06},"color":"#3E3E3E"}]}]`;
 
 app.post('/api/ai/build', authenticate, async (req, res) => {
     const { prompt, history, sceneContext } = req.body;
@@ -1086,22 +1109,51 @@ app.post('/api/ai/build', authenticate, async (req, res) => {
         }
 
         // Validate and sanitize each object
-        const validTypes = new Set(['box','sphere','cylinder','cone','plane','wedge','torus','stairs','pyramid','dome','arch','wall','corner','tree','house','platform','bridge','crate','gem']);
-        const sanitized = objects.slice(0, 50).map(obj => ({
-            type: validTypes.has(obj.type) ? obj.type : 'box',
-            position: {
-                x: Number(obj.position?.x) || 0,
-                y: Number(obj.position?.y) || 0,
-                z: Number(obj.position?.z) || 0
-            },
-            scale: {
-                x: Math.min(Math.abs(Number(obj.scale?.x) || 1), 50),
-                y: Math.min(Math.abs(Number(obj.scale?.y) || 1), 50),
-                z: Math.min(Math.abs(Number(obj.scale?.z) || 1), 50)
-            },
-            color: /^#[0-9a-fA-F]{6}$/.test(obj.color) ? obj.color : '#4a90d9',
-            name: (typeof obj.name === 'string' ? obj.name : 'Object').slice(0, 50)
-        }));
+        const validTypes = new Set(['box','sphere','cylinder','cone','plane','wedge','torus','tube','stairs','pyramid','dome','arch','wall','corner','tree','house','platform','bridge','crate','gem','coin','light-point','custom']);
+        const validShapes = new Set(['box','sphere','cylinder','cone','pyramid','dome','wedge']);
+        const sanitized = objects.slice(0, 50).map(obj => {
+            const result = {
+                type: validTypes.has(obj.type) ? obj.type : 'box',
+                position: {
+                    x: Number(obj.position?.x) || 0,
+                    y: Number(obj.position?.y) || 0,
+                    z: Number(obj.position?.z) || 0
+                },
+                scale: {
+                    x: Math.min(Math.abs(Number(obj.scale?.x) || 1), 50),
+                    y: Math.min(Math.abs(Number(obj.scale?.y) || 1), 50),
+                    z: Math.min(Math.abs(Number(obj.scale?.z) || 1), 50)
+                },
+                color: /^#[0-9a-fA-F]{6}$/.test(obj.color) ? obj.color : '#4a90d9',
+                name: (typeof obj.name === 'string' ? obj.name : 'Object').slice(0, 50)
+            };
+            // Add rotation if provided
+            if (obj.rotation && (obj.rotation.x || obj.rotation.y || obj.rotation.z)) {
+                result.rotation = {
+                    x: Number(obj.rotation.x) || 0,
+                    y: Number(obj.rotation.y) || 0,
+                    z: Number(obj.rotation.z) || 0
+                };
+            }
+            // Add custom parts if type is custom
+            if (result.type === 'custom' && Array.isArray(obj.customParts)) {
+                result.customParts = obj.customParts.slice(0, 20).map(p => ({
+                    shape: validShapes.has(p.shape) ? p.shape : 'box',
+                    offset: {
+                        x: Number(p.offset?.x) || 0,
+                        y: Number(p.offset?.y) || 0,
+                        z: Number(p.offset?.z) || 0
+                    },
+                    scale: {
+                        x: Math.min(Math.abs(Number(p.scale?.x) || 1), 20),
+                        y: Math.min(Math.abs(Number(p.scale?.y) || 1), 20),
+                        z: Math.min(Math.abs(Number(p.scale?.z) || 1), 20)
+                    },
+                    color: /^#[0-9a-fA-F]{6}$/.test(p.color) ? p.color : '#4a90d9'
+                }));
+            }
+            return result;
+        });
 
         res.json({ objects: sanitized });
     } catch (err) {
