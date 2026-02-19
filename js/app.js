@@ -6227,6 +6227,9 @@ class App {
         const input = document.getElementById('ai-prompt-input');
         const buildBtn = document.getElementById('ai-build-btn');
 
+        // Conversation history for multi-turn context
+        this._aiHistory = [];
+
         btn.addEventListener('click', () => {
             panel.classList.toggle('hidden');
             if (!panel.classList.contains('hidden')) {
@@ -6249,6 +6252,37 @@ class App {
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') submit();
         });
+    }
+
+    _aiGetSceneContext() {
+        // Gather existing scene objects for AI awareness
+        const objects = [];
+        if (this.scene3d && this.scene3d.objects) {
+            for (const obj of this.scene3d.objects) {
+                if (obj.userData && obj.userData.objectType === 'baseplate') continue;
+                if (obj.userData && obj.userData.objectType === 'spawn') continue;
+                objects.push({
+                    name: obj.name || 'Unnamed',
+                    type: obj.userData?.objectType || 'box',
+                    position: {
+                        x: Math.round(obj.position.x * 100) / 100,
+                        y: Math.round(obj.position.y * 100) / 100,
+                        z: Math.round(obj.position.z * 100) / 100
+                    },
+                    scale: {
+                        x: Math.round(obj.scale.x * 100) / 100,
+                        y: Math.round(obj.scale.y * 100) / 100,
+                        z: Math.round(obj.scale.z * 100) / 100
+                    }
+                });
+            }
+        }
+        if (objects.length === 0) return '';
+        // Keep it concise — summarize if too many objects
+        const limited = objects.slice(0, 30);
+        let ctx = limited.map(o => `${o.name} (${o.type}) at [${o.position.x},${o.position.y},${o.position.z}] scale [${o.scale.x},${o.scale.y},${o.scale.z}]`).join('\n');
+        if (objects.length > 30) ctx += `\n...and ${objects.length - 30} more objects`;
+        return ctx;
     }
 
     _aiAddMessage(text, type) {
@@ -6286,10 +6320,15 @@ class App {
         input.disabled = true;
 
         try {
+            const sceneContext = this._aiGetSceneContext();
             const res = await fetch('/api/ai/build', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt })
+                body: JSON.stringify({
+                    prompt,
+                    history: this._aiHistory,
+                    sceneContext
+                })
             });
 
             loadingEl.remove();
@@ -6307,6 +6346,12 @@ class App {
                 this._aiAddMessage('No objects were generated. Try a different prompt.', 'ai-error');
                 return;
             }
+
+            // Store conversation history for follow-up requests
+            this._aiHistory.push({ role: 'user', content: prompt });
+            this._aiHistory.push({ role: 'assistant', content: JSON.stringify(objects) });
+            // Keep history bounded
+            if (this._aiHistory.length > 12) this._aiHistory = this._aiHistory.slice(-12);
 
             // Calculate offset from camera target so structures appear in front of the user
             const target = this.scene3d.orbitControls.target;

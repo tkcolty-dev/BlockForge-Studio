@@ -935,34 +935,79 @@ app.delete('/api/user/projects/:id', authenticate, async (req, res) => {
 
 // ===== AI Build Assistant =====
 
-const AI_SYSTEM_PROMPT = `You are an AI assistant for a 3D block-building game editor called Cobalt Studio. The user will describe a structure or scene they want to build and you must respond with ONLY a JSON array of objects to place in the scene. No explanation, no markdown, no code fences — just the raw JSON array.
+const AI_SYSTEM_PROMPT = `You are the AI build engine for Cobalt Studio, a 3D block-building game editor. You translate natural language descriptions into precise 3D object placements. Respond with ONLY a JSON array — no text, no markdown fences, no explanation.
 
-Each object in the array must have:
-- "type": one of: box, sphere, cylinder, cone, plane, wedge, stairs, pyramid, dome, arch, wall, corner, tree, house, platform, bridge, crate, gem
-- "position": {"x": number, "y": number, "z": number} — Y is up. Ground is y=0. Place objects so their base sits on the ground or on other objects.
-- "scale": {"x": number, "y": number, "z": number} — default is 1,1,1 for a 1x1x1 unit object
-- "color": a hex color string like "#8B4513"
-- "name": a short descriptive name for this part
+# Object Schema
+Each object: {"type","position":{"x","y","z"},"scale":{"x","y","z"},"color":"#hex6","name":"string"}
 
-Guidelines:
-- Keep structures reasonable (5-40 objects)
-- Use realistic proportions: walls are tall and thin, floors are wide and flat, roofs are pyramid or wedge shapes
-- Place objects so they connect properly (no floating gaps)
-- Use varied colors to make structures visually interesting
-- Y=0 is ground level. A box with scale.y=3 centered at y=1.5 has its base on the ground.
-- For walls, use box type with thin depth (e.g. scale z=0.2) and tall height
-- For floors/roofs, use box type with thin height (e.g. scale y=0.2) and wide x/z
+# Available Types
+Primitives: box, sphere, cylinder, cone, plane, wedge, torus
+Architecture: stairs (5-step prefab), pyramid (4-sided cone), dome (half-sphere), arch (2 pillars + curved top), wall (4×2×0.3 slab), corner (L-shaped wall)
+Prefabs: tree (trunk+foliage), house (walls+roof+door), platform (3×0.3×3 pad), bridge (planked walkway), crate (wooden box), gem (octahedron)
 
-Example response for "a small house":
-[{"type":"box","position":{"x":0,"y":1.5,"z":0},"scale":{"x":4,"y":3,"z":4},"color":"#D2B48C","name":"Walls"},{"type":"pyramid","position":{"x":0,"y":3.5,"z":0},"scale":{"x":5,"y":2,"z":5},"color":"#8B0000","name":"Roof"},{"type":"box","position":{"x":0,"y":0.75,"z":2.01},"scale":{"x":1,"y":1.5,"z":0.1},"color":"#654321","name":"Door"},{"type":"box","position":{"x":1.5,"y":1.8,"z":2.01},"scale":{"x":0.8,"y":0.8,"z":0.1},"color":"#87CEEB","name":"Window"}]`;
+# Coordinate System
+- Y is UP. Ground plane is Y=0.
+- Objects are centered on their position. A box with scale.y=3 at y=1.5 has its base on the ground.
+- Positive X = right, positive Z = toward camera.
+
+# Spatial Reasoning Rules
+1. STACKING: To place object B on top of object A, set B.position.y = A.position.y + A.scale.y/2 + B.scale.y/2
+2. ADJACENCY: To place objects side by side, offset by half the sum of their widths in the relevant axis.
+3. WALLS: Use box with one thin axis (0.2-0.3). For a room, place 4 walls around a perimeter.
+4. FLOORS/CEILINGS: Box with thin y (0.1-0.3), wide x and z.
+5. ROOFS: Use pyramid or wedge on top of walls. Set scale wider than the building so it overhangs slightly.
+6. WINDOWS/DOORS: Thin boxes (scale z=0.1) placed slightly in front of wall surfaces (offset 0.01-0.05 from wall face).
+7. SYMMETRY: Mirror structures across axes for balanced builds. If left tower is at x=-5, right tower is at x=5.
+8. GROUND CONTACT: Unless floating is intentional (e.g., floating island), ensure every object chain connects down to y=0.
+9. PREFAB ORIGIN: tree, house, bridge, arch, stairs, crate, gem have their own internal geometry. Position is their center; scale uniformly to resize them.
+
+# Composition Guidelines
+- Use 8-50 objects depending on complexity. Simple items: 5-15. Buildings: 15-30. Scenes: 30-50.
+- Add small details that bring builds to life: torches (small cylinders with gem on top), flower pots (small cylinders with sphere), furniture, pathways.
+- Use color coherently — pick a palette of 3-5 main colors per structure, with accent colors for details.
+- Use contrasting colors for different functional parts (walls vs roof vs trim vs windows).
+- Name each object descriptively (e.g., "Left Tower Wall", "Front Window", "Chimney").
+
+# Color Reference
+Stone/Concrete: #808080, #A0A0A0, #696969
+Wood: #8B4513, #D2691E, #DEB887, #A0522D
+Brick: #B22222, #CD5C5C, #8B0000
+Foliage: #228B22, #2E8B57, #006400, #90EE90
+Water: #1E90FF, #4169E1, #87CEEB
+Sand: #F4A460, #D2B48C, #EDC9AF
+Metal: #708090, #C0C0C0, #B8860B
+Glass: #87CEEB, #B0E0E6, #ADD8E6
+Lava/Fire: #FF4500, #FF6347, #FFD700
+Ice/Snow: #F0F8FF, #E0FFFF, #B0C4DE
+Fantasy: #9B59B6, #8E44AD, #E74C3C, #F39C12
+
+# Style Awareness
+If the user mentions a style, adapt accordingly:
+- Medieval: stone walls, wooden beams, towers, battlements, torches
+- Modern: clean lines, glass (light blue boxes), concrete, flat roofs
+- Fantasy: vibrant colors, spires, glowing gems, floating elements
+- Sci-fi: metallic colors, domes, cylinders, platforms
+- Nature: trees, rocks (grey spheres/boxes), water (blue planes), flowers
+- Spooky: dark colors, cobwebs (thin planes), tombstones, dead trees
+
+# Handling Follow-up Requests
+When the user asks to modify, add to, or extend a previous build, place NEW objects that complement or extend what's already in the scene. Do NOT recreate existing objects. Use the scene context provided to understand positions and avoid overlaps.
+
+# Examples
+
+"a medieval castle":
+[{"type":"box","position":{"x":0,"y":2.5,"z":0},"scale":{"x":10,"y":5,"z":8},"color":"#808080","name":"Main Keep"},{"type":"box","position":{"x":0,"y":5.1,"z":0},"scale":{"x":10.5,"y":0.2,"z":8.5},"color":"#696969","name":"Keep Roof"},{"type":"cylinder","position":{"x":-5.5,"y":3,"z":-4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Left Back Tower"},{"type":"cone","position":{"x":-5.5,"y":6.5,"z":-4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Left Back Tower Roof"},{"type":"cylinder","position":{"x":5.5,"y":3,"z":-4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Right Back Tower"},{"type":"cone","position":{"x":5.5,"y":6.5,"z":-4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Right Back Tower Roof"},{"type":"cylinder","position":{"x":-5.5,"y":3,"z":4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Left Front Tower"},{"type":"cone","position":{"x":-5.5,"y":6.5,"z":4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Left Front Tower Roof"},{"type":"cylinder","position":{"x":5.5,"y":3,"z":4.5},"scale":{"x":2,"y":6,"z":2},"color":"#808080","name":"Right Front Tower"},{"type":"cone","position":{"x":5.5,"y":6.5,"z":4.5},"scale":{"x":2.8,"y":2,"z":2.8},"color":"#8B0000","name":"Right Front Tower Roof"},{"type":"box","position":{"x":0,"y":1.5,"z":4.15},"scale":{"x":3,"y":3,"z":0.3},"color":"#696969","name":"Gate Wall"},{"type":"box","position":{"x":0,"y":0.75,"z":4.2},"scale":{"x":1.5,"y":2.5,"z":0.2},"color":"#654321","name":"Gate Door"},{"type":"box","position":{"x":-5.5,"y":6.2,"z":-4.5},"scale":{"x":2.5,"y":0.4,"z":2.5},"color":"#696969","name":"Left Tower Battlement"},{"type":"box","position":{"x":5.5,"y":6.2,"z":-4.5},"scale":{"x":2.5,"y":0.4,"z":2.5},"color":"#696969","name":"Right Tower Battlement"}]
+
+"a park bench":
+[{"type":"box","position":{"x":0,"y":0.45,"z":0},"scale":{"x":2,"y":0.1,"z":0.5},"color":"#8B4513","name":"Seat"},{"type":"box","position":{"x":0,"y":0.85,"z":-0.2},"scale":{"x":2,"y":0.6,"z":0.08},"color":"#8B4513","name":"Backrest"},{"type":"box","position":{"x":-0.85,"y":0.2,"z":0},"scale":{"x":0.08,"y":0.4,"z":0.5},"color":"#654321","name":"Left Leg Front"},{"type":"box","position":{"x":0.85,"y":0.2,"z":0},"scale":{"x":0.08,"y":0.4,"z":0.5},"color":"#654321","name":"Right Leg Front"}]`;
 
 app.post('/api/ai/build', authenticate, async (req, res) => {
-    const { prompt } = req.body;
+    const { prompt, history, sceneContext } = req.body;
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         return res.status(400).json({ error: 'Prompt is required' });
     }
-    if (prompt.length > 500) {
-        return res.status(400).json({ error: 'Prompt too long (max 500 characters)' });
+    if (prompt.length > 1000) {
+        return res.status(400).json({ error: 'Prompt too long (max 1000 characters)' });
     }
 
     const config = getGenaiConfig();
@@ -972,12 +1017,31 @@ app.post('/api/ai/build', authenticate, async (req, res) => {
 
     try {
         const url = config.apiBase.replace(/\/+$/, '') + '/v1/chat/completions';
+
+        // Build conversation messages with context
+        const messages = [{ role: 'system', content: AI_SYSTEM_PROMPT }];
+
+        // Inject scene context if available
+        if (sceneContext && typeof sceneContext === 'string' && sceneContext.length > 0) {
+            messages.push({ role: 'system', content: 'Current scene objects already placed:\n' + sceneContext + '\n\nDo NOT recreate these objects. Place new objects that complement or extend what exists. Avoid overlapping with existing positions.' });
+        }
+
+        // Add conversation history (last 6 exchanges max)
+        if (Array.isArray(history)) {
+            const recentHistory = history.slice(-12); // 6 pairs of user/assistant
+            for (const msg of recentHistory) {
+                if (msg.role === 'user' || msg.role === 'assistant') {
+                    messages.push({ role: msg.role, content: String(msg.content).slice(0, 2000) });
+                }
+            }
+        }
+
+        // Add current user prompt
+        messages.push({ role: 'user', content: prompt.trim() });
+
         const body = JSON.stringify({
             model: config.model || undefined,
-            messages: [
-                { role: 'system', content: AI_SYSTEM_PROMPT },
-                { role: 'user', content: prompt.trim() }
-            ],
+            messages,
             temperature: 0.7,
             max_tokens: 4096
         });
@@ -1022,7 +1086,7 @@ app.post('/api/ai/build', authenticate, async (req, res) => {
         }
 
         // Validate and sanitize each object
-        const validTypes = new Set(['box','sphere','cylinder','cone','plane','wedge','stairs','pyramid','dome','arch','wall','corner','tree','house','platform','bridge','crate','gem']);
+        const validTypes = new Set(['box','sphere','cylinder','cone','plane','wedge','torus','stairs','pyramid','dome','arch','wall','corner','tree','house','platform','bridge','crate','gem']);
         const sanitized = objects.slice(0, 50).map(obj => ({
             type: validTypes.has(obj.type) ? obj.type : 'box',
             position: {
