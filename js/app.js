@@ -134,8 +134,9 @@ class App {
         }
 
         // Auto-save every 15 seconds (skip for collab guests)
+        this.autoSaveEnabled = localStorage.getItem('blockforge_auto_save') !== 'false';
         setInterval(() => {
-            if (this.currentProjectId && this.hasUnsavedChanges && !this._collabGuest()) {
+            if (this.autoSaveEnabled && this.currentProjectId && this.hasUnsavedChanges && !this._collabGuest()) {
                 this.saveProject(true);
             }
         }, 15000);
@@ -2785,6 +2786,16 @@ class App {
             this.toast(e.target.checked ? 'Mouse orbit enabled' : 'Drag-to-select enabled', 'success');
         });
 
+        // Auto-save toggle
+        const autoSaveCheckbox = document.getElementById('setting-auto-save');
+        this.autoSaveEnabled = localStorage.getItem('blockforge_auto_save') !== 'false';
+        autoSaveCheckbox.checked = this.autoSaveEnabled;
+        autoSaveCheckbox.addEventListener('change', (e) => {
+            this.autoSaveEnabled = e.target.checked;
+            localStorage.setItem('blockforge_auto_save', e.target.checked);
+            this.toast(e.target.checked ? 'Auto-save enabled' : 'Auto-save disabled', 'success');
+        });
+
         // Graphics quality
         const qualityDescriptions = {
             ultra: 'Maximum quality — best visuals, most demanding',
@@ -2949,6 +2960,7 @@ class App {
     }
 
     _debouncedSave() {
+        if (!this.autoSaveEnabled) return;
         if (this._saveTimeout) clearTimeout(this._saveTimeout);
         this._saveTimeout = setTimeout(() => {
             if (this.currentProjectId && this.hasUnsavedChanges && !this._collabGuest()) {
