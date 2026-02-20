@@ -41,6 +41,7 @@ class App {
         this.initSoundLibrary();
         this.initAnimateTab();
         this.initLoadingScreen();
+        this.initGallery();
 
         this.VERSION = '1.0.0';
         this.currentProjectId = null;
@@ -1328,14 +1329,8 @@ class App {
 
     initSaveLoad() {
         document.getElementById('btn-save').addEventListener('click', () => this.saveProject());
-        document.getElementById('btn-load').addEventListener('click', () => this.showTitleScreen());
         document.getElementById('btn-export').addEventListener('click', () => this.exportGame());
         document.getElementById('btn-share').addEventListener('click', () => this.shareProject());
-
-        // Update tooltip for load button
-        const loadBtn = document.getElementById('btn-load');
-        loadBtn.title = 'My Projects';
-        if (loadBtn.dataset.tooltip !== undefined) loadBtn.dataset.tooltip = 'My Projects';
     }
 
     _updateGuestRestrictions() {
@@ -6527,6 +6522,9 @@ class App {
                 if (obj && msg.objectData.scripts) {
                     obj.userData.scripts = msg.objectData.scripts;
                 }
+                if (obj && msg.objectData.animations) {
+                    obj.userData.animations = msg.objectData.animations;
+                }
                 this.refreshExplorer();
                 this.updateObjectCount();
                 this._collabBroadcastPaused = false;
@@ -6633,7 +6631,8 @@ class App {
                     mass: mesh.userData.mass,
                     scripts: mesh.userData.scripts,
                     customParts: mesh.userData.customParts,
-                    customObjectId: mesh.userData.customObjectId
+                    customObjectId: mesh.userData.customObjectId,
+                    animations: mesh.userData.animations || null
                 }
             });
         };
@@ -6978,6 +6977,231 @@ class App {
         this.toast('Screenshot captured', 'success');
     }
 
+    // ===== Gallery =====
+
+    initGallery() {
+        this._galleryItems = [
+            // Vehicles
+            { name: 'Car', icon: '🚗', category: 'vehicles', parts: [
+                { shape: 'box', color: '#e74c3c', offset: { x: 0, y: 0.4, z: 0 }, scale: { x: 1.8, y: 0.5, z: 1 } },
+                { shape: 'box', color: '#c0392b', offset: { x: -0.1, y: 0.85, z: 0 }, scale: { x: 1, y: 0.45, z: 0.9 } },
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: 0.55, y: 0.1, z: 0.5 }, scale: { x: 0.3, y: 0.12, z: 0.3 } },
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: 0.55, y: 0.1, z: -0.5 }, scale: { x: 0.3, y: 0.12, z: 0.3 } },
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: -0.55, y: 0.1, z: 0.5 }, scale: { x: 0.3, y: 0.12, z: 0.3 } },
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: -0.55, y: 0.1, z: -0.5 }, scale: { x: 0.3, y: 0.12, z: 0.3 } },
+                { shape: 'box', color: '#85c1e9', offset: { x: -0.1, y: 0.85, z: 0.44 }, scale: { x: 0.85, y: 0.32, z: 0.05 } },
+            ]},
+            { name: 'Truck', icon: '🚚', category: 'vehicles', parts: [
+                { shape: 'box', color: '#2980b9', offset: { x: 0.7, y: 0.5, z: 0 }, scale: { x: 0.9, y: 0.7, z: 1.1 } },
+                { shape: 'box', color: '#f39c12', offset: { x: -0.5, y: 0.55, z: 0 }, scale: { x: 1.6, y: 0.9, z: 1.15 } },
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: 0.6, y: 0.05, z: 0.55 }, scale: { x: 0.35, y: 0.14, z: 0.35 } },
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: 0.6, y: 0.05, z: -0.55 }, scale: { x: 0.35, y: 0.14, z: 0.35 } },
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: -0.7, y: 0.05, z: 0.55 }, scale: { x: 0.35, y: 0.14, z: 0.35 } },
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: -0.7, y: 0.05, z: -0.55 }, scale: { x: 0.35, y: 0.14, z: 0.35 } },
+            ]},
+            { name: 'Rocket', icon: '🚀', category: 'vehicles', parts: [
+                { shape: 'cylinder', color: '#ecf0f1', offset: { x: 0, y: 0.8, z: 0 }, scale: { x: 0.5, y: 1.6, z: 0.5 } },
+                { shape: 'cone', color: '#e74c3c', offset: { x: 0, y: 1.8, z: 0 }, scale: { x: 0.5, y: 0.6, z: 0.5 } },
+                { shape: 'box', color: '#e74c3c', offset: { x: 0, y: 0.1, z: 0.25 }, scale: { x: 0.08, y: 0.4, z: 0.3 } },
+                { shape: 'box', color: '#e74c3c', offset: { x: 0, y: 0.1, z: -0.25 }, scale: { x: 0.08, y: 0.4, z: 0.3 } },
+                { shape: 'box', color: '#e74c3c', offset: { x: 0.25, y: 0.1, z: 0 }, scale: { x: 0.3, y: 0.4, z: 0.08 } },
+                { shape: 'cylinder', color: '#3498db', offset: { x: 0, y: 1.2, z: 0.22 }, scale: { x: 0.12, y: 0.12, z: 0.06 } },
+            ]},
+            { name: 'Boat', icon: '⛵', category: 'vehicles', parts: [
+                { shape: 'box', color: '#8b4513', offset: { x: 0, y: 0.15, z: 0 }, scale: { x: 2, y: 0.3, z: 0.8 } },
+                { shape: 'wedge', color: '#a0522d', offset: { x: 1.1, y: 0.15, z: 0 }, scale: { x: 0.4, y: 0.3, z: 0.7 } },
+                { shape: 'cylinder', color: '#8b4513', offset: { x: 0, y: 0.7, z: 0 }, scale: { x: 0.06, y: 1, z: 0.06 } },
+                { shape: 'box', color: '#ecf0f1', offset: { x: -0.2, y: 0.8, z: 0 }, scale: { x: 0.7, y: 0.6, z: 0.05 } },
+            ]},
+            { name: 'Airplane', icon: '✈️', category: 'vehicles', parts: [
+                { shape: 'cylinder', color: '#bdc3c7', offset: { x: 0, y: 0, z: 0 }, scale: { x: 0.35, y: 2.2, z: 0.35 } },
+                { shape: 'cone', color: '#e74c3c', offset: { x: 0, y: 1.25, z: 0 }, scale: { x: 0.35, y: 0.4, z: 0.35 } },
+                { shape: 'box', color: '#95a5a6', offset: { x: 0, y: 0.1, z: 0 }, scale: { x: 0.1, y: 0.06, z: 2.8 } },
+                { shape: 'box', color: '#95a5a6', offset: { x: 0, y: -0.8, z: 0 }, scale: { x: 0.06, y: 0.04, z: 0.8 } },
+                { shape: 'box', color: '#e74c3c', offset: { x: 0, y: -0.8, z: 0 }, scale: { x: 0.04, y: 0.35, z: 0.04 } },
+            ]},
+            // Furniture
+            { name: 'Chair', icon: '🪑', category: 'furniture', parts: [
+                { shape: 'box', color: '#8b4513', offset: { x: 0, y: 0.45, z: 0 }, scale: { x: 0.5, y: 0.05, z: 0.5 } },
+                { shape: 'box', color: '#8b4513', offset: { x: 0.2, y: 0.22, z: 0.2 }, scale: { x: 0.06, y: 0.45, z: 0.06 } },
+                { shape: 'box', color: '#8b4513', offset: { x: -0.2, y: 0.22, z: 0.2 }, scale: { x: 0.06, y: 0.45, z: 0.06 } },
+                { shape: 'box', color: '#8b4513', offset: { x: 0.2, y: 0.22, z: -0.2 }, scale: { x: 0.06, y: 0.45, z: 0.06 } },
+                { shape: 'box', color: '#8b4513', offset: { x: -0.2, y: 0.22, z: -0.2 }, scale: { x: 0.06, y: 0.45, z: 0.06 } },
+                { shape: 'box', color: '#a0522d', offset: { x: 0, y: 0.72, z: -0.22 }, scale: { x: 0.5, y: 0.5, z: 0.05 } },
+            ]},
+            { name: 'Table', icon: '🪵', category: 'furniture', parts: [
+                { shape: 'box', color: '#a0522d', offset: { x: 0, y: 0.7, z: 0 }, scale: { x: 1.2, y: 0.06, z: 0.7 } },
+                { shape: 'box', color: '#8b4513', offset: { x: 0.5, y: 0.35, z: 0.25 }, scale: { x: 0.06, y: 0.7, z: 0.06 } },
+                { shape: 'box', color: '#8b4513', offset: { x: -0.5, y: 0.35, z: 0.25 }, scale: { x: 0.06, y: 0.7, z: 0.06 } },
+                { shape: 'box', color: '#8b4513', offset: { x: 0.5, y: 0.35, z: -0.25 }, scale: { x: 0.06, y: 0.7, z: 0.06 } },
+                { shape: 'box', color: '#8b4513', offset: { x: -0.5, y: 0.35, z: -0.25 }, scale: { x: 0.06, y: 0.7, z: 0.06 } },
+            ]},
+            { name: 'Bed', icon: '🛏️', category: 'furniture', parts: [
+                { shape: 'box', color: '#ecf0f1', offset: { x: 0, y: 0.35, z: 0 }, scale: { x: 1.2, y: 0.15, z: 0.7 } },
+                { shape: 'box', color: '#8b4513', offset: { x: 0, y: 0.15, z: 0 }, scale: { x: 1.3, y: 0.3, z: 0.75 } },
+                { shape: 'box', color: '#3498db', offset: { x: 0, y: 0.45, z: 0 }, scale: { x: 1.15, y: 0.05, z: 0.65 } },
+                { shape: 'box', color: '#ecf0f1', offset: { x: 0.45, y: 0.42, z: 0 }, scale: { x: 0.25, y: 0.1, z: 0.5 } },
+                { shape: 'box', color: '#8b4513', offset: { x: -0.62, y: 0.4, z: 0 }, scale: { x: 0.08, y: 0.35, z: 0.75 } },
+            ]},
+            { name: 'Lamp', icon: '💡', category: 'furniture', parts: [
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: 0, y: 0.02, z: 0 }, scale: { x: 0.35, y: 0.04, z: 0.35 } },
+                { shape: 'cylinder', color: '#7f8c8d', offset: { x: 0, y: 0.5, z: 0 }, scale: { x: 0.04, y: 1, z: 0.04 } },
+                { shape: 'cone', color: '#f1c40f', offset: { x: 0, y: 1.05, z: 0 }, scale: { x: 0.5, y: 0.35, z: 0.5 } },
+            ]},
+            { name: 'Bookshelf', icon: '📚', category: 'furniture', parts: [
+                { shape: 'box', color: '#8b4513', offset: { x: 0, y: 0.65, z: 0 }, scale: { x: 0.9, y: 1.3, z: 0.3 } },
+                { shape: 'box', color: '#e74c3c', offset: { x: -0.2, y: 1.05, z: 0.02 }, scale: { x: 0.12, y: 0.25, z: 0.2 } },
+                { shape: 'box', color: '#3498db', offset: { x: 0, y: 1.05, z: 0.02 }, scale: { x: 0.12, y: 0.28, z: 0.2 } },
+                { shape: 'box', color: '#2ecc71', offset: { x: 0.2, y: 1.05, z: 0.02 }, scale: { x: 0.12, y: 0.22, z: 0.2 } },
+                { shape: 'box', color: '#f39c12', offset: { x: -0.15, y: 0.6, z: 0.02 }, scale: { x: 0.12, y: 0.25, z: 0.2 } },
+                { shape: 'box', color: '#9b59b6', offset: { x: 0.1, y: 0.6, z: 0.02 }, scale: { x: 0.15, y: 0.26, z: 0.2 } },
+            ]},
+            // Nature
+            { name: 'Pine Tree', icon: '🌲', category: 'nature', parts: [
+                { shape: 'cylinder', color: '#8b4513', offset: { x: 0, y: 0.4, z: 0 }, scale: { x: 0.2, y: 0.8, z: 0.2 } },
+                { shape: 'cone', color: '#27ae60', offset: { x: 0, y: 1.3, z: 0 }, scale: { x: 1, y: 1.2, z: 1 } },
+                { shape: 'cone', color: '#2ecc71', offset: { x: 0, y: 1.8, z: 0 }, scale: { x: 0.75, y: 0.9, z: 0.75 } },
+                { shape: 'cone', color: '#27ae60', offset: { x: 0, y: 2.2, z: 0 }, scale: { x: 0.5, y: 0.7, z: 0.5 } },
+            ]},
+            { name: 'Bush', icon: '🌳', category: 'nature', parts: [
+                { shape: 'sphere', color: '#27ae60', offset: { x: 0, y: 0.35, z: 0 }, scale: { x: 0.7, y: 0.6, z: 0.7 } },
+                { shape: 'sphere', color: '#2ecc71', offset: { x: 0.25, y: 0.3, z: 0.15 }, scale: { x: 0.5, y: 0.45, z: 0.5 } },
+                { shape: 'sphere', color: '#27ae60', offset: { x: -0.2, y: 0.3, z: -0.1 }, scale: { x: 0.55, y: 0.5, z: 0.55 } },
+            ]},
+            { name: 'Rock', icon: '🪨', category: 'nature', parts: [
+                { shape: 'sphere', color: '#7f8c8d', offset: { x: 0, y: 0.2, z: 0 }, scale: { x: 0.7, y: 0.4, z: 0.6 } },
+                { shape: 'sphere', color: '#95a5a6', offset: { x: 0.2, y: 0.15, z: 0.1 }, scale: { x: 0.35, y: 0.25, z: 0.3 } },
+            ]},
+            { name: 'Flower', icon: '🌷', category: 'nature', parts: [
+                { shape: 'cylinder', color: '#27ae60', offset: { x: 0, y: 0.3, z: 0 }, scale: { x: 0.04, y: 0.6, z: 0.04 } },
+                { shape: 'sphere', color: '#e74c3c', offset: { x: 0, y: 0.65, z: 0 }, scale: { x: 0.25, y: 0.2, z: 0.25 } },
+                { shape: 'sphere', color: '#f1c40f', offset: { x: 0, y: 0.65, z: 0 }, scale: { x: 0.1, y: 0.1, z: 0.1 } },
+                { shape: 'box', color: '#2ecc71', offset: { x: 0.12, y: 0.25, z: 0 }, scale: { x: 0.2, y: 0.08, z: 0.08 } },
+            ]},
+            { name: 'Mushroom', icon: '🍄', category: 'nature', parts: [
+                { shape: 'cylinder', color: '#f5f5dc', offset: { x: 0, y: 0.2, z: 0 }, scale: { x: 0.15, y: 0.4, z: 0.15 } },
+                { shape: 'dome', color: '#e74c3c', offset: { x: 0, y: 0.42, z: 0 }, scale: { x: 0.6, y: 0.35, z: 0.6 } },
+                { shape: 'sphere', color: '#ecf0f1', offset: { x: 0.1, y: 0.5, z: 0.05 }, scale: { x: 0.06, y: 0.06, z: 0.06 } },
+                { shape: 'sphere', color: '#ecf0f1', offset: { x: -0.08, y: 0.52, z: -0.08 }, scale: { x: 0.05, y: 0.05, z: 0.05 } },
+            ]},
+            // Buildings
+            { name: 'Tower', icon: '🏰', category: 'buildings', parts: [
+                { shape: 'cylinder', color: '#95a5a6', offset: { x: 0, y: 1, z: 0 }, scale: { x: 0.7, y: 2, z: 0.7 } },
+                { shape: 'cone', color: '#e74c3c', offset: { x: 0, y: 2.2, z: 0 }, scale: { x: 0.85, y: 0.7, z: 0.85 } },
+                { shape: 'box', color: '#7f8c8d', offset: { x: 0, y: 2.0, z: 0 }, scale: { x: 0.8, y: 0.12, z: 0.8 } },
+            ]},
+            { name: 'Cabin', icon: '🏠', category: 'buildings', parts: [
+                { shape: 'box', color: '#a0522d', offset: { x: 0, y: 0.55, z: 0 }, scale: { x: 1.4, y: 1, z: 1.2 } },
+                { shape: 'wedge', color: '#8b4513', offset: { x: 0, y: 1.25, z: 0 }, scale: { x: 1.5, y: 0.6, z: 1.3 } },
+                { shape: 'box', color: '#f5f5dc', offset: { x: 0.3, y: 0.5, z: 0.61 }, scale: { x: 0.25, y: 0.3, z: 0.02 } },
+                { shape: 'box', color: '#8b4513', offset: { x: -0.3, y: 0.35, z: 0.61 }, scale: { x: 0.3, y: 0.6, z: 0.02 } },
+            ]},
+            { name: 'Windmill', icon: '🏗️', category: 'buildings', parts: [
+                { shape: 'cylinder', color: '#ecf0f1', offset: { x: 0, y: 1.2, z: 0 }, scale: { x: 0.6, y: 2.4, z: 0.6 } },
+                { shape: 'cone', color: '#e74c3c', offset: { x: 0, y: 2.6, z: 0 }, scale: { x: 0.7, y: 0.5, z: 0.7 } },
+                { shape: 'box', color: '#8b4513', offset: { x: 0, y: 1.8, z: 0.32 }, scale: { x: 0.08, y: 1.2, z: 0.06 } },
+                { shape: 'box', color: '#8b4513', offset: { x: 0.32, y: 1.8, z: 0 }, scale: { x: 0.06, y: 0.08, z: 1.2 } },
+            ]},
+            { name: 'Skyscraper', icon: '🏢', category: 'buildings', parts: [
+                { shape: 'box', color: '#5d6d7e', offset: { x: 0, y: 2, z: 0 }, scale: { x: 1, y: 4, z: 1 } },
+                { shape: 'box', color: '#85c1e9', offset: { x: 0.1, y: 2.5, z: 0.51 }, scale: { x: 0.25, y: 0.4, z: 0.02 } },
+                { shape: 'box', color: '#85c1e9', offset: { x: -0.2, y: 2.5, z: 0.51 }, scale: { x: 0.25, y: 0.4, z: 0.02 } },
+                { shape: 'box', color: '#85c1e9', offset: { x: 0.1, y: 1.8, z: 0.51 }, scale: { x: 0.25, y: 0.4, z: 0.02 } },
+                { shape: 'box', color: '#85c1e9', offset: { x: -0.2, y: 1.8, z: 0.51 }, scale: { x: 0.25, y: 0.4, z: 0.02 } },
+                { shape: 'box', color: '#85c1e9', offset: { x: 0.1, y: 3.2, z: 0.51 }, scale: { x: 0.25, y: 0.4, z: 0.02 } },
+                { shape: 'box', color: '#85c1e9', offset: { x: -0.2, y: 3.2, z: 0.51 }, scale: { x: 0.25, y: 0.4, z: 0.02 } },
+            ]},
+            // Props
+            { name: 'Street Lamp', icon: '🏮', category: 'props', parts: [
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: 0, y: 1.2, z: 0 }, scale: { x: 0.06, y: 2.4, z: 0.06 } },
+                { shape: 'cylinder', color: '#2c3e50', offset: { x: 0, y: 0.02, z: 0 }, scale: { x: 0.25, y: 0.04, z: 0.25 } },
+                { shape: 'sphere', color: '#f1c40f', offset: { x: 0, y: 2.45, z: 0 }, scale: { x: 0.2, y: 0.2, z: 0.2 } },
+                { shape: 'cone', color: '#2c3e50', offset: { x: 0, y: 2.5, z: 0 }, scale: { x: 0.35, y: 0.15, z: 0.35 } },
+            ]},
+            { name: 'Bench', icon: '🪑', category: 'props', parts: [
+                { shape: 'box', color: '#a0522d', offset: { x: 0, y: 0.4, z: 0 }, scale: { x: 1.2, y: 0.06, z: 0.35 } },
+                { shape: 'box', color: '#2c3e50', offset: { x: 0.5, y: 0.2, z: 0.12 }, scale: { x: 0.04, y: 0.4, z: 0.04 } },
+                { shape: 'box', color: '#2c3e50', offset: { x: 0.5, y: 0.2, z: -0.12 }, scale: { x: 0.04, y: 0.4, z: 0.04 } },
+                { shape: 'box', color: '#2c3e50', offset: { x: -0.5, y: 0.2, z: 0.12 }, scale: { x: 0.04, y: 0.4, z: 0.04 } },
+                { shape: 'box', color: '#2c3e50', offset: { x: -0.5, y: 0.2, z: -0.12 }, scale: { x: 0.04, y: 0.4, z: 0.04 } },
+                { shape: 'box', color: '#a0522d', offset: { x: 0, y: 0.6, z: -0.17 }, scale: { x: 1.2, y: 0.35, z: 0.04 } },
+            ]},
+            { name: 'Fence', icon: '🚧', category: 'props', parts: [
+                { shape: 'box', color: '#a0522d', offset: { x: -0.9, y: 0.35, z: 0 }, scale: { x: 0.08, y: 0.7, z: 0.06 } },
+                { shape: 'box', color: '#a0522d', offset: { x: 0, y: 0.35, z: 0 }, scale: { x: 0.08, y: 0.7, z: 0.06 } },
+                { shape: 'box', color: '#a0522d', offset: { x: 0.9, y: 0.35, z: 0 }, scale: { x: 0.08, y: 0.7, z: 0.06 } },
+                { shape: 'box', color: '#deb887', offset: { x: 0, y: 0.5, z: 0 }, scale: { x: 1.9, y: 0.06, z: 0.04 } },
+                { shape: 'box', color: '#deb887', offset: { x: 0, y: 0.25, z: 0 }, scale: { x: 1.9, y: 0.06, z: 0.04 } },
+            ]},
+            { name: 'Barrel', icon: '🛢️', category: 'props', parts: [
+                { shape: 'cylinder', color: '#8b4513', offset: { x: 0, y: 0.4, z: 0 }, scale: { x: 0.45, y: 0.8, z: 0.45 } },
+                { shape: 'cylinder', color: '#654321', offset: { x: 0, y: 0.2, z: 0 }, scale: { x: 0.48, y: 0.04, z: 0.48 } },
+                { shape: 'cylinder', color: '#654321', offset: { x: 0, y: 0.6, z: 0 }, scale: { x: 0.48, y: 0.04, z: 0.48 } },
+            ]},
+            { name: 'Chest', icon: '📦', category: 'props', parts: [
+                { shape: 'box', color: '#8b4513', offset: { x: 0, y: 0.2, z: 0 }, scale: { x: 0.6, y: 0.35, z: 0.4 } },
+                { shape: 'box', color: '#a0522d', offset: { x: 0, y: 0.42, z: 0 }, scale: { x: 0.62, y: 0.1, z: 0.42 } },
+                { shape: 'box', color: '#f1c40f', offset: { x: 0, y: 0.25, z: 0.21 }, scale: { x: 0.12, y: 0.1, z: 0.02 } },
+            ]},
+            { name: 'Sword', icon: '⚔️', category: 'props', parts: [
+                { shape: 'box', color: '#bdc3c7', offset: { x: 0, y: 0.6, z: 0 }, scale: { x: 0.08, y: 0.8, z: 0.02 } },
+                { shape: 'box', color: '#8b4513', offset: { x: 0, y: 0.15, z: 0 }, scale: { x: 0.06, y: 0.2, z: 0.04 } },
+                { shape: 'box', color: '#f1c40f', offset: { x: 0, y: 0.27, z: 0 }, scale: { x: 0.2, y: 0.04, z: 0.04 } },
+            ]},
+            { name: 'Shield', icon: '🛡️', category: 'props', parts: [
+                { shape: 'cylinder', color: '#2980b9', offset: { x: 0, y: 0.35, z: 0 }, scale: { x: 0.55, y: 0.04, z: 0.55 } },
+                { shape: 'cylinder', color: '#f1c40f', offset: { x: 0, y: 0.36, z: 0 }, scale: { x: 0.15, y: 0.05, z: 0.15 } },
+                { shape: 'cylinder', color: '#1a5276', offset: { x: 0, y: 0.36, z: 0 }, scale: { x: 0.4, y: 0.02, z: 0.4 } },
+            ]},
+            { name: 'Campfire', icon: '🔥', category: 'props', parts: [
+                { shape: 'cylinder', color: '#8b4513', offset: { x: 0.15, y: 0.12, z: 0.1 }, scale: { x: 0.06, y: 0.25, z: 0.06 } },
+                { shape: 'cylinder', color: '#8b4513', offset: { x: -0.15, y: 0.12, z: 0.08 }, scale: { x: 0.06, y: 0.25, z: 0.06 } },
+                { shape: 'cylinder', color: '#8b4513', offset: { x: 0, y: 0.12, z: -0.15 }, scale: { x: 0.06, y: 0.25, z: 0.06 } },
+                { shape: 'cylinder', color: '#8b4513', offset: { x: 0.1, y: 0.12, z: -0.1 }, scale: { x: 0.06, y: 0.22, z: 0.06 } },
+                { shape: 'cone', color: '#e67e22', offset: { x: 0, y: 0.35, z: 0 }, scale: { x: 0.2, y: 0.35, z: 0.2 } },
+                { shape: 'cone', color: '#f1c40f', offset: { x: 0, y: 0.3, z: 0 }, scale: { x: 0.12, y: 0.25, z: 0.12 } },
+                { shape: 'sphere', color: '#7f8c8d', offset: { x: 0.22, y: 0.06, z: 0 }, scale: { x: 0.12, y: 0.1, z: 0.12 } },
+                { shape: 'sphere', color: '#95a5a6', offset: { x: -0.2, y: 0.06, z: 0.15 }, scale: { x: 0.1, y: 0.08, z: 0.1 } },
+            ]},
+        ];
+
+        const grid = document.getElementById('gallery-grid');
+        this._renderGallery('all');
+
+        // Filter buttons
+        document.querySelectorAll('.gallery-filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.gallery-filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this._renderGallery(btn.dataset.filter);
+            });
+        });
+    }
+
+    _renderGallery(filter) {
+        const grid = document.getElementById('gallery-grid');
+        grid.innerHTML = '';
+        const items = filter === 'all' ? this._galleryItems : this._galleryItems.filter(i => i.category === filter);
+        items.forEach(item => {
+            const btn = document.createElement('button');
+            btn.className = 'object-btn';
+            btn.title = item.name;
+            btn.innerHTML = `<div class="gallery-item-icon">${item.icon}</div><span>${item.name}</span>`;
+            btn.addEventListener('click', () => {
+                const obj = this.scene3d.addObject('custom', {
+                    name: item.name,
+                    position: { x: 0, y: 0, z: 0 },
+                    customParts: JSON.parse(JSON.stringify(item.parts))
+                });
+                this.scene3d.selectObject(obj);
+                this.refreshExplorer();
+                this.updateObjectCount();
+                this.saveUndoState();
+            });
+            grid.appendChild(btn);
+        });
+    }
+
     // ===== Sound Library =====
 
     initSoundLibrary() {
@@ -7000,10 +7224,6 @@ class App {
             if (!file) return;
             fileInput.value = '';
 
-            if (this.customSounds.length >= 10) {
-                this.toast('Maximum 10 sounds allowed', 'error');
-                return;
-            }
             if (file.size > 500 * 1024) {
                 this.toast('File too large (max 500KB)', 'error');
                 return;
@@ -7047,7 +7267,7 @@ class App {
         const list = document.getElementById('sound-list');
         const countEl = document.getElementById('sound-count');
         list.innerHTML = '';
-        countEl.textContent = this.customSounds.length + ' / 10';
+        countEl.textContent = this.customSounds.length + ' sound' + (this.customSounds.length !== 1 ? 's' : '');
 
         this.customSounds.forEach((snd, i) => {
             const el = document.createElement('div');

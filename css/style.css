@@ -6205,6 +6205,40 @@ kbd {
     flex-shrink: 0;
 }
 
+/* ===== Gallery Filter ===== */
+.gallery-filter {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+    padding: 0 2px;
+}
+.gallery-filter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.gallery-filter-btn:hover { color: var(--text); border-color: var(--text-dim); }
+.gallery-filter-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+.gallery-item-icon {
+    font-size: 22px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+}
+
 /* ===== Screenshot / Viewport Info Button ===== */
 .viewport-info-btn {
     background: rgba(0,0,0,0.4);
