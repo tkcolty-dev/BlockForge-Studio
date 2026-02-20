@@ -2896,6 +2896,8 @@ class App {
         document.getElementById('char-btn-save').addEventListener('click', () => {
             this.gameSettings.characterParts = JSON.parse(JSON.stringify(this._charWorkingParts));
             this.hasUnsavedChanges = true;
+            // Broadcast to party members
+            this._collabSend({ type: 'update-character', characterParts: this.gameSettings.characterParts });
             this.toast('Character saved', 'success');
             this._charClose();
         });
@@ -6500,6 +6502,11 @@ class App {
                         this.blockCode.renderWorkspace();
                     }
                 }
+                break;
+            }
+            case 'update-character': {
+                this.gameSettings.characterParts = msg.characterParts || null;
+                this.toast('Character updated by party member', 'info');
                 break;
             }
             case 'update-environment': {

@@ -1359,6 +1359,7 @@ wss.on('connection', (ws) => {
             case 'update-transform':
             case 'update-property':
             case 'update-environment':
+            case 'update-character':
             case 'vote-request':
             case 'vote-response':
             case 'vote-passed':
