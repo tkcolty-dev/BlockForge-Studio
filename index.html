@@ -1041,9 +1041,50 @@
                         <div id="ai-script-commands" class="ai-script-commands hidden"></div>
                     </div>
                     <div id="ai-script-status" class="ai-script-status hidden"></div>
+                    <button class="ai-script-help-btn" id="ai-script-help-btn" title="Command Reference">
+                        <span class="material-icons-round">help_outline</span>
+                    </button>
                     <button class="ai-script-btn" id="ai-script-btn" title="Generate Script">
                         <span class="material-icons-round">arrow_upward</span>
                     </button>
+                </div>
+                <div id="ai-script-help" class="ai-script-help hidden">
+                    <div class="ai-help-header">
+                        <span class="material-icons-round" style="font-size:18px;background:linear-gradient(135deg,#a78bfa,#6366f1);-webkit-background-clip:text;-webkit-text-fill-color:transparent">auto_awesome</span>
+                        <strong>AI Script Assistant</strong>
+                        <button id="ai-script-help-close" class="ai-help-close"><span class="material-icons-round">close</span></button>
+                    </div>
+                    <div class="ai-help-section">
+                        <div class="ai-help-label">Natural Language</div>
+                        <p>Type what you want and the AI generates block scripts.</p>
+                        <div class="ai-help-examples">
+                            <code>spin when clicked</code>
+                            <code>make this a collectible coin</code>
+                            <code>enemy that chases the player</code>
+                            <code>also make it glow</code>
+                        </div>
+                    </div>
+                    <div class="ai-help-section">
+                        <div class="ai-help-label">Slash Commands</div>
+                        <table class="ai-help-table">
+                            <tr><td><code>/cleanup</code></td><td>Optimize and tidy existing scripts</td></tr>
+                            <tr><td><code>/fix</code></td><td>Find and fix bugs in scripts</td></tr>
+                            <tr><td><code>/explain</code></td><td>Describe what the scripts do</td></tr>
+                            <tr><td><code>/simplify</code></td><td>Strip scripts to essentials</td></tr>
+                            <tr><td><code>/enhance</code></td><td>Add sounds, particles, effects</td></tr>
+                            <tr><td><code>/clear</code></td><td>Remove all scripts</td></tr>
+                            <tr><td><code>/duplicate</code></td><td>Copy all scripts as new stacks</td></tr>
+                        </table>
+                    </div>
+                    <div class="ai-help-section">
+                        <div class="ai-help-label">Tips</div>
+                        <ul class="ai-help-tips">
+                            <li>Select an object first before generating</li>
+                            <li>Say <code>also...</code> to add to existing scripts</li>
+                            <li>Add instructions after commands: <code>/enhance add screen shake</code></li>
+                            <li>AI remembers your last few prompts for follow-ups</li>
+                        </ul>
+                    </div>
                 </div>
                 <div id="script-workspace">
                     <div id="workspace-canvas">

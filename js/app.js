@@ -6950,6 +6950,11 @@ class App {
         const input = document.getElementById('ai-script-input');
         const btn = document.getElementById('ai-script-btn');
         const cmdList = document.getElementById('ai-script-commands');
+        const helpBtn = document.getElementById('ai-script-help-btn');
+        const helpPanel = document.getElementById('ai-script-help');
+
+        helpBtn.addEventListener('click', () => helpPanel.classList.toggle('hidden'));
+        document.getElementById('ai-script-help-close').addEventListener('click', () => helpPanel.classList.add('hidden'));
         this._aiScriptHistory = [];
         this._aiCmdIdx = -1;
 
