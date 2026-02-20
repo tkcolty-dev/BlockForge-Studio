@@ -505,7 +505,11 @@
                     </div>
                 </div>
                 <div class="panel-section" id="gallery-section">
-                    <div class="section-header"><span>Gallery</span></div>
+                    <div class="section-header gallery-toggle" style="cursor:pointer">
+                        <span>Gallery</span>
+                        <span class="material-icons-round gallery-toggle-icon" style="font-size:16px;margin-left:auto">expand_more</span>
+                    </div>
+                    <div class="gallery-body" style="display:none">
                     <div class="gallery-filter">
                         <button class="gallery-filter-btn active" data-filter="all">All</button>
                         <button class="gallery-filter-btn" data-filter="vehicles">Vehicles</button>
@@ -516,6 +520,7 @@
                     </div>
                     <div class="object-grid" id="gallery-grid">
                         <!-- Populated dynamically by app.js -->
+                    </div>
                     </div>
                 </div>
                 <div class="panel-section" id="custom-objects-section">
