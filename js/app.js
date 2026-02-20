@@ -2902,6 +2902,18 @@ class App {
 
         // Viewport click for selection
         document.getElementById('char-designer-canvas').addEventListener('click', (e) => this._charOnViewportClick(e));
+
+        // Humanoid template
+        document.getElementById('char-btn-humanoid').addEventListener('click', () => this._charAddHumanoid());
+
+        // Color presets
+        document.querySelectorAll('.char-color-swatch').forEach(swatch => {
+            swatch.addEventListener('click', () => {
+                const color = swatch.dataset.color;
+                document.getElementById('char-prop-color').value = color;
+                this._charOnPropertyChange();
+            });
+        });
     }
 
     _charOpen() {
@@ -2998,12 +3010,22 @@ class App {
     _charAddPart(shape) {
         const names = { box: 'Box', sphere: 'Sphere', cylinder: 'Cylinder', cone: 'Cone', pyramid: 'Pyramid', dome: 'Dome', wedge: 'Wedge', torus: 'Torus' };
         const count = this._charWorkingParts.filter(p => p.shape === shape).length;
+        // Smart Y: stack on top of existing parts
+        let startY = 0.5;
+        if (this._charWorkingParts.length > 0) {
+            let maxTop = 0;
+            this._charWorkingParts.forEach(p => {
+                const top = (p.offset?.y || 0) + (p.scale?.y || 1) * 0.5;
+                if (top > maxTop) maxTop = top;
+            });
+            startY = maxTop + 0.5;
+        }
         const part = {
             id: 'part_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
             name: (names[shape] || 'Part') + ' ' + (count + 1),
             shape,
             color: '#4c97ff',
-            offset: { x: 0, y: 0.5, z: 0 },
+            offset: { x: 0, y: parseFloat(startY.toFixed(1)), z: 0 },
             scale: { x: 1, y: 1, z: 1 },
             rotation: { x: 0, y: 0, z: 0 }
         };
@@ -3012,6 +3034,21 @@ class App {
         this._charRebuildPreview();
         this._charRenderPartsList();
         this._charShowProperties(part);
+    }
+
+    _charAddHumanoid() {
+        this._charWorkingParts = [
+            { id: 'h_body', name: 'Body', shape: 'cylinder', color: '#4c97ff', offset: { x: 0, y: 0.7, z: 0 }, scale: { x: 0.7, y: 1.2, z: 0.7 }, rotation: { x: 0, y: 0, z: 0 } },
+            { id: 'h_head', name: 'Head', shape: 'sphere', color: '#f5cba7', offset: { x: 0, y: 1.6, z: 0 }, scale: { x: 0.7, y: 0.7, z: 0.7 }, rotation: { x: 0, y: 0, z: 0 } },
+            { id: 'h_larm', name: 'Left Arm', shape: 'box', color: '#4c97ff', offset: { x: -0.55, y: 0.7, z: 0 }, scale: { x: 0.25, y: 0.9, z: 0.25 }, rotation: { x: 0, y: 0, z: 0 } },
+            { id: 'h_rarm', name: 'Right Arm', shape: 'box', color: '#4c97ff', offset: { x: 0.55, y: 0.7, z: 0 }, scale: { x: 0.25, y: 0.9, z: 0.25 }, rotation: { x: 0, y: 0, z: 0 } },
+            { id: 'h_lleg', name: 'Left Leg', shape: 'box', color: '#2c3e50', offset: { x: -0.18, y: -0.2, z: 0 }, scale: { x: 0.3, y: 0.8, z: 0.3 }, rotation: { x: 0, y: 0, z: 0 } },
+            { id: 'h_rleg', name: 'Right Leg', shape: 'box', color: '#2c3e50', offset: { x: 0.18, y: -0.2, z: 0 }, scale: { x: 0.3, y: 0.8, z: 0.3 }, rotation: { x: 0, y: 0, z: 0 } },
+        ];
+        this._charSelectedIndex = 0;
+        this._charRebuildPreview();
+        this._charRenderPartsList();
+        this._charShowProperties(this._charWorkingParts[0]);
     }
 
     _charCreateGeometry(shape) {
@@ -3061,7 +3098,7 @@ class App {
                 color: new THREE.Color(part.color || '#4c97ff'),
                 roughness: 0.5,
                 metalness: 0.1,
-                emissive: isSelected ? new THREE.Color(0x222222) : new THREE.Color(0x000000)
+                emissive: isSelected ? new THREE.Color(part.color || '#4c97ff').multiplyScalar(0.3) : new THREE.Color(0x000000)
             });
             const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(part.offset?.x || 0, part.offset?.y || 0, part.offset?.z || 0);
@@ -3076,6 +3113,20 @@ class App {
             mesh.userData._charPartIndex = i;
             this._charGroup.add(mesh);
             this._charPartMeshes.push(mesh);
+
+            // Add wireframe outline for selected part
+            if (isSelected) {
+                const outline = new THREE.LineSegments(
+                    new THREE.EdgesGeometry(geom),
+                    new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 })
+                );
+                outline.position.copy(mesh.position);
+                outline.scale.copy(mesh.scale);
+                outline.rotation.copy(mesh.rotation);
+                // Scale slightly larger so outline is visible outside the mesh
+                outline.scale.multiplyScalar(1.02);
+                this._charGroup.add(outline);
+            }
         });
     }
 
@@ -3084,7 +3135,14 @@ class App {
         document.getElementById('char-parts-count').textContent = this._charWorkingParts.length;
 
         if (this._charWorkingParts.length === 0) {
-            list.innerHTML = '<div class="char-parts-empty">Click a shape above to add parts</div>';
+            list.innerHTML = `<div class="char-parts-empty">
+                <button class="action-btn small primary" id="char-btn-humanoid-list" style="margin-bottom:6px">
+                    <span class="material-icons-round" style="font-size:14px">person</span> Start with Humanoid
+                </button>
+                <div>or click a shape above</div>
+            </div>`;
+            const hBtn = document.getElementById('char-btn-humanoid-list');
+            if (hBtn) hBtn.addEventListener('click', () => this._charAddHumanoid());
             return;
         }
 

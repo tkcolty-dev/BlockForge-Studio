@@ -513,16 +513,19 @@ class Runtime {
         // Custom character or default
         if (this.characterParts && this.characterParts.length > 0 && showBody) {
             playerMesh = this._buildCustomCharacterMesh(this.characterParts);
-            playerMesh.position.copy(spawnPos);
-            // Compute bounding box height for collision
+            // Compute bounding box in LOCAL space (before setting world position)
             const box = new THREE.Box3().setFromObject(playerMesh);
             playerHeight = box.max.y - box.min.y;
             if (playerHeight < 0.5) playerHeight = 1.6;
-            // Center the mesh vertically so bottom sits at spawn
+            // Center children so group origin = geometric center
             const center = box.getCenter(new THREE.Vector3());
             playerMesh.children.forEach(child => {
-                child.position.y -= center.y - playerHeight / 2;
+                child.position.x -= center.x;
+                child.position.y -= center.y;
+                child.position.z -= center.z;
             });
+            // Position so center is at spawn height
+            playerMesh.position.copy(spawnPos);
         } else if (this.characterParts && this.characterParts.length > 0 && !showBody) {
             // First-person: invisible collision body
             const playerGeom = new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8);

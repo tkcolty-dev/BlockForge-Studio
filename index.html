@@ -1647,7 +1647,12 @@
                     <div class="char-section char-parts-section">
                         <div class="char-section-title">Parts <span class="char-parts-count" id="char-parts-count">0</span></div>
                         <div class="char-parts-list" id="char-parts-list">
-                            <div class="char-parts-empty">Click a shape above to add parts</div>
+                            <div class="char-parts-empty">
+                                <button class="action-btn small primary" id="char-btn-humanoid" style="margin-bottom:6px">
+                                    <span class="material-icons-round" style="font-size:14px">person</span> Start with Humanoid
+                                </button>
+                                <div>or click a shape above</div>
+                            </div>
                         </div>
                     </div>
                     <div class="char-section" id="char-properties-panel" style="display:none">
@@ -1667,25 +1672,43 @@
                                 <option value="torus">Torus</option>
                             </select>
                             <label>Color</label>
-                            <input type="color" id="char-prop-color" class="char-prop-input" value="#4c97ff">
-                            <label>Pos X</label>
-                            <input type="number" id="char-prop-px" class="char-prop-input" step="0.1" value="0">
-                            <label>Pos Y</label>
-                            <input type="number" id="char-prop-py" class="char-prop-input" step="0.1" value="0">
-                            <label>Pos Z</label>
-                            <input type="number" id="char-prop-pz" class="char-prop-input" step="0.1" value="0">
-                            <label>Scale X</label>
-                            <input type="number" id="char-prop-sx" class="char-prop-input" step="0.1" min="0.1" value="1">
-                            <label>Scale Y</label>
-                            <input type="number" id="char-prop-sy" class="char-prop-input" step="0.1" min="0.1" value="1">
-                            <label>Scale Z</label>
-                            <input type="number" id="char-prop-sz" class="char-prop-input" step="0.1" min="0.1" value="1">
-                            <label>Rot X</label>
-                            <input type="number" id="char-prop-rx" class="char-prop-input" step="5" value="0">
-                            <label>Rot Y</label>
-                            <input type="number" id="char-prop-ry" class="char-prop-input" step="5" value="0">
-                            <label>Rot Z</label>
-                            <input type="number" id="char-prop-rz" class="char-prop-input" step="5" value="0">
+                            <div class="char-color-row">
+                                <input type="color" id="char-prop-color" class="char-prop-input" value="#4c97ff">
+                                <div class="char-color-presets" id="char-color-presets">
+                                    <span class="char-color-swatch" data-color="#4c97ff" style="background:#4c97ff" title="Blue"></span>
+                                    <span class="char-color-swatch" data-color="#e74c3c" style="background:#e74c3c" title="Red"></span>
+                                    <span class="char-color-swatch" data-color="#2ecc71" style="background:#2ecc71" title="Green"></span>
+                                    <span class="char-color-swatch" data-color="#f39c12" style="background:#f39c12" title="Orange"></span>
+                                    <span class="char-color-swatch" data-color="#9b59b6" style="background:#9b59b6" title="Purple"></span>
+                                    <span class="char-color-swatch" data-color="#f5cba7" style="background:#f5cba7" title="Skin"></span>
+                                    <span class="char-color-swatch" data-color="#ecf0f1" style="background:#ecf0f1" title="White"></span>
+                                    <span class="char-color-swatch" data-color="#2c3e50" style="background:#2c3e50" title="Dark"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="char-xyz-group">
+                            <label>Position</label>
+                            <div class="char-xyz-row">
+                                <div class="char-xyz-field"><span class="char-xyz-label" style="color:#e74c3c">X</span><input type="number" id="char-prop-px" class="char-prop-input" step="0.1" value="0"></div>
+                                <div class="char-xyz-field"><span class="char-xyz-label" style="color:#2ecc71">Y</span><input type="number" id="char-prop-py" class="char-prop-input" step="0.1" value="0"></div>
+                                <div class="char-xyz-field"><span class="char-xyz-label" style="color:#4c97ff">Z</span><input type="number" id="char-prop-pz" class="char-prop-input" step="0.1" value="0"></div>
+                            </div>
+                        </div>
+                        <div class="char-xyz-group">
+                            <label>Scale</label>
+                            <div class="char-xyz-row">
+                                <div class="char-xyz-field"><span class="char-xyz-label" style="color:#e74c3c">X</span><input type="number" id="char-prop-sx" class="char-prop-input" step="0.1" min="0.1" value="1"></div>
+                                <div class="char-xyz-field"><span class="char-xyz-label" style="color:#2ecc71">Y</span><input type="number" id="char-prop-sy" class="char-prop-input" step="0.1" min="0.1" value="1"></div>
+                                <div class="char-xyz-field"><span class="char-xyz-label" style="color:#4c97ff">Z</span><input type="number" id="char-prop-sz" class="char-prop-input" step="0.1" min="0.1" value="1"></div>
+                            </div>
+                        </div>
+                        <div class="char-xyz-group">
+                            <label>Rotation</label>
+                            <div class="char-xyz-row">
+                                <div class="char-xyz-field"><span class="char-xyz-label" style="color:#e74c3c">X</span><input type="number" id="char-prop-rx" class="char-prop-input" step="5" value="0"></div>
+                                <div class="char-xyz-field"><span class="char-xyz-label" style="color:#2ecc71">Y</span><input type="number" id="char-prop-ry" class="char-prop-input" step="5" value="0"></div>
+                                <div class="char-xyz-field"><span class="char-xyz-label" style="color:#4c97ff">Z</span><input type="number" id="char-prop-rz" class="char-prop-input" step="5" value="0"></div>
+                            </div>
                         </div>
                         <div class="char-prop-actions">
                             <button class="action-btn small" id="char-btn-duplicate">
