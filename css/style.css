@@ -1463,17 +1463,38 @@ input[type="checkbox"] {
 
 .ai-script-input-wrap input {
     width: 100%;
+    position: relative;
+    z-index: 1;
+    background: var(--bg-secondary);
+}
+
+.ai-script-ghost {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: var(--text-dim);
+    opacity: 0.4;
+    white-space: nowrap;
+    overflow: hidden;
+    border: 1px solid transparent;
+    z-index: 0;
 }
 
 .ai-script-commands {
     position: absolute;
-    bottom: calc(100% + 6px);
+    top: calc(100% + 6px);
     left: 0;
     right: 0;
     background: var(--bg-dark);
     border: 1px solid var(--border);
     border-radius: 8px;
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
     overflow: hidden;
     z-index: 100;
     max-height: 280px;

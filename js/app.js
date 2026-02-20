@@ -6950,12 +6950,14 @@ class App {
         const input = document.getElementById('ai-script-input');
         const btn = document.getElementById('ai-script-btn');
         const cmdList = document.getElementById('ai-script-commands');
+        const ghost = document.getElementById('ai-script-ghost');
         const helpBtn = document.getElementById('ai-script-help-btn');
         const helpPanel = document.getElementById('ai-script-help');
 
         helpBtn.addEventListener('click', () => helpPanel.classList.toggle('hidden'));
         document.getElementById('ai-script-help-close').addEventListener('click', () => helpPanel.classList.add('hidden'));
         this._aiScriptHistory = [];
+        this._aiGhostCmd = null;
         this._aiCmdIdx = -1;
 
         this._aiScriptCommands = [
@@ -6990,8 +6992,26 @@ class App {
             });
         };
 
+        const updateGhost = () => {
+            const val = input.value;
+            if (val.startsWith('/') && !val.includes(' ') && val.length > 1) {
+                const match = this._aiScriptCommands.find(c => c.cmd.startsWith(val) && c.cmd !== val);
+                if (match) {
+                    ghost.textContent = match.cmd;
+                    this._aiGhostCmd = match.cmd;
+                    // Make input background transparent so ghost shows through
+                    input.style.background = 'transparent';
+                    return;
+                }
+            }
+            ghost.textContent = '';
+            this._aiGhostCmd = null;
+            input.style.background = '';
+        };
+
         input.addEventListener('input', () => {
             const val = input.value;
+            updateGhost();
             if (val.startsWith('/')) {
                 this._aiCmdIdx = -1;
                 renderCmdList(val.split(' ')[0]);
@@ -7001,17 +7021,39 @@ class App {
         });
 
         input.addEventListener('blur', () => {
-            setTimeout(() => { cmdList.classList.add('hidden'); this._aiCmdIdx = -1; }, 150);
+            setTimeout(() => {
+                cmdList.classList.add('hidden');
+                this._aiCmdIdx = -1;
+                ghost.textContent = '';
+                this._aiGhostCmd = null;
+                input.style.background = '';
+            }, 150);
         });
 
         input.addEventListener('focus', () => {
+            updateGhost();
             if (input.value.startsWith('/')) renderCmdList(input.value.split(' ')[0]);
         });
+
+        const acceptGhost = () => {
+            if (this._aiGhostCmd) {
+                input.value = this._aiGhostCmd + ' ';
+                ghost.textContent = '';
+                this._aiGhostCmd = null;
+                input.style.background = '';
+                cmdList.classList.add('hidden');
+                return true;
+            }
+            return false;
+        };
 
         const submit = () => {
             const raw = input.value.trim();
             if (!raw) return;
             input.value = '';
+            ghost.textContent = '';
+            this._aiGhostCmd = null;
+            input.style.background = '';
             cmdList.classList.add('hidden');
             this._aiCmdIdx = -1;
 
@@ -7024,6 +7066,13 @@ class App {
 
         btn.addEventListener('click', submit);
         input.addEventListener('keydown', (e) => {
+            // Tab or Right arrow accepts ghost text
+            if ((e.key === 'Tab' || (e.key === 'ArrowRight' && input.selectionStart === input.value.length)) && this._aiGhostCmd) {
+                e.preventDefault();
+                acceptGhost();
+                return;
+            }
+
             // Arrow navigation for command list
             if (!cmdList.classList.contains('hidden')) {
                 const items = cmdList.querySelectorAll('.ai-cmd-item');
@@ -7039,10 +7088,13 @@ class App {
                     items.forEach((el, i) => el.classList.toggle('active', i === this._aiCmdIdx));
                     return;
                 }
-                if ((e.key === 'Tab' || e.key === 'Enter') && this._aiCmdIdx >= 0 && items[this._aiCmdIdx]) {
+                if (e.key === 'Enter' && this._aiCmdIdx >= 0 && items[this._aiCmdIdx]) {
                     e.preventDefault();
                     const cmd = items[this._aiCmdIdx].dataset.cmd;
                     input.value = cmd + ' ';
+                    ghost.textContent = '';
+                    this._aiGhostCmd = null;
+                    input.style.background = '';
                     cmdList.classList.add('hidden');
                     this._aiCmdIdx = -1;
                     return;
@@ -7050,6 +7102,9 @@ class App {
                 if (e.key === 'Escape') {
                     cmdList.classList.add('hidden');
                     this._aiCmdIdx = -1;
+                    ghost.textContent = '';
+                    this._aiGhostCmd = null;
+                    input.style.background = '';
                     return;
                 }
             }
