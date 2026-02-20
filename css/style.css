@@ -6204,3 +6204,286 @@ kbd {
     border-top: 1px solid var(--border);
     flex-shrink: 0;
 }
+
+/* ===== Screenshot / Viewport Info Button ===== */
+.viewport-info-btn {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.7);
+    border-radius: 4px;
+    padding: 2px 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    font-size: 0;
+    transition: background 0.15s, color 0.15s;
+}
+.viewport-info-btn:hover {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+}
+.viewport-info-btn .material-icons-round {
+    font-size: 16px;
+}
+
+.screenshot-flash {
+    position: fixed;
+    inset: 0;
+    background: white;
+    z-index: 99999;
+    pointer-events: none;
+    animation: screenshotFlash 0.3s ease-out forwards;
+}
+@keyframes screenshotFlash {
+    0% { opacity: 0.8; }
+    100% { opacity: 0; }
+}
+
+.publish-thumbnail-preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+}
+.publish-thumbnail-preview img {
+    width: 160px;
+    height: 90px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    object-fit: cover;
+    background: var(--surface);
+}
+.publish-thumbnail-preview .action-btn {
+    flex-shrink: 0;
+}
+
+/* ===== Loading Screen (Settings Preview) ===== */
+.loading-preview-thumb {
+    width: 100%;
+    height: 80px;
+    background: #1a1a2e;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+}
+.loading-preview-thumb .lp-title {
+    color: #fff;
+    font-weight: 700;
+    font-size: 12px;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+.loading-preview-thumb .lp-subtitle {
+    color: rgba(255,255,255,0.6);
+    font-size: 9px;
+    margin-top: 2px;
+}
+.loading-preview-thumb .lp-bar {
+    width: 60%;
+    height: 4px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+    margin-top: 6px;
+    overflow: hidden;
+}
+.loading-preview-thumb .lp-bar-fill {
+    width: 65%;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+}
+
+/* ===== Game Loading Screen (Fullscreen Overlay) ===== */
+#game-loading-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.5s ease;
+}
+#game-loading-screen.fade-out {
+    opacity: 0;
+}
+.gls-title {
+    color: #fff;
+    font-size: 36px;
+    font-weight: 700;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.5);
+    letter-spacing: 1px;
+}
+.gls-subtitle {
+    color: rgba(255,255,255,0.65);
+    font-size: 16px;
+    margin-top: 8px;
+}
+.gls-progress {
+    width: 240px;
+    height: 6px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 3px;
+    margin-top: 32px;
+    overflow: hidden;
+}
+.gls-progress-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #93c5fd);
+    border-radius: 3px;
+    transition: width 0.1s linear;
+}
+
+/* ===== Sound Library ===== */
+.sound-lib-upload {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.sound-count {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+.sound-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+.sound-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+}
+.sound-item .sound-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.sound-item .sound-name:hover {
+    color: var(--accent);
+}
+.sound-item .sound-duration {
+    font-size: 11px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+}
+.sound-item-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+}
+.sound-item-btn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+.sound-item-btn.danger:hover { color: #e74c3c; }
+.sound-item-btn .material-icons-round { font-size: 16px; }
+
+/* ===== Animation Tab ===== */
+.anim-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+.anim-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.anim-item:hover { background: rgba(255,255,255,0.04); }
+.anim-item.selected {
+    border-color: var(--accent);
+    background: rgba(76,151,255,0.08);
+}
+.anim-item .anim-item-name { flex: 1; }
+.anim-item .anim-item-info {
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+.section-action-btn {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+}
+.section-action-btn .material-icons-round { font-size: 18px; }
+.section-action-btn:hover { color: #fff; }
+
+.keyframe-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+.keyframe-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+}
+.keyframe-item .kf-time {
+    font-weight: 600;
+    color: var(--accent);
+    min-width: 36px;
+}
+.keyframe-item .kf-summary {
+    flex: 1;
+    color: var(--text-dim);
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.keyframe-item .kf-actions {
+    display: flex;
+    gap: 2px;
+}
+.keyframe-item .kf-actions button {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 1px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+}
+.keyframe-item .kf-actions button:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+.keyframe-item .kf-actions button.danger:hover { color: #e74c3c; }
+.keyframe-item .kf-actions .material-icons-round { font-size: 14px; }

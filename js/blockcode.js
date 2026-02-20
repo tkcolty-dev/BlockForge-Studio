@@ -172,6 +172,12 @@ class BlockCode {
             'sound_stop_all': { category: 'sound', type: 'command', label: 'Stop all sounds', code: 'stopAllSounds' },
             'sound_play_note': { category: 'sound', type: 'command', label: 'Play note {note} for {dur}s', inputs: { note: { type: 'select', options: ['C4','D4','E4','F4','G4','A4','B4','C5'], default: 'C4' }, dur: { type: 'number', default: 0.3 } }, code: 'playNote' },
             'sound_drum': { category: 'sound', type: 'command', label: 'Play drum {type}', inputs: { type: { type: 'select', options: ['kick','snare','hihat','clap'], default: 'kick' } }, code: 'playDrum' },
+            'sound_play_custom': { category: 'sound', type: 'command', label: 'Play custom sound {sound}', inputs: { sound: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'playCustomSound' },
+
+            // === Animation ===
+            'animation_play': { category: 'motion', type: 'command', label: 'Play animation {anim}', inputs: { anim: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'playAnimation' },
+            'animation_play_loop': { category: 'motion', type: 'command', label: 'Play animation {anim} loop', inputs: { anim: { type: 'select', options: ['(none)'], default: '(none)' } }, code: 'playAnimationLoop' },
+            'animation_stop': { category: 'motion', type: 'command', label: 'Stop animation', code: 'stopAnimation' },
 
             // === New Variables ===
             'var_show_message': { category: 'variables', type: 'command', label: 'Show message {text} for {time}s', inputs: { text: { type: 'text', default: 'You win!' }, time: { type: 'number', default: 3 } }, code: 'showMessage' },
@@ -471,6 +477,33 @@ class BlockCode {
         });
         // Re-render drawer if currently showing UI category
         if (this.activeCategory === 'ui') {
+            this.renderDrawer();
+        }
+    }
+
+    _updateCustomSoundDropdowns(names) {
+        const opts = names.length > 0 ? [...names] : ['(none)'];
+        const block = this.blocks['sound_play_custom'];
+        if (block && block.inputs && block.inputs.sound) {
+            block.inputs.sound.options = opts;
+            block.inputs.sound.default = opts[0];
+        }
+        if (this.activeCategory === 'sound') {
+            this.renderDrawer();
+        }
+    }
+
+    _updateAnimationDropdowns(names) {
+        const opts = (names && names.length > 0) ? [...names] : ['(none)'];
+        const animBlockIds = ['animation_play', 'animation_play_loop'];
+        animBlockIds.forEach(id => {
+            const block = this.blocks[id];
+            if (block && block.inputs && block.inputs.anim) {
+                block.inputs.anim.options = opts;
+                block.inputs.anim.default = opts[0];
+            }
+        });
+        if (this.activeCategory === 'motion') {
             this.renderDrawer();
         }
     }

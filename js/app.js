@@ -37,6 +37,10 @@ class App {
         this.initCollab();
         this.initAIAssistant();
         this.initCharacterDesigner();
+        this.initScreenshot();
+        this.initSoundLibrary();
+        this.initAnimateTab();
+        this.initLoadingScreen();
 
         this.VERSION = '1.0.0';
         this.currentProjectId = null;
@@ -44,6 +48,13 @@ class App {
         this.hasUnsavedChanges = false;
         this.lastSaveTime = null;
         this.projectSortBy = 'date';
+
+        // Custom sounds
+        this.customSounds = [];
+
+        // Screenshot/thumbnail state
+        this._latestScreenshot = null;
+        this._publishThumbnail = null;
 
         // Collab state
         this._collabWs = null;
@@ -245,9 +256,19 @@ class App {
     }
 
     _doStartPlay() {
+        const ls = this.gameSettings.loadingScreen;
+        if (ls && ls.title && ls.duration > 0) {
+            this._showGameLoadingScreen(ls, () => this._startRuntime());
+        } else {
+            this._startRuntime();
+        }
+    }
+
+    _startRuntime() {
         this.runtime.playerColors = this.gameSettings.playerColors;
         this.runtime.characterParts = this.gameSettings.characterParts || null;
         this.runtime._uiScreens = this.uiScreens;
+        this.runtime._customSounds = this.customSounds;
         this.runtime.start(this.gameSettings);
     }
 
@@ -260,6 +281,10 @@ class App {
     }
 
     _doStopPlay() {
+        // Clean up loading screen if still showing
+        const gls = document.getElementById('game-loading-screen');
+        if (gls) { gls.classList.add('hidden'); gls.innerHTML = ''; }
+        if (this._loadingScreenTimer) { clearTimeout(this._loadingScreenTimer); this._loadingScreenTimer = null; }
         this.runtime.stop();
     }
 
@@ -549,10 +574,13 @@ class App {
         document.getElementById('properties-content').classList.remove('hidden');
         document.getElementById('material-no-selection').classList.add('hidden');
         document.getElementById('material-content').classList.remove('hidden');
+        document.getElementById('animate-no-selection').classList.add('hidden');
+        document.getElementById('animate-content').classList.remove('hidden');
 
         this.updateProperties(obj);
         this.updateNpcColors(obj);
         this.refreshExplorer();
+        this._refreshAnimateTab(obj);
 
         // Auto-set block code target so drag-and-drop works immediately
         this.blockCode.setTarget(obj);
@@ -565,6 +593,8 @@ class App {
         document.getElementById('material-no-selection').classList.remove('hidden');
         document.getElementById('material-content').classList.add('hidden');
         document.getElementById('npc-colors-section').classList.add('hidden');
+        document.getElementById('animate-no-selection').classList.remove('hidden');
+        document.getElementById('animate-content').classList.add('hidden');
 
         this.blockCode.setTarget(null);
         this.refreshExplorer();
@@ -1405,6 +1435,7 @@ class App {
             customMessages: this.blockCode.customMessages,
             customObjects: this.customObjects,
             uiScreens: this.uiScreens,
+            sounds: this.customSounds,
             environment: {
                 skyColor: document.getElementById('sky-color').value,
                 skybox: document.getElementById('skybox-type').value,
@@ -1420,7 +1451,8 @@ class App {
                 jumpForce: this.gameSettings.jumpForce,
                 sensitivity: this.gameSettings.sensitivity,
                 keyBindings: this.gameSettings.keyBindings,
-                characterParts: this.gameSettings.characterParts
+                characterParts: this.gameSettings.characterParts,
+                loadingScreen: this.gameSettings.loadingScreen
             }
         };
     }
@@ -1492,7 +1524,20 @@ class App {
             if (data.environment.sensitivity) this.gameSettings.sensitivity = data.environment.sensitivity;
             if (data.environment.keyBindings) this.gameSettings.keyBindings = data.environment.keyBindings;
             if (data.environment.characterParts) this.gameSettings.characterParts = data.environment.characterParts;
+            if (data.environment.loadingScreen) {
+                this.gameSettings.loadingScreen = data.environment.loadingScreen;
+                this._applyLoadingScreenSettings(data.environment.loadingScreen);
+            }
         }
+
+        if (data.sounds) {
+            this.customSounds = data.sounds;
+            this._renderSoundList();
+            this._updateCustomSoundDropdowns();
+        }
+
+        // Update animation dropdowns from scene objects
+        this._updateAnimationDropdowns();
 
         this.refreshExplorer();
         this.updateObjectCount();
@@ -5322,6 +5367,13 @@ class App {
             unpublishBtn.classList.add('hidden');
         }
 
+        // Show thumbnail preview
+        this._publishThumbnail = this.captureThumbnail();
+        const thumbImg = document.getElementById('publish-thumbnail-img');
+        if (thumbImg && this._publishThumbnail) {
+            thumbImg.src = this._publishThumbnail;
+        }
+
         modal.classList.remove('hidden');
     }
 
@@ -5347,7 +5399,7 @@ class App {
                     name: title,
                     description,
                     tags,
-                    thumbnail: null,
+                    thumbnail: this._publishThumbnail || this.captureThumbnail(),
                     projectData
                 })
             });
@@ -6886,6 +6938,530 @@ class App {
             input.disabled = false;
             input.focus();
         }
+    }
+
+    // ===== Screenshot =====
+
+    initScreenshot() {
+        document.getElementById('btn-screenshot').addEventListener('click', () => {
+            this._takeScreenshot();
+        });
+
+        // Retake button in publish modal
+        document.getElementById('publish-retake-thumbnail').addEventListener('click', () => {
+            this._publishThumbnail = this.captureThumbnail();
+            const img = document.getElementById('publish-thumbnail-img');
+            if (img && this._publishThumbnail) img.src = this._publishThumbnail;
+        });
+    }
+
+    _takeScreenshot() {
+        const dataUrl = this.captureThumbnail();
+        if (!dataUrl) return;
+        this._latestScreenshot = dataUrl;
+        this._publishThumbnail = dataUrl;
+
+        // Update project index thumbnail
+        if (this.currentProjectId) {
+            const index = this.getProjectIndex();
+            if (index[this.currentProjectId]) {
+                index[this.currentProjectId].thumbnail = dataUrl;
+                this.saveProjectIndex(index);
+            }
+        }
+
+        // Flash effect
+        const flash = document.getElementById('screenshot-flash');
+        flash.classList.remove('hidden');
+        setTimeout(() => flash.classList.add('hidden'), 350);
+
+        this.toast('Screenshot captured', 'success');
+    }
+
+    // ===== Sound Library =====
+
+    initSoundLibrary() {
+        const modal = document.getElementById('sound-library-modal');
+        document.getElementById('btn-sound-library').addEventListener('click', () => {
+            this._renderSoundList();
+            modal.classList.remove('hidden');
+        });
+        document.getElementById('sound-library-close').addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.add('hidden');
+        });
+
+        const fileInput = document.getElementById('sound-file-input');
+        document.getElementById('sound-upload-btn').addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            fileInput.value = '';
+
+            if (this.customSounds.length >= 10) {
+                this.toast('Maximum 10 sounds allowed', 'error');
+                return;
+            }
+            if (file.size > 500 * 1024) {
+                this.toast('File too large (max 500KB)', 'error');
+                return;
+            }
+            if (!file.type.match(/^audio\/(mp3|mpeg|wav|ogg)$/)) {
+                this.toast('Unsupported format (use mp3/wav/ogg)', 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                const dataUrl = reader.result;
+                // Get duration
+                const audio = new Audio(dataUrl);
+                audio.addEventListener('loadedmetadata', () => {
+                    const snd = {
+                        id: 's_' + Date.now().toString(36),
+                        name: file.name.replace(/\.[^.]+$/, ''),
+                        dataUrl,
+                        duration: Math.round(audio.duration * 10) / 10
+                    };
+                    this.customSounds.push(snd);
+                    this._renderSoundList();
+                    this._updateCustomSoundDropdowns();
+                    this.toast('Sound added: ' + snd.name, 'success');
+                });
+                audio.addEventListener('error', () => {
+                    this.toast('Could not read audio file', 'error');
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Stop keyboard propagation in modal
+        modal.querySelectorAll('input').forEach(el => {
+            el.addEventListener('keydown', (e) => e.stopPropagation());
+        });
+    }
+
+    _renderSoundList() {
+        const list = document.getElementById('sound-list');
+        const countEl = document.getElementById('sound-count');
+        list.innerHTML = '';
+        countEl.textContent = this.customSounds.length + ' / 10';
+
+        this.customSounds.forEach((snd, i) => {
+            const el = document.createElement('div');
+            el.className = 'sound-item';
+            el.innerHTML = `
+                <span class="sound-name" title="Click to rename">${snd.name}</span>
+                <span class="sound-duration">${snd.duration}s</span>
+                <button class="sound-item-btn" data-action="play" title="Preview"><span class="material-icons-round">play_arrow</span></button>
+                <button class="sound-item-btn danger" data-action="delete" title="Delete"><span class="material-icons-round">close</span></button>
+            `;
+            el.querySelector('.sound-name').addEventListener('click', () => {
+                const newName = prompt('Rename sound:', snd.name);
+                if (newName && newName.trim()) {
+                    snd.name = newName.trim();
+                    this._renderSoundList();
+                    this._updateCustomSoundDropdowns();
+                }
+            });
+            el.querySelector('[data-action="play"]').addEventListener('click', () => {
+                const a = new Audio(snd.dataUrl);
+                a.volume = 0.5;
+                a.play();
+            });
+            el.querySelector('[data-action="delete"]').addEventListener('click', () => {
+                this.customSounds.splice(i, 1);
+                this._renderSoundList();
+                this._updateCustomSoundDropdowns();
+            });
+            list.appendChild(el);
+        });
+    }
+
+    _updateCustomSoundDropdowns() {
+        const names = this.customSounds.map(s => s.name);
+        this.blockCode._updateCustomSoundDropdowns(names);
+    }
+
+    // ===== Loading Screen =====
+
+    initLoadingScreen() {
+        this.gameSettings.loadingScreen = { title: '', subtitle: '', bgColor: '#1a1a2e', bgImage: null, duration: 2 };
+
+        const titleInput = document.getElementById('setting-loading-title');
+        const subtitleInput = document.getElementById('setting-loading-subtitle');
+        const bgColorInput = document.getElementById('setting-loading-bg');
+        const durationInput = document.getElementById('setting-loading-duration');
+        const durationVal = document.getElementById('setting-loading-duration-val');
+
+        const update = () => {
+            this.gameSettings.loadingScreen.title = titleInput.value;
+            this.gameSettings.loadingScreen.subtitle = subtitleInput.value;
+            this.gameSettings.loadingScreen.bgColor = bgColorInput.value;
+            this.gameSettings.loadingScreen.duration = parseFloat(durationInput.value);
+            durationVal.textContent = durationInput.value + 's';
+            this._updateLoadingPreview();
+        };
+
+        titleInput.addEventListener('input', update);
+        subtitleInput.addEventListener('input', update);
+        bgColorInput.addEventListener('input', update);
+        durationInput.addEventListener('input', update);
+
+        // Stop keyboard propagation
+        [titleInput, subtitleInput].forEach(el => {
+            el.addEventListener('keydown', (e) => e.stopPropagation());
+        });
+
+        // BG image upload
+        const bgFileInput = document.getElementById('loading-bg-file');
+        document.getElementById('setting-loading-bg-upload').addEventListener('click', () => bgFileInput.click());
+        bgFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            bgFileInput.value = '';
+            if (file.size > 500 * 1024) { this.toast('Image too large (max 500KB)', 'error'); return; }
+            const reader = new FileReader();
+            reader.onload = () => {
+                this.gameSettings.loadingScreen.bgImage = reader.result;
+                this._updateLoadingPreview();
+            };
+            reader.readAsDataURL(file);
+        });
+        document.getElementById('setting-loading-bg-clear').addEventListener('click', () => {
+            this.gameSettings.loadingScreen.bgImage = null;
+            this._updateLoadingPreview();
+        });
+    }
+
+    _applyLoadingScreenSettings(ls) {
+        document.getElementById('setting-loading-title').value = ls.title || '';
+        document.getElementById('setting-loading-subtitle').value = ls.subtitle || '';
+        document.getElementById('setting-loading-bg').value = ls.bgColor || '#1a1a2e';
+        document.getElementById('setting-loading-duration').value = ls.duration || 2;
+        document.getElementById('setting-loading-duration-val').textContent = (ls.duration || 2) + 's';
+        this._updateLoadingPreview();
+    }
+
+    _updateLoadingPreview() {
+        const ls = this.gameSettings.loadingScreen;
+        const thumb = document.getElementById('loading-preview-thumb');
+        if (!ls.title) {
+            thumb.style.background = '#1a1a2e';
+            thumb.style.backgroundImage = '';
+            thumb.innerHTML = '<span style="font-size:10px;color:rgba(255,255,255,0.5)">No loading screen</span>';
+            return;
+        }
+        thumb.style.background = ls.bgColor;
+        if (ls.bgImage) {
+            thumb.style.backgroundImage = `url(${ls.bgImage})`;
+            thumb.style.backgroundSize = 'cover';
+            thumb.style.backgroundPosition = 'center';
+        } else {
+            thumb.style.backgroundImage = '';
+        }
+        thumb.innerHTML = `
+            <span class="lp-title">${ls.title}</span>
+            ${ls.subtitle ? `<span class="lp-subtitle">${ls.subtitle}</span>` : ''}
+            <div class="lp-bar"><div class="lp-bar-fill"></div></div>
+        `;
+    }
+
+    _showGameLoadingScreen(ls, onComplete) {
+        const overlay = document.getElementById('game-loading-screen');
+        overlay.classList.remove('hidden', 'fade-out');
+        overlay.style.background = ls.bgColor;
+        if (ls.bgImage) {
+            overlay.style.backgroundImage = `url(${ls.bgImage})`;
+            overlay.style.backgroundSize = 'cover';
+            overlay.style.backgroundPosition = 'center';
+        } else {
+            overlay.style.backgroundImage = '';
+        }
+        overlay.innerHTML = `
+            <span class="gls-title">${ls.title}</span>
+            ${ls.subtitle ? `<span class="gls-subtitle">${ls.subtitle}</span>` : ''}
+            <div class="gls-progress"><div class="gls-progress-fill" id="gls-progress-fill"></div></div>
+        `;
+
+        const duration = (ls.duration || 2) * 1000;
+        const startTime = performance.now();
+        const fill = document.getElementById('gls-progress-fill');
+
+        const animateProgress = () => {
+            const elapsed = performance.now() - startTime;
+            const pct = Math.min(elapsed / duration, 1);
+            if (fill) fill.style.width = (pct * 100) + '%';
+            if (pct < 1) {
+                requestAnimationFrame(animateProgress);
+            } else {
+                overlay.classList.add('fade-out');
+                this._loadingScreenTimer = setTimeout(() => {
+                    overlay.classList.add('hidden');
+                    overlay.innerHTML = '';
+                    this._loadingScreenTimer = null;
+                }, 500);
+                onComplete();
+            }
+        };
+        requestAnimationFrame(animateProgress);
+    }
+
+    // ===== Animate Tab =====
+
+    initAnimateTab() {
+        this._selectedAnimName = null;
+        this._animPreviewRAF = null;
+
+        document.getElementById('btn-add-animation').addEventListener('click', () => {
+            const obj = this.scene3d.selectedObject;
+            if (!obj) return;
+            if (!obj.userData.animations) obj.userData.animations = {};
+            let name = 'anim1';
+            let n = 1;
+            while (obj.userData.animations[name]) { n++; name = 'anim' + n; }
+            obj.userData.animations[name] = { loop: false, keyframes: [] };
+            this._renderAnimList(obj);
+            this._selectAnim(obj, name);
+            this._updateAnimationDropdowns();
+        });
+
+        document.getElementById('btn-capture-keyframe').addEventListener('click', () => {
+            const obj = this.scene3d.selectedObject;
+            if (!obj || !this._selectedAnimName) return;
+            const anim = obj.userData.animations[this._selectedAnimName];
+            if (!anim) return;
+            const lastTime = anim.keyframes.length > 0 ? anim.keyframes[anim.keyframes.length - 1].time : -0.5;
+            const kf = {
+                time: Math.round((lastTime + 0.5) * 100) / 100,
+                position: { x: +obj.position.x.toFixed(3), y: +obj.position.y.toFixed(3), z: +obj.position.z.toFixed(3) },
+                rotation: {
+                    x: +(THREE.MathUtils.radToDeg(obj.rotation.x)).toFixed(1),
+                    y: +(THREE.MathUtils.radToDeg(obj.rotation.y)).toFixed(1),
+                    z: +(THREE.MathUtils.radToDeg(obj.rotation.z)).toFixed(1)
+                },
+                scale: { x: +obj.scale.x.toFixed(3), y: +obj.scale.y.toFixed(3), z: +obj.scale.z.toFixed(3) }
+            };
+            anim.keyframes.push(kf);
+            this._renderKeyframeList(obj, this._selectedAnimName);
+        });
+
+        document.getElementById('anim-name').addEventListener('change', (e) => {
+            const obj = this.scene3d.selectedObject;
+            if (!obj || !this._selectedAnimName) return;
+            const newName = e.target.value.trim().replace(/\s+/g, '_') || this._selectedAnimName;
+            if (newName !== this._selectedAnimName && !obj.userData.animations[newName]) {
+                obj.userData.animations[newName] = obj.userData.animations[this._selectedAnimName];
+                delete obj.userData.animations[this._selectedAnimName];
+                this._selectedAnimName = newName;
+                this._renderAnimList(obj);
+                this._updateAnimationDropdowns();
+            }
+        });
+        document.getElementById('anim-name').addEventListener('keydown', (e) => e.stopPropagation());
+
+        document.getElementById('anim-loop').addEventListener('change', (e) => {
+            const obj = this.scene3d.selectedObject;
+            if (!obj || !this._selectedAnimName) return;
+            const anim = obj.userData.animations[this._selectedAnimName];
+            if (anim) anim.loop = e.target.checked;
+        });
+
+        document.getElementById('btn-preview-anim').addEventListener('click', () => {
+            this._previewAnimation();
+        });
+
+        document.getElementById('btn-delete-anim').addEventListener('click', () => {
+            const obj = this.scene3d.selectedObject;
+            if (!obj || !this._selectedAnimName) return;
+            delete obj.userData.animations[this._selectedAnimName];
+            this._selectedAnimName = null;
+            document.getElementById('anim-editor').classList.add('hidden');
+            this._renderAnimList(obj);
+            this._updateAnimationDropdowns();
+        });
+    }
+
+    _refreshAnimateTab(obj) {
+        if (!obj) return;
+        if (!obj.userData.animations) obj.userData.animations = {};
+        this._selectedAnimName = null;
+        document.getElementById('anim-editor').classList.add('hidden');
+        this._renderAnimList(obj);
+    }
+
+    _renderAnimList(obj) {
+        const list = document.getElementById('anim-list');
+        list.innerHTML = '';
+        if (!obj.userData.animations) return;
+        const names = Object.keys(obj.userData.animations);
+        if (names.length === 0) {
+            list.innerHTML = '<div style="font-size:11px;color:var(--text-dim);padding:8px">No animations yet</div>';
+            return;
+        }
+        names.forEach(name => {
+            const anim = obj.userData.animations[name];
+            const el = document.createElement('div');
+            el.className = 'anim-item' + (name === this._selectedAnimName ? ' selected' : '');
+            el.innerHTML = `
+                <span class="anim-item-name">${name}</span>
+                <span class="anim-item-info">${anim.keyframes.length} kf${anim.loop ? ' · loop' : ''}</span>
+            `;
+            el.addEventListener('click', () => this._selectAnim(obj, name));
+            list.appendChild(el);
+        });
+    }
+
+    _selectAnim(obj, name) {
+        this._selectedAnimName = name;
+        const anim = obj.userData.animations[name];
+        if (!anim) return;
+        document.getElementById('anim-editor').classList.remove('hidden');
+        document.getElementById('anim-editor-title').textContent = name;
+        document.getElementById('anim-name').value = name;
+        document.getElementById('anim-loop').checked = !!anim.loop;
+        this._renderKeyframeList(obj, name);
+        this._renderAnimList(obj); // update selected state
+    }
+
+    _renderKeyframeList(obj, name) {
+        const list = document.getElementById('keyframe-list');
+        list.innerHTML = '';
+        const anim = obj.userData.animations[name];
+        if (!anim || anim.keyframes.length === 0) {
+            list.innerHTML = '<div style="font-size:11px;color:var(--text-dim);padding:6px">Move the object, then click the red circle to capture a keyframe.</div>';
+            return;
+        }
+        anim.keyframes.forEach((kf, i) => {
+            const el = document.createElement('div');
+            el.className = 'keyframe-item';
+            el.innerHTML = `
+                <span class="kf-time">${kf.time.toFixed(2)}s</span>
+                <span class="kf-summary">pos(${kf.position.x},${kf.position.y},${kf.position.z})</span>
+                <div class="kf-actions">
+                    <button title="Go to this keyframe" data-action="goto"><span class="material-icons-round">my_location</span></button>
+                    <button title="Update time" data-action="time"><span class="material-icons-round">schedule</span></button>
+                    <button class="danger" title="Delete" data-action="delete"><span class="material-icons-round">close</span></button>
+                </div>
+            `;
+            el.querySelector('[data-action="goto"]').addEventListener('click', () => {
+                obj.position.set(kf.position.x, kf.position.y, kf.position.z);
+                obj.rotation.set(
+                    THREE.MathUtils.degToRad(kf.rotation.x),
+                    THREE.MathUtils.degToRad(kf.rotation.y),
+                    THREE.MathUtils.degToRad(kf.rotation.z)
+                );
+                obj.scale.set(kf.scale.x, kf.scale.y, kf.scale.z);
+                this.scene3d._needsRender = true;
+                this.updateProperties(obj);
+            });
+            el.querySelector('[data-action="time"]').addEventListener('click', () => {
+                const newTime = prompt('Time (seconds):', kf.time);
+                if (newTime !== null) {
+                    kf.time = Math.max(0, parseFloat(newTime) || 0);
+                    anim.keyframes.sort((a, b) => a.time - b.time);
+                    this._renderKeyframeList(obj, name);
+                }
+            });
+            el.querySelector('[data-action="delete"]').addEventListener('click', () => {
+                anim.keyframes.splice(i, 1);
+                this._renderKeyframeList(obj, name);
+            });
+            list.appendChild(el);
+        });
+    }
+
+    _previewAnimation() {
+        const obj = this.scene3d.selectedObject;
+        if (!obj || !this._selectedAnimName) return;
+        const anim = obj.userData.animations[this._selectedAnimName];
+        if (!anim || anim.keyframes.length < 2) { this.toast('Need at least 2 keyframes', 'error'); return; }
+
+        // Cancel any running preview
+        if (this._animPreviewRAF) cancelAnimationFrame(this._animPreviewRAF);
+
+        const startPos = obj.position.clone();
+        const startRot = obj.rotation.clone();
+        const startScale = obj.scale.clone();
+        const totalTime = anim.keyframes[anim.keyframes.length - 1].time;
+        const startMs = performance.now();
+
+        const tick = () => {
+            const elapsed = (performance.now() - startMs) / 1000;
+            const t = anim.loop ? (elapsed % totalTime) : Math.min(elapsed, totalTime);
+            this._interpolateKeyframes(obj, anim.keyframes, t);
+            this.scene3d._needsRender = true;
+            if (elapsed < totalTime * (anim.loop ? 2 : 1)) {
+                this._animPreviewRAF = requestAnimationFrame(tick);
+            } else {
+                // Restore original
+                obj.position.copy(startPos);
+                obj.rotation.copy(startRot);
+                obj.scale.copy(startScale);
+                this.scene3d._needsRender = true;
+                this._animPreviewRAF = null;
+            }
+        };
+        this._animPreviewRAF = requestAnimationFrame(tick);
+    }
+
+    _interpolateKeyframes(obj, keyframes, time) {
+        if (keyframes.length === 0) return;
+        if (keyframes.length === 1 || time <= keyframes[0].time) {
+            const kf = keyframes[0];
+            obj.position.set(kf.position.x, kf.position.y, kf.position.z);
+            obj.rotation.set(THREE.MathUtils.degToRad(kf.rotation.x), THREE.MathUtils.degToRad(kf.rotation.y), THREE.MathUtils.degToRad(kf.rotation.z));
+            obj.scale.set(kf.scale.x, kf.scale.y, kf.scale.z);
+            return;
+        }
+        if (time >= keyframes[keyframes.length - 1].time) {
+            const kf = keyframes[keyframes.length - 1];
+            obj.position.set(kf.position.x, kf.position.y, kf.position.z);
+            obj.rotation.set(THREE.MathUtils.degToRad(kf.rotation.x), THREE.MathUtils.degToRad(kf.rotation.y), THREE.MathUtils.degToRad(kf.rotation.z));
+            obj.scale.set(kf.scale.x, kf.scale.y, kf.scale.z);
+            return;
+        }
+        // Find surrounding keyframes
+        let a = keyframes[0], b = keyframes[1];
+        for (let i = 0; i < keyframes.length - 1; i++) {
+            if (time >= keyframes[i].time && time <= keyframes[i + 1].time) {
+                a = keyframes[i];
+                b = keyframes[i + 1];
+                break;
+            }
+        }
+        const range = b.time - a.time;
+        const raw = range > 0 ? (time - a.time) / range : 0;
+        // Ease in-out quadratic
+        const t = raw < 0.5 ? 2 * raw * raw : 1 - Math.pow(-2 * raw + 2, 2) / 2;
+
+        obj.position.set(
+            a.position.x + (b.position.x - a.position.x) * t,
+            a.position.y + (b.position.y - a.position.y) * t,
+            a.position.z + (b.position.z - a.position.z) * t
+        );
+        obj.rotation.set(
+            THREE.MathUtils.degToRad(a.rotation.x + (b.rotation.x - a.rotation.x) * t),
+            THREE.MathUtils.degToRad(a.rotation.y + (b.rotation.y - a.rotation.y) * t),
+            THREE.MathUtils.degToRad(a.rotation.z + (b.rotation.z - a.rotation.z) * t)
+        );
+        obj.scale.set(
+            a.scale.x + (b.scale.x - a.scale.x) * t,
+            a.scale.y + (b.scale.y - a.scale.y) * t,
+            a.scale.z + (b.scale.z - a.scale.z) * t
+        );
+    }
+
+    _updateAnimationDropdowns() {
+        const allNames = new Set();
+        this.scene3d.objects.forEach(obj => {
+            if (obj.userData.animations) {
+                Object.keys(obj.userData.animations).forEach(n => allNames.add(n));
+            }
+        });
+        this.blockCode._updateAnimationDropdowns([...allNames]);
     }
 
     // ===== Toast =====

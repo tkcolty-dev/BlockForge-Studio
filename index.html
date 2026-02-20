@@ -345,6 +345,9 @@
             <button class="tool-btn" id="btn-share" title="Share Project">
                 <span class="material-icons-round">share</span>
             </button>
+            <button class="tool-btn" id="btn-sound-library" title="Sound Library">
+                <span class="material-icons-round">library_music</span>
+            </button>
             <button class="tool-btn" id="btn-settings" title="Game Settings">
                 <span class="material-icons-round">settings</span>
             </button>
@@ -619,6 +622,9 @@
                 <div class="viewport-info" id="viewport-info">
                     <span id="info-fps">60 FPS</span>
                     <span id="info-objects">0 objects</span>
+                    <button class="viewport-info-btn" id="btn-screenshot" title="Take Screenshot">
+                        <span class="material-icons-round">photo_camera</span>
+                    </button>
                     <button class="viewport-fullscreen-btn" id="btn-fullscreen-viewport" title="Fullscreen Viewport">
                         <span class="material-icons-round">fullscreen</span>
                     </button>
@@ -658,6 +664,7 @@
             <div class="panel-tabs">
                 <button class="panel-tab active" data-tab="properties">Properties</button>
                 <button class="panel-tab" data-tab="materials">Material</button>
+                <button class="panel-tab" data-tab="animate">Animate</button>
             </div>
 
             <!-- Properties Tab -->
@@ -845,6 +852,55 @@
                         <div class="prop-row">
                             <label>Legs</label>
                             <input type="color" id="prop-npc-legs" value="#2c3e50" class="color-picker">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Animate Tab -->
+            <div class="tab-content" id="tab-animate">
+                <div id="animate-no-selection" class="empty-state">
+                    <span class="material-icons-round">animation</span>
+                    <p>Select an object to create animations</p>
+                </div>
+                <div id="animate-content" class="hidden">
+                    <div class="panel-section">
+                        <div class="section-header">
+                            <span>Animations</span>
+                            <button class="section-action-btn" id="btn-add-animation" title="Add Animation">
+                                <span class="material-icons-round">add</span>
+                            </button>
+                        </div>
+                        <div id="anim-list" class="anim-list"></div>
+                    </div>
+                    <div id="anim-editor" class="hidden">
+                        <div class="panel-section">
+                            <div class="section-header"><span id="anim-editor-title">Animation</span></div>
+                            <div class="prop-row">
+                                <label>Name</label>
+                                <input type="text" id="anim-name" class="prop-input" spellcheck="false">
+                            </div>
+                            <div class="prop-row">
+                                <label>Loop</label>
+                                <input type="checkbox" id="anim-loop">
+                            </div>
+                        </div>
+                        <div class="panel-section">
+                            <div class="section-header">
+                                <span>Keyframes</span>
+                                <button class="section-action-btn" id="btn-capture-keyframe" title="Capture Current Transform">
+                                    <span class="material-icons-round">fiber_manual_record</span>
+                                </button>
+                            </div>
+                            <div id="keyframe-list" class="keyframe-list"></div>
+                        </div>
+                        <div class="action-buttons" style="padding:8px 12px;gap:6px">
+                            <button class="action-btn small" id="btn-preview-anim">
+                                <span class="material-icons-round">play_arrow</span> Preview
+                            </button>
+                            <button class="action-btn small danger" id="btn-delete-anim">
+                                <span class="material-icons-round">delete</span> Delete
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1169,6 +1225,42 @@
                         <input type="color" id="setting-player-detail" value="#e0b090">
                     </div>
                 </div>
+                <div class="settings-section">
+                    <div class="settings-section-title">Loading Screen</div>
+                    <div class="settings-row">
+                        <label>Title</label>
+                        <input type="text" id="setting-loading-title" class="prop-input" placeholder="My Game" maxlength="40" spellcheck="false">
+                    </div>
+                    <div class="settings-row">
+                        <label>Subtitle</label>
+                        <input type="text" id="setting-loading-subtitle" class="prop-input" placeholder="Loading..." maxlength="60" spellcheck="false">
+                    </div>
+                    <div class="settings-row">
+                        <label>BG Color</label>
+                        <input type="color" id="setting-loading-bg" value="#1a1a2e">
+                    </div>
+                    <div class="settings-row">
+                        <label>BG Image</label>
+                        <div style="display:flex;gap:6px;align-items:center">
+                            <button class="action-btn small" id="setting-loading-bg-upload">
+                                <span class="material-icons-round" style="font-size:14px">upload</span> Upload
+                            </button>
+                            <button class="action-btn small" id="setting-loading-bg-clear">Clear</button>
+                            <input type="file" id="loading-bg-file" accept="image/*" style="display:none">
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <label>Duration</label>
+                        <input type="range" id="setting-loading-duration" min="0" max="5" value="2" step="0.5">
+                        <span class="setting-value" id="setting-loading-duration-val">2s</span>
+                    </div>
+                    <div class="settings-row">
+                        <label>Preview</label>
+                        <div class="loading-preview-thumb" id="loading-preview-thumb">
+                            <span style="font-size:10px;color:rgba(255,255,255,0.5)">No loading screen</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1449,6 +1541,15 @@
                         <label class="publish-tag-checkbox"><input type="checkbox" value="Puzzle"> Puzzle</label>
                     </div>
                 </div>
+                <div class="publish-field">
+                    <label>Thumbnail</label>
+                    <div class="publish-thumbnail-preview" id="publish-thumbnail-preview">
+                        <img id="publish-thumbnail-img">
+                        <button class="action-btn small" id="publish-retake-thumbnail" title="Retake">
+                            <span class="material-icons-round">photo_camera</span> Retake
+                        </button>
+                    </div>
+                </div>
                 <div class="publish-share-link" id="publish-share-link">
                     <label>Share Link</label>
                     <div class="publish-link-row">
@@ -1482,6 +1583,36 @@
             </div>
         </div>
     </div>
+
+    <!-- Sound Library Modal -->
+    <div id="sound-library-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:480px">
+            <div class="modal-header">
+                <span class="material-icons-round">library_music</span>
+                <span>Sound Library</span>
+                <button class="modal-close" id="sound-library-close">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-dim);font-size:12px;margin-bottom:12px">Upload custom sounds (mp3/wav/ogg, max 500KB each, up to 10 sounds).</p>
+                <div class="sound-lib-upload">
+                    <button class="action-btn primary" id="sound-upload-btn">
+                        <span class="material-icons-round">upload</span> Upload Sound
+                    </button>
+                    <input type="file" id="sound-file-input" accept="audio/mp3,audio/wav,audio/ogg,audio/mpeg" style="display:none">
+                    <span class="sound-count" id="sound-count">0 / 10</span>
+                </div>
+                <div id="sound-list" class="sound-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Loading Screen Overlay (shown during play) -->
+    <div id="game-loading-screen" class="hidden"></div>
+
+    <!-- Screenshot Flash Effect -->
+    <div id="screenshot-flash" class="screenshot-flash hidden"></div>
 
     <!-- Project Page (Scratch-style) -->
     <div id="project-page" class="hidden">

@@ -1825,7 +1825,8 @@ class Scene3D {
                 } : null,
                 textureId: obj.userData.textureId || null,
                 tileScale: obj.userData.tileScale || null,
-                childColors: childColors
+                childColors: childColors,
+                animations: obj.userData.animations || null
             };
 
             // Custom object data
@@ -1869,6 +1870,7 @@ class Scene3D {
 
             const obj = this.addObject(item.type, opts);
             obj.userData.scripts = item.scripts || [];
+            if (item.animations) obj.userData.animations = item.animations;
             if (item.material && obj.material) {
                 obj.material.roughness = item.material.roughness;
                 obj.material.metalness = item.material.metalness;

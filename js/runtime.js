@@ -65,6 +65,10 @@ class Runtime {
         this._activeScreens = new Map();
         this._uiScreens = [];
 
+        // Custom sounds
+        this._customSounds = [];
+        this._customSoundBuffers = {};
+
         // Number displays
         this._numberDisplays = new Map();
 
@@ -230,6 +234,21 @@ class Runtime {
         // Init audio
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Preload custom sounds
+        this._customSoundBuffers = {};
+        if (this._customSounds && this._customSounds.length > 0) {
+            this._customSounds.forEach(snd => {
+                try {
+                    const binary = atob(snd.dataUrl.split(',')[1]);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    this.audioCtx.decodeAudioData(bytes.buffer.slice(0), (buffer) => {
+                        this._customSoundBuffers[snd.name] = buffer;
+                    });
+                } catch (e) { /* skip bad sounds */ }
+            });
         }
 
         // Start background music if configured
@@ -1238,6 +1257,21 @@ class Runtime {
                     this.scene3d.camera.fov = anim.startFov + (anim.targetFov - anim.startFov) * eased;
                     this.scene3d.camera.updateProjectionMatrix();
                     if (t >= 1) anim.done = true;
+                    break;
+                }
+
+                case 'keyframe': {
+                    const kfs = anim.keyframes;
+                    if (!kfs || kfs.length < 2) { anim.done = true; break; }
+                    const totalTime = kfs[kfs.length - 1].time;
+                    let time = anim.elapsed;
+                    if (anim.loop) {
+                        time = totalTime > 0 ? (time % totalTime) : 0;
+                    } else if (time >= totalTime) {
+                        anim.done = true;
+                    }
+                    // Interpolate
+                    this._interpolateKeyframes(anim.object, kfs, Math.min(time, totalTime));
                     break;
                 }
             }
@@ -2677,6 +2711,46 @@ class Runtime {
                 break;
             }
 
+            // ===== Custom Sound ====
+            case 'playCustomSound': {
+                const soundName = v.sound;
+                if (soundName && soundName !== '(none)') {
+                    this._playCustomSound(soundName);
+                }
+                break;
+            }
+
+            // ===== Animation Blocks =====
+            case 'playAnimation': {
+                const animName = v.anim;
+                if (animName && animName !== '(none)' && obj.userData.animations && obj.userData.animations[animName]) {
+                    // Remove any existing keyframe animation for this object
+                    this.activeAnimations = this.activeAnimations.filter(a => !(a.type === 'keyframe' && a.object === obj));
+                    const animData = obj.userData.animations[animName];
+                    this.activeAnimations.push({
+                        type: 'keyframe', object: obj, elapsed: 0,
+                        keyframes: animData.keyframes, loop: false
+                    });
+                }
+                break;
+            }
+            case 'playAnimationLoop': {
+                const animName2 = v.anim;
+                if (animName2 && animName2 !== '(none)' && obj.userData.animations && obj.userData.animations[animName2]) {
+                    this.activeAnimations = this.activeAnimations.filter(a => !(a.type === 'keyframe' && a.object === obj));
+                    const animData2 = obj.userData.animations[animName2];
+                    this.activeAnimations.push({
+                        type: 'keyframe', object: obj, elapsed: 0,
+                        keyframes: animData2.keyframes, loop: true
+                    });
+                }
+                break;
+            }
+            case 'stopAnimation': {
+                this.activeAnimations = this.activeAnimations.filter(a => !(a.type === 'keyframe' && a.object === obj));
+                break;
+            }
+
             // ===== New Variables Blocks =====
             case 'showMessage': {
                 const text = v.text || 'You win!';
@@ -3897,6 +3971,65 @@ class Runtime {
             this._musicNodes = null;
         }
         this._musicTrack = 'none';
+    }
+
+    // ===== Custom Sound Playback =====
+
+    _playCustomSound(name) {
+        if (!this.audioCtx || !this._customSoundBuffers) return;
+        const buffer = this._customSoundBuffers[name];
+        if (!buffer) return;
+        const source = this.audioCtx.createBufferSource();
+        source.buffer = buffer;
+        const gain = this.audioCtx.createGain();
+        gain.gain.value = this.soundVolume * 0.5;
+        source.connect(gain);
+        gain.connect(this.audioCtx.destination);
+        source.start();
+    }
+
+    // ===== Keyframe Interpolation =====
+
+    _interpolateKeyframes(obj, keyframes, time) {
+        if (!keyframes || keyframes.length === 0) return;
+        if (keyframes.length === 1 || time <= keyframes[0].time) {
+            const kf = keyframes[0];
+            obj.position.set(kf.position.x, kf.position.y, kf.position.z);
+            obj.rotation.set(THREE.MathUtils.degToRad(kf.rotation.x), THREE.MathUtils.degToRad(kf.rotation.y), THREE.MathUtils.degToRad(kf.rotation.z));
+            obj.scale.set(kf.scale.x, kf.scale.y, kf.scale.z);
+            return;
+        }
+        if (time >= keyframes[keyframes.length - 1].time) {
+            const kf = keyframes[keyframes.length - 1];
+            obj.position.set(kf.position.x, kf.position.y, kf.position.z);
+            obj.rotation.set(THREE.MathUtils.degToRad(kf.rotation.x), THREE.MathUtils.degToRad(kf.rotation.y), THREE.MathUtils.degToRad(kf.rotation.z));
+            obj.scale.set(kf.scale.x, kf.scale.y, kf.scale.z);
+            return;
+        }
+        let a = keyframes[0], b = keyframes[1];
+        for (let i = 0; i < keyframes.length - 1; i++) {
+            if (time >= keyframes[i].time && time <= keyframes[i + 1].time) {
+                a = keyframes[i]; b = keyframes[i + 1]; break;
+            }
+        }
+        const range = b.time - a.time;
+        const raw = range > 0 ? (time - a.time) / range : 0;
+        const t = raw < 0.5 ? 2 * raw * raw : 1 - Math.pow(-2 * raw + 2, 2) / 2;
+        obj.position.set(
+            a.position.x + (b.position.x - a.position.x) * t,
+            a.position.y + (b.position.y - a.position.y) * t,
+            a.position.z + (b.position.z - a.position.z) * t
+        );
+        obj.rotation.set(
+            THREE.MathUtils.degToRad(a.rotation.x + (b.rotation.x - a.rotation.x) * t),
+            THREE.MathUtils.degToRad(a.rotation.y + (b.rotation.y - a.rotation.y) * t),
+            THREE.MathUtils.degToRad(a.rotation.z + (b.rotation.z - a.rotation.z) * t)
+        );
+        obj.scale.set(
+            a.scale.x + (b.scale.x - a.scale.x) * t,
+            a.scale.y + (b.scale.y - a.scale.y) * t,
+            a.scale.z + (b.scale.z - a.scale.z) * t
+        );
     }
 
     // ===== Sound Synthesis =====
