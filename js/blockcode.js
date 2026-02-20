@@ -1433,6 +1433,96 @@ class BlockCode {
         this.renderWorkspace();
     }
 
+    _buildBlockData(block) {
+        const def = this.blocks[block.blockId];
+        if (!def) return null;
+
+        const defaults = this._getDefaults(def);
+        const values = { ...defaults };
+        if (block.values && typeof block.values === 'object') {
+            for (const [k, v] of Object.entries(block.values)) {
+                if (k in defaults) values[k] = v;
+            }
+        }
+
+        const blockData = {
+            instanceId: this.nextBlockId++,
+            blockId: block.blockId,
+            values,
+            children: []
+        };
+
+        if (Array.isArray(block.children) && def.type === 'c-block') {
+            for (const child of block.children.slice(0, 15)) {
+                const childDef = this.blocks[child.blockId];
+                if (!childDef || childDef.type === 'hat') continue;
+                const childData = this._buildBlockData(child);
+                if (childData) blockData.children.push(childData);
+            }
+        }
+
+        return blockData;
+    }
+
+    addScriptStacks(stacks) {
+        if (!Array.isArray(stacks) || stacks.length === 0) return 0;
+
+        // Find lowest Y to position new stacks below existing ones
+        let maxY = 20;
+        for (const s of this.workspaceScripts) {
+            const bottom = (s.y || 0) + (s.blocks ? s.blocks.length * 40 : 40);
+            if (bottom > maxY) maxY = bottom;
+        }
+
+        let added = 0;
+        for (const stack of stacks) {
+            if (!Array.isArray(stack.blocks) || stack.blocks.length === 0) continue;
+
+            // Check if AI wants to append to an existing stack
+            const appendIdx = typeof stack.appendToStack === 'number' ? stack.appendToStack - 1 : -1;
+            if (appendIdx >= 0 && appendIdx < this.workspaceScripts.length) {
+                // Append mode: add non-hat blocks to existing stack
+                let appended = 0;
+                for (const block of stack.blocks) {
+                    const def = this.blocks[block.blockId];
+                    if (!def || def.type === 'hat') continue; // skip hats when appending
+                    const blockData = this._buildBlockData(block);
+                    if (blockData) {
+                        this.workspaceScripts[appendIdx].blocks.push(blockData);
+                        appended++;
+                    }
+                }
+                if (appended > 0) added++;
+                continue;
+            }
+
+            // New stack mode
+            const validBlocks = [];
+            for (const block of stack.blocks) {
+                const blockData = this._buildBlockData(block);
+                if (blockData) validBlocks.push(blockData);
+            }
+
+            if (validBlocks.length === 0) continue;
+
+            this.workspaceScripts.push({
+                id: this.nextBlockId++,
+                x: 20,
+                y: maxY + 20,
+                blocks: validBlocks
+            });
+            maxY += validBlocks.length * 40 + 30;
+            added++;
+        }
+
+        if (added > 0) {
+            this._syncNextId();
+            this.renderWorkspace();
+            this.saveScriptsToObject();
+        }
+        return added;
+    }
+
     // ===== Backpack =====
 
     addToBackpack(blocks) {

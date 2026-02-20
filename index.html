@@ -1032,6 +1032,19 @@
 
             <!-- Script Area (workspace + backpack) -->
             <div id="script-area">
+                <div id="ai-script-bar" class="ai-script-bar">
+                    <span class="material-icons-round ai-script-icon">auto_awesome</span>
+                    <div class="ai-script-input-wrap">
+                        <input type="text" id="ai-script-input"
+                               placeholder="Describe a behavior or type / for commands"
+                               maxlength="500" autocomplete="off" spellcheck="false">
+                        <div id="ai-script-commands" class="ai-script-commands hidden"></div>
+                    </div>
+                    <div id="ai-script-status" class="ai-script-status hidden"></div>
+                    <button class="ai-script-btn" id="ai-script-btn" title="Generate Script">
+                        <span class="material-icons-round">arrow_upward</span>
+                    </button>
+                </div>
                 <div id="script-workspace">
                     <div id="workspace-canvas">
                         <!-- Block scripts rendered here -->

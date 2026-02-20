@@ -1162,6 +1162,430 @@ app.post('/api/ai/build', authenticate, async (req, res) => {
     }
 });
 
+// ===== AI Script Assistant =====
+
+const AI_SCRIPT_SYSTEM_PROMPT = `You generate block code scripts for a 3D game engine. Output ONLY a JSON array of stacks.
+
+# Block Catalog (blockId | inputs key:type=default)
+
+## Events (hat blocks — must start every stack)
+event_start | (none)
+event_click | (none)
+event_key | key:select[W,A,S,D,Space,E,Q,1,2,3,ArrowUp,ArrowDown,ArrowLeft,ArrowRight]=Space
+event_collide | object:select[any,player,coin,npc]=player
+event_timer | seconds:number=1
+event_message | msg:select[message1,message2,message3,go,stop,reset]=message1
+event_health_zero | (none)
+event_enemy_defeated | (none)
+event_item_collected | (none)
+event_lives_zero | (none)
+event_level_start | (none)
+event_timer_done | (none)
+shoot_event_fire | (none)
+shoot_event_hit | (none)
+
+## Motion (command)
+motion_move | direction:select[forward,backward,left,right,up,down]=forward, amount:number=1
+motion_moveto | x:number=0, y:number=0, z:number=0
+motion_rotate | axis:select[X,Y,Z]=Y, degrees:number=15
+motion_spin | axis:select[X,Y,Z]=Y, speed:number=1
+motion_glide | x:number=0, y:number=5, z:number=0, time:number=1
+motion_bounce | height:number=2, speed:number=2
+motion_follow_player | speed:number=2
+motion_patrol | dist:number=5, speed:number=2
+motion_orbit | r:number=3, s:number=1
+motion_look_at_player | (none)
+motion_random_pos | range:number=10
+motion_push_from_player | f:number=3
+motion_smooth_move | dir:select[forward,backward,left,right,up,down]=forward, amt:number=3, time:number=0.5
+motion_align_to_grid | size:number=1
+motion_face_direction | dir:select[north,south,east,west,player]=north
+motion_set_rotation | x:number=0, y:number=0, z:number=0
+motion_zigzag | w:number=3, s:number=2
+motion_spiral | r:number=3, s:number=1
+motion_hover | h:number=0.5, s:number=1.5
+motion_teleport | x:number=0, y:number=5, z:number=0
+motion_launch_up | force:number=10
+motion_move_toward | speed:number=3, dist:number=2
+
+## Control (command/c-block)
+control_wait | seconds:number=1
+control_repeat | times:number=10 [c-block]
+control_forever | [c-block]
+control_if | condition:select[touching player,key pressed,variable > 0,random chance]=touching player [c-block]
+control_if_else | condition:select[touching player,key pressed,variable > 0,health < 50,random chance,distance < 3]=touching player [c-block]
+control_wait_until | condition:select[touching player,key pressed,timer > 5]=touching player
+control_stop | what:select[this script,all scripts,other scripts]=this script
+control_broadcast | msg:select[message1,message2,message3,go,stop,reset]=message1
+control_while | condition:select[touching player,key pressed,variable > 0,health > 0,timer < 10]=touching player [c-block]
+control_for_each | var:select[i,j,count]=i, start:number=1, end:number=10 [c-block]
+control_next_level | (none)
+
+## Looks (command)
+looks_color | color:color=#ff0000
+looks_size | percent:number=100
+looks_show | (none)
+looks_hide | (none)
+looks_glow | color:color=#ffffff, val:number=0.5
+looks_opacity | percent:number=50
+looks_say | text:text=Hello!, time:number=2
+looks_effect | speed:number=1
+looks_scale_pulse | min:number=80, max:number=120, spd:number=2
+looks_trail | color:color=#ffff00
+looks_particles | type:select[burst,sparkle,fire,snow]=burst, color:color=#ffff00
+looks_stop_particles | (none)
+looks_tint | color:color=#ff0000, amount:number=50
+looks_wireframe | state:select[on,off]=on
+looks_flash | color:color=#ffffff, times:number=3
+looks_billboard_text | text:text=Label
+looks_player_color | part:select[body,head,detail]=body, color:color=#4c97ff
+looks_npc_color | part:select[body,head,legs]=body, color:color=#3498db
+
+## Physics (command)
+physics_gravity | (none)
+physics_nogravity | (none)
+physics_velocity | x:number=0, y:number=5, z:number=0
+physics_impulse | direction:select[up,forward,backward,left,right]=up, force:number=5
+physics_anchor | state:select[true,false]=true
+physics_destroy | (none)
+physics_clone | (none)
+physics_teleport_player | x:number=0, y:number=5, z:number=0
+physics_explode | force:number=10, radius:number=5
+physics_launch_player | force:number=15
+physics_set_player_speed | speed:number=8
+physics_freeze | (none)
+physics_unfreeze | (none)
+physics_attract | force:number=3, radius:number=8
+physics_set_gravity | g:number=-20
+physics_spawn_object | shape:select[box,sphere,cylinder,cone,wall,platform,pyramid,coin,gem]=box, x:number=0, y:number=2, z:number=0
+physics_spawn_color | shape:select[box,sphere,cylinder,cone,wall,platform,pyramid]=box, color:color=#4c97ff
+physics_spawn_at_player | shape:select[box,sphere,cylinder,cone,wall,platform,pyramid]=box
+physics_remove_last | (none)
+physics_remove_all | (none)
+physics_clone_at | x:number=0, y:number=0, z:number=0
+health_set_damage | damage:number=10
+
+## Sound (command)
+sound_play | sound:select[pop,ding,whoosh,boom,jump,coin,hurt,powerup,laser,explosion,splash,click,bell,alarm,magic,swoosh,beep,chime]=pop
+sound_volume | percent:number=100
+sound_pitch | freq:number=440, dur:number=0.3
+sound_stop_all | (none)
+sound_play_note | note:select[C4,D4,E4,F4,G4,A4,B4,C5]=C4, dur:number=0.3
+sound_drum | type:select[kick,snare,hihat,clap]=kick
+sound_play_music | track:select[adventure,chill,action,mystery,retro,none]=adventure
+sound_stop_music | (none)
+sound_music_volume | percent:number=50
+
+## Variables (command)
+var_set | var:select[score,health,coins,speed,level,custom]=score, value:number=0
+var_change | var:select[score,health,coins,speed,level,custom]=score, amount:number=1
+var_show | var:select[score,health,coins,speed,level,timer]=score
+var_if_check | var:select[score,health,coins,speed,level]=score, op:select[>,<,=,>=,<=]=>, value:number=10 [c-block]
+var_reset_all | (none)
+var_show_message | text:text=You win!, time:number=3
+var_game_over | result:select[win,lose]=win
+var_save_checkpoint | (none)
+var_load_checkpoint | (none)
+var_set_lives | n:number=3
+var_change_lives | n:number=-1
+var_show_lives | (none)
+var_show_dialog | text:text=Hello!
+var_start_timer | seconds:number=60
+var_show_timer | (none)
+health_set_max | value:number=100
+health_set | value:number=100
+health_change | amount:number=-10
+health_heal | amount:number=25
+health_show_bar | (none)
+health_set_invincibility | seconds:number=1
+
+## Shooting (command)
+shoot_fire_player | speed:number=30, color:color=#ff0000
+shoot_fire_at_player | speed:number=20, color:color=#ff4400
+shoot_fire_forward | speed:number=25, color:color=#00ccff
+shoot_set_damage | damage:number=10
+shoot_set_fire_rate | seconds:number=0.3
+shoot_set_size | size:number=0.15
+shoot_set_lifetime | seconds:number=3
+
+## Enemies (command)
+enemy_set_as | health:number=50
+enemy_follow | speed:number=3
+enemy_patrol | dist:number=5, speed:number=2
+enemy_wander | radius:number=5, speed:number=1.5
+enemy_attack_touch | damage:number=10
+enemy_attack_ranged | seconds:number=2, damage:number=5
+enemy_set_health | value:number=50
+enemy_show_health | (none)
+
+## Items (command)
+item_set_pickup | type:select[key,potion,powerup,coin,gem,custom]=key
+item_set_pickup_name | name:text=Gold Key
+item_set_effect | effect:select[heal,speed boost,score,none]=heal, amount:number=25
+item_add | item:text=Gold Key
+item_remove | item:text=Gold Key
+item_has | item:text=Gold Key [c-block]
+item_use | item:text=Potion
+item_show_inventory | (none)
+
+## Effects (command)
+fx_screen_shake | intensity:number=5
+fx_fade_out | seconds:number=1
+fx_fade_in | seconds:number=1
+fx_flash_screen | color:color=#ffffff
+fx_slow_motion | speed:number=0.3, seconds:number=3
+fx_camera_zoom | factor:number=1.5, time:number=0.5
+fx_camera_reset | (none)
+fx_screen_tint | color:color=#ff0000, opacity:number=30
+
+## Camera (command)
+camera_switch | (none)
+camera_switch_back | (none)
+camera_look_at | target:select[player,this object,origin]=player
+camera_move_to | x:number=0, y:number=5, z:number=10
+camera_glide_to | x:number=0, y:number=5, z:number=10, time:number=1
+camera_follow | target:select[player,this object]=player, dist:number=8
+camera_shake | intensity:number=0.3, time:number=0.5
+camera_fov | fov:number=75
+
+## UI (command)
+ui_show_screen | screen:select[(none)]=(none)
+ui_hide_screen | screen:select[(none)]=(none)
+ui_hide_all | (none)
+ui_show_text_overlay | text:text=Level 1, time:number=2
+ui_show_number | label:text=Score, value:number=0
+ui_set_number | label:text=Score, value:number=0
+ui_change_number | label:text=Score, value:number=1
+
+# Rules
+1. Every NEW stack MUST start with a hat block (event_*,shoot_event_*).
+2. Only c-blocks (control_repeat,control_forever,control_if,control_if_else,control_while,control_for_each,var_if_check,item_has) have "children" arrays.
+3. Command blocks and c-blocks go inside stacks. Reporters cannot be standalone.
+4. Keep scripts focused: one behavior per stack. Use multiple stacks for different triggers.
+5. When the user says "also", "add", "make it also", or refers to extending existing behavior, APPEND to an existing stack using "appendToStack" instead of creating a duplicate hat.
+6. Think about what the user ACTUALLY wants. "make a door" means a full door system (click to open, animation, sound). "make an enemy" means chase + attack + defeat logic. Be thorough.
+7. Use control_forever with children for continuous behaviors (spinning, hovering, patrolling). Use single commands for one-shot actions.
+8. Combine multiple effects for polish: add sounds, particles, visual feedback when things happen.
+
+# Output Format
+JSON array of stacks.
+
+New stack: { "blocks": [ { "blockId": "...", "values": {...}, "children": [...] } ] }
+Append to existing: { "appendToStack": <stack number>, "blocks": [ ...blocks to add... ] }
+
+When appending, do NOT include a hat block — just the command/c-blocks to add.
+Only include "values" keys that differ from defaults. Omit "children" if empty.
+Existing scripts context labels stacks as "Stack 1:", "Stack 2:", etc. Use those numbers for appendToStack.
+
+# Common Patterns
+
+Door/Switch: event_click → sound_play(click) → motion_glide(move up/aside) → control_wait → motion_glide(back). Or broadcast a message to trigger another object.
+Collectible/Pickup: event_start → hover+spin forever. event_collide(player) → sound(coin) → var_change(coins/score) → particles(sparkle) → destroy.
+Enemy: event_start → enemy_set_as → enemy_show_health → chase/patrol/wander → attack. event_enemy_defeated → score + particles + sound.
+Jump Pad/Trampoline: event_collide(player) → physics_launch_player → sound(jump) → looks_scale_pulse → particles(burst).
+Checkpoint: event_collide(player) → var_save_checkpoint → sound(ding) → looks_glow → looks_say("Checkpoint!").
+Health Pickup: event_collide(player) → health_heal → sound(powerup) → particles(sparkle) → physics_destroy.
+Hazard/Trap: event_collide(player) → health_change(-25) → sound(hurt) → fx_screen_shake → looks_flash(red) → camera_shake.
+NPC/Dialog: event_click → looks_say(text,3) → control_wait(3) → looks_say(more text,3). Or chain multiple dialog lines.
+Teleporter: event_collide(player) → sound(magic) → fx_fade_out(0.3) → physics_teleport_player(x,y,z) → fx_fade_in(0.3).
+Button/Trigger: event_click → sound(click) → looks_color(green) → control_broadcast(message1). Another object: event_message(message1) → do something.
+Timer Challenge: event_start → var_start_timer(60) → var_show_timer. event_timer_done → var_game_over(lose).
+Shooting Turret: event_start → control_forever { control_wait(2) → shoot_fire_at_player(15) → sound(laser) }. Or event_timer(2) → fire.
+Patrol Guard: event_start → enemy_set_as(30) → enemy_patrol(8,2) → enemy_attack_ranged(3,10). event_enemy_defeated → var_change(score,50).
+Moving Platform: event_start → control_forever { motion_glide(up) → wait → motion_glide(down) → wait }. Can also zigzag or orbit.
+Destructible: event_start → physics_anchor(true). shoot_event_hit → health_change(-20) → looks_flash(white) → sound(hurt). event_health_zero → physics_explode → particles(burst) → destroy.
+Boss: event_start → enemy_set_as(200) → enemy_show_health → looks_size(200). Multiple attack patterns with timers. event_enemy_defeated → fx_slow_motion → var_game_over(win).
+Animated Decoration: event_start → control_forever { motion_hover + looks_scale_pulse } or motion_orbit or motion_bounce. Add glow/particles for magic items.
+Score System: event_start → var_set(score,0) → var_show(score). Increment via var_change on other events.
+Respawn: event_health_zero → fx_fade_out(0.5) → var_change_lives(-1) → var_load_checkpoint → fx_fade_in(0.5) → health_set(100).
+
+# Examples
+
+"spin when clicked":
+[{"blocks":[{"blockId":"event_click"},{"blockId":"control_forever","children":[{"blockId":"motion_spin","values":{"speed":2}}]}]}]
+
+"collectible coin":
+[{"blocks":[{"blockId":"event_start"},{"blockId":"motion_hover"},{"blockId":"control_forever","children":[{"blockId":"motion_spin","values":{"speed":3}}]}]},{"blocks":[{"blockId":"event_collide","values":{"object":"player"}},{"blockId":"sound_play","values":{"sound":"coin"}},{"blockId":"var_change","values":{"var":"coins","amount":1}},{"blockId":"looks_particles","values":{"type":"sparkle","color":"#ffd700"}},{"blockId":"physics_destroy"}]}]
+
+"enemy that chases and attacks":
+[{"blocks":[{"blockId":"event_start"},{"blockId":"enemy_set_as","values":{"health":50}},{"blockId":"enemy_show_health"},{"blockId":"enemy_follow","values":{"speed":3}},{"blockId":"enemy_attack_touch","values":{"damage":15}}]},{"blocks":[{"blockId":"event_enemy_defeated"},{"blockId":"var_change","values":{"var":"score","amount":100}},{"blockId":"looks_particles","values":{"type":"burst","color":"#ff4444"}},{"blockId":"sound_play","values":{"sound":"explosion"}},{"blockId":"physics_destroy"}]}]
+
+"door that opens when clicked":
+[{"blocks":[{"blockId":"event_click"},{"blockId":"sound_play","values":{"sound":"click"}},{"blockId":"motion_glide","values":{"x":0,"y":3,"z":0,"time":0.5}},{"blockId":"looks_say","values":{"text":"Opened!","time":1}},{"blockId":"control_wait","values":{"seconds":3}},{"blockId":"motion_glide","values":{"x":0,"y":0,"z":0,"time":0.5}},{"blockId":"sound_play","values":{"sound":"whoosh"}}]}]
+
+"jump pad / trampoline":
+[{"blocks":[{"blockId":"event_collide","values":{"object":"player"}},{"blockId":"physics_launch_player","values":{"force":20}},{"blockId":"sound_play","values":{"sound":"jump"}},{"blockId":"looks_scale_pulse","values":{"min":80,"max":120,"spd":4}},{"blockId":"looks_particles","values":{"type":"burst","color":"#00ff88"}}]}]
+
+"teleporter":
+[{"blocks":[{"blockId":"event_collide","values":{"object":"player"}},{"blockId":"sound_play","values":{"sound":"magic"}},{"blockId":"looks_particles","values":{"type":"sparkle","color":"#aa66ff"}},{"blockId":"fx_fade_out","values":{"seconds":0.3}},{"blockId":"physics_teleport_player","values":{"x":10,"y":1,"z":0}},{"blockId":"fx_fade_in","values":{"seconds":0.3}}]}]
+
+"health pickup":
+[{"blocks":[{"blockId":"event_start"},{"blockId":"motion_hover","values":{"h":0.3,"s":1.5}},{"blockId":"looks_glow","values":{"color":"#00ff00","val":0.5}},{"blockId":"control_forever","children":[{"blockId":"motion_spin","values":{"axis":"Y","speed":2}}]}]},{"blocks":[{"blockId":"event_collide","values":{"object":"player"}},{"blockId":"health_heal","values":{"amount":25}},{"blockId":"sound_play","values":{"sound":"powerup"}},{"blockId":"looks_particles","values":{"type":"sparkle","color":"#00ff00"}},{"blockId":"physics_destroy"}]}]
+
+"shooting turret":
+[{"blocks":[{"blockId":"event_start"},{"blockId":"looks_glow","values":{"color":"#ff0000","val":0.3}},{"blockId":"motion_look_at_player"},{"blockId":"control_forever","children":[{"blockId":"shoot_fire_at_player","values":{"speed":20,"color":"#ff4400"}},{"blockId":"sound_play","values":{"sound":"laser"}},{"blockId":"control_wait","values":{"seconds":1.5}}]}]}]
+
+"lava / hazard that damages player":
+[{"blocks":[{"blockId":"event_collide","values":{"object":"player"}},{"blockId":"health_change","values":{"amount":-20}},{"blockId":"sound_play","values":{"sound":"hurt"}},{"blockId":"fx_flash_screen","values":{"color":"#ff0000"}},{"blockId":"camera_shake","values":{"intensity":0.4,"time":0.3}}]}]
+
+"NPC that talks when clicked":
+[{"blocks":[{"blockId":"event_click"},{"blockId":"motion_face_direction","values":{"dir":"player"}},{"blockId":"looks_say","values":{"text":"Hey there, adventurer!","time":3}},{"blockId":"control_wait","values":{"seconds":3}},{"blockId":"looks_say","values":{"text":"Watch out for enemies ahead!","time":3}},{"blockId":"sound_play","values":{"sound":"chime"}}]}]
+
+"moving platform":
+[{"blocks":[{"blockId":"event_start"},{"blockId":"control_forever","children":[{"blockId":"motion_glide","values":{"x":0,"y":5,"z":0,"time":2}},{"blockId":"control_wait","values":{"seconds":0.5}},{"blockId":"motion_glide","values":{"x":0,"y":0,"z":0,"time":2}},{"blockId":"control_wait","values":{"seconds":0.5}}]}]}]
+
+"button that triggers another object via broadcast":
+[{"blocks":[{"blockId":"event_click"},{"blockId":"sound_play","values":{"sound":"click"}},{"blockId":"looks_color","values":{"color":"#00ff00"}},{"blockId":"control_broadcast","values":{"msg":"go"}},{"blockId":"looks_say","values":{"text":"Activated!","time":2}}]}]
+
+"destructible object":
+[{"blocks":[{"blockId":"event_start"},{"blockId":"health_set","values":{"value":50}},{"blockId":"health_show_bar"}]},{"blocks":[{"blockId":"shoot_event_hit"},{"blockId":"health_change","values":{"amount":-10}},{"blockId":"looks_flash","values":{"color":"#ffffff","times":2}},{"blockId":"sound_play","values":{"sound":"hurt"}}]},{"blocks":[{"blockId":"event_health_zero"},{"blockId":"looks_particles","values":{"type":"burst","color":"#ff6600"}},{"blockId":"sound_play","values":{"sound":"explosion"}},{"blockId":"physics_explode","values":{"force":5,"radius":3}},{"blockId":"physics_destroy"}]}]
+
+"boss enemy":
+[{"blocks":[{"blockId":"event_start"},{"blockId":"enemy_set_as","values":{"health":200}},{"blockId":"enemy_show_health"},{"blockId":"looks_size","values":{"percent":200}},{"blockId":"looks_glow","values":{"color":"#ff0000","val":0.3}},{"blockId":"enemy_follow","values":{"speed":1.5}}]},{"blocks":[{"blockId":"event_timer","values":{"seconds":2}},{"blockId":"shoot_fire_at_player","values":{"speed":15,"color":"#ff0000"}},{"blockId":"sound_play","values":{"sound":"laser"}}]},{"blocks":[{"blockId":"event_timer","values":{"seconds":5}},{"blockId":"physics_spawn_at_player","values":{"shape":"sphere"}},{"blockId":"sound_play","values":{"sound":"boom"}},{"blockId":"camera_shake","values":{"intensity":0.3,"time":0.5}}]},{"blocks":[{"blockId":"event_enemy_defeated"},{"blockId":"fx_slow_motion","values":{"speed":0.3,"seconds":2}},{"blockId":"looks_particles","values":{"type":"burst","color":"#ffd700"}},{"blockId":"sound_play","values":{"sound":"explosion"}},{"blockId":"var_show_message","values":{"text":"Boss defeated!","time":3}},{"blockId":"var_game_over","values":{"result":"win"}}]}]
+
+Append example — existing Stack 1 has event_start → motion_spin. User says "also make it glow":
+[{"appendToStack":1,"blocks":[{"blockId":"looks_glow","values":{"color":"#00ffff","val":0.8}}]}]
+
+Append example — existing Stack 1 has event_start → stuff, Stack 2 has event_click → stuff. User says "also play a sound when clicked":
+[{"appendToStack":2,"blocks":[{"blockId":"sound_play","values":{"sound":"pop"}}]}]`;
+
+app.post('/api/ai/script', authenticate, async (req, res) => {
+    const { prompt, history, existingScripts, explain, replaceMode } = req.body;
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+        return res.status(400).json({ error: 'Prompt is required' });
+    }
+    if (prompt.length > 1000) {
+        return res.status(400).json({ error: 'Prompt too long' });
+    }
+
+    const config = getGenaiConfig();
+    if (!config.apiBase) {
+        return res.status(503).json({ error: 'AI service not configured' });
+    }
+
+    try {
+        const url = config.apiBase.replace(/\/+$/, '') + '/v1/chat/completions';
+
+        // Explain mode: different system prompt
+        if (explain) {
+            const messages = [
+                { role: 'system', content: 'You explain block code scripts for a 3D game engine. The user will provide scripts and ask what they do. Give a brief, clear explanation in 1-3 sentences. Be specific about behaviors (e.g. "spins continuously when clicked" not "does something on click").' }
+            ];
+            if (existingScripts) {
+                messages.push({ role: 'system', content: 'Current scripts:\n' + existingScripts.slice(0, 3000) });
+            }
+            messages.push({ role: 'user', content: prompt.trim() });
+
+            const body = JSON.stringify({ model: config.model || undefined, messages, temperature: 0.3, max_tokens: 300 });
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(config.apiKey ? { 'Authorization': 'Bearer ' + config.apiKey } : {}) },
+                body
+            });
+            if (!response.ok) return res.status(502).json({ error: 'AI service error' });
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content || 'Could not generate explanation';
+            return res.json({ explanation: content.trim() });
+        }
+
+        const messages = [{ role: 'system', content: AI_SCRIPT_SYSTEM_PROMPT }];
+
+        // Inject existing scripts context
+        if (existingScripts && typeof existingScripts === 'string' && existingScripts.length > 0) {
+            if (replaceMode) {
+                messages.push({ role: 'system', content: 'Object currently has these scripts:\n' + existingScripts.slice(0, 3000) + '\n\nThe user wants you to modify/improve these scripts. Return the COMPLETE replacement set of scripts (all stacks). Do NOT use appendToStack — return full new stacks.' });
+            } else {
+                messages.push({ role: 'system', content: 'Object already has these scripts:\n' + existingScripts.slice(0, 2000) + '\n\nDo NOT duplicate existing behaviors. Add new complementary scripts.' });
+            }
+        }
+
+        // Conversation history
+        if (Array.isArray(history)) {
+            const recent = history.slice(-12);
+            for (const msg of recent) {
+                if (msg.role === 'user' || msg.role === 'assistant') {
+                    messages.push({ role: msg.role, content: String(msg.content).slice(0, 2000) });
+                }
+            }
+        }
+
+        messages.push({ role: 'user', content: prompt.trim() });
+
+        const body = JSON.stringify({
+            model: config.model || undefined,
+            messages,
+            temperature: 0.7,
+            max_tokens: 4096
+        });
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(config.apiKey ? { 'Authorization': 'Bearer ' + config.apiKey } : {})
+            },
+            body
+        });
+
+        if (!response.ok) {
+            const errText = await response.text().catch(() => '');
+            console.error('AI script error:', response.status, errText);
+            return res.status(502).json({ error: 'AI service error' });
+        }
+
+        const data = await response.json();
+        const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (!content) {
+            return res.status(502).json({ error: 'Empty AI response' });
+        }
+
+        // Extract JSON array
+        let jsonStr = content.trim();
+        const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fenceMatch) jsonStr = fenceMatch[1].trim();
+
+        const arrStart = jsonStr.indexOf('[');
+        const arrEnd = jsonStr.lastIndexOf(']');
+        if (arrStart === -1 || arrEnd === -1) {
+            return res.status(502).json({ error: 'AI response was not valid JSON' });
+        }
+        jsonStr = jsonStr.substring(arrStart, arrEnd + 1);
+
+        const stacks = JSON.parse(jsonStr);
+        if (!Array.isArray(stacks)) {
+            return res.status(502).json({ error: 'AI response was not an array' });
+        }
+
+        // Sanitize: max 10 stacks, 20 blocks each, 15 children per c-block
+        const sanitized = stacks.slice(0, 10).map(stack => {
+            if (!stack.blocks || !Array.isArray(stack.blocks)) return null;
+            const blocks = stack.blocks.slice(0, 20).map(b => {
+                const block = {
+                    blockId: typeof b.blockId === 'string' ? b.blockId : '',
+                    values: (b.values && typeof b.values === 'object') ? b.values : {}
+                };
+                if (Array.isArray(b.children) && b.children.length > 0) {
+                    block.children = b.children.slice(0, 15).map(c => ({
+                        blockId: typeof c.blockId === 'string' ? c.blockId : '',
+                        values: (c.values && typeof c.values === 'object') ? c.values : {}
+                    }));
+                }
+                return block;
+            });
+            const result = { blocks };
+            if (typeof stack.appendToStack === 'number' && stack.appendToStack > 0) {
+                result.appendToStack = stack.appendToStack;
+            }
+            return result;
+        }).filter(Boolean);
+
+        res.json({ stacks: sanitized });
+    } catch (err) {
+        console.error('AI script error:', err);
+        res.status(500).json({ error: 'Failed to generate script' });
+    }
+});
+
 // ===== WebSocket Collab Server =====
 
 const server = http.createServer(app);

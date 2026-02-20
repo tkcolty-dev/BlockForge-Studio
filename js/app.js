@@ -36,6 +36,7 @@ class App {
         this.initPublish();
         this.initCollab();
         this.initAIAssistant();
+        this.initAIScriptAssistant();
         this.initCharacterDesigner();
         this.initScreenshot();
         this.initSoundLibrary();
@@ -6938,6 +6939,357 @@ class App {
             this._aiAddMessage('Connection error. Please try again.', 'ai-error');
         } finally {
             buildBtn.disabled = false;
+            input.disabled = false;
+            input.focus();
+        }
+    }
+
+    // ===== AI Script Assistant =====
+
+    initAIScriptAssistant() {
+        const input = document.getElementById('ai-script-input');
+        const btn = document.getElementById('ai-script-btn');
+        const cmdList = document.getElementById('ai-script-commands');
+        this._aiScriptHistory = [];
+        this._aiCmdIdx = -1;
+
+        this._aiScriptCommands = [
+            { cmd: '/cleanup', icon: 'auto_fix_high', color: '#6366f1', label: 'Clean Up', desc: 'Optimize and tidy existing scripts', mode: 'replace', aiPrompt: 'Clean up, optimize, and remove redundancies from these scripts. Keep the same behaviors but make them cleaner and more efficient. Merge stacks that share the same hat block if appropriate.' },
+            { cmd: '/fix', icon: 'build', color: '#ef4444', label: 'Fix Scripts', desc: 'Find and fix issues in current scripts', mode: 'replace', aiPrompt: 'Analyze these scripts for bugs or issues. Fix any problems like missing events, broken logic, or ineffective blocks. Return the corrected scripts.' },
+            { cmd: '/explain', icon: 'help_outline', color: '#3b82f6', label: 'Explain', desc: 'Explain what the current scripts do', mode: 'explain' },
+            { cmd: '/simplify', icon: 'compress', color: '#22c55e', label: 'Simplify', desc: 'Reduce scripts to the essentials', mode: 'replace', aiPrompt: 'Simplify these scripts. Remove unnecessary blocks and keep only what is essential for the core behavior to work.' },
+            { cmd: '/enhance', icon: 'add_circle', color: '#a78bfa', label: 'Enhance', desc: 'Add polish — sounds, particles, effects', mode: 'replace', aiPrompt: 'Enhance these scripts by adding polish: sounds, particles, visual effects, screen shake, etc. Keep existing behavior but make it feel more satisfying and game-ready.' },
+            { cmd: '/clear', icon: 'delete_sweep', color: '#f59e0b', label: 'Clear All', desc: 'Remove all scripts from this object', mode: 'local' },
+            { cmd: '/duplicate', icon: 'content_copy', color: '#06b6d4', label: 'Duplicate', desc: 'Duplicate all scripts to a new copy', mode: 'local' },
+        ];
+
+        const renderCmdList = (filter) => {
+            const filtered = filter
+                ? this._aiScriptCommands.filter(c => c.cmd.startsWith(filter) || c.label.toLowerCase().includes(filter.slice(1)))
+                : this._aiScriptCommands;
+            if (filtered.length === 0) { cmdList.classList.add('hidden'); return; }
+            cmdList.innerHTML = filtered.map((c, i) =>
+                `<div class="ai-cmd-item${i === this._aiCmdIdx ? ' active' : ''}" data-idx="${i}" data-cmd="${c.cmd}">
+                    <div class="ai-cmd-icon" style="background:${c.color}20;color:${c.color}"><span class="material-icons-round">${c.icon}</span></div>
+                    <div class="ai-cmd-info"><div class="ai-cmd-name">${c.cmd}<span>${c.label}</span></div><div class="ai-cmd-desc">${c.desc}</div></div>
+                </div>`
+            ).join('');
+            cmdList.classList.remove('hidden');
+            cmdList.querySelectorAll('.ai-cmd-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    input.value = el.dataset.cmd + ' ';
+                    cmdList.classList.add('hidden');
+                    this._aiCmdIdx = -1;
+                    input.focus();
+                });
+            });
+        };
+
+        input.addEventListener('input', () => {
+            const val = input.value;
+            if (val.startsWith('/')) {
+                this._aiCmdIdx = -1;
+                renderCmdList(val.split(' ')[0]);
+            } else {
+                cmdList.classList.add('hidden');
+            }
+        });
+
+        input.addEventListener('blur', () => {
+            setTimeout(() => { cmdList.classList.add('hidden'); this._aiCmdIdx = -1; }, 150);
+        });
+
+        input.addEventListener('focus', () => {
+            if (input.value.startsWith('/')) renderCmdList(input.value.split(' ')[0]);
+        });
+
+        const submit = () => {
+            const raw = input.value.trim();
+            if (!raw) return;
+            input.value = '';
+            cmdList.classList.add('hidden');
+            this._aiCmdIdx = -1;
+
+            if (raw.startsWith('/')) {
+                this._aiRunCommand(raw);
+            } else {
+                this._aiGenerateScript(raw);
+            }
+        };
+
+        btn.addEventListener('click', submit);
+        input.addEventListener('keydown', (e) => {
+            // Arrow navigation for command list
+            if (!cmdList.classList.contains('hidden')) {
+                const items = cmdList.querySelectorAll('.ai-cmd-item');
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    this._aiCmdIdx = this._aiCmdIdx <= 0 ? items.length - 1 : this._aiCmdIdx - 1;
+                    items.forEach((el, i) => el.classList.toggle('active', i === this._aiCmdIdx));
+                    return;
+                }
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    this._aiCmdIdx = this._aiCmdIdx >= items.length - 1 ? 0 : this._aiCmdIdx + 1;
+                    items.forEach((el, i) => el.classList.toggle('active', i === this._aiCmdIdx));
+                    return;
+                }
+                if ((e.key === 'Tab' || e.key === 'Enter') && this._aiCmdIdx >= 0 && items[this._aiCmdIdx]) {
+                    e.preventDefault();
+                    const cmd = items[this._aiCmdIdx].dataset.cmd;
+                    input.value = cmd + ' ';
+                    cmdList.classList.add('hidden');
+                    this._aiCmdIdx = -1;
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    cmdList.classList.add('hidden');
+                    this._aiCmdIdx = -1;
+                    return;
+                }
+            }
+            if (e.key === 'Enter') submit();
+        });
+    }
+
+    _aiScriptShowStatus(text, type) {
+        const el = document.getElementById('ai-script-status');
+        el.className = 'ai-script-status status-' + type;
+        if (type === 'loading') {
+            el.innerHTML = '<span class="ai-loading-dots"><span></span><span></span><span></span></span> ' + text;
+        } else {
+            el.textContent = text;
+        }
+        el.classList.remove('hidden');
+
+        if (type === 'success' || type === 'error') {
+            setTimeout(() => el.classList.add('hidden'), 4000);
+        }
+    }
+
+    async _aiRunCommand(raw) {
+        const parts = raw.split(/\s+/);
+        const cmdName = parts[0].toLowerCase();
+        const extra = parts.slice(1).join(' ').trim();
+        const cmdDef = this._aiScriptCommands.find(c => c.cmd === cmdName);
+
+        if (!cmdDef) {
+            this._aiScriptShowStatus('Unknown command: ' + cmdName, 'error');
+            return;
+        }
+
+        if (!this.blockCode.targetObject) {
+            this._aiScriptShowStatus('Select an object first', 'error');
+            return;
+        }
+
+        // Local commands
+        if (cmdDef.mode === 'local') {
+            if (cmdName === '/clear') {
+                this.blockCode.clearScripts();
+                this.blockCode.renderWorkspace();
+                this._aiScriptHistory = [];
+                this._aiScriptShowStatus('Scripts cleared!', 'success');
+                this.toast('Scripts cleared', 'success');
+            } else if (cmdName === '/duplicate') {
+                const copy = JSON.parse(JSON.stringify(this.blockCode.workspaceScripts));
+                if (copy.length === 0) {
+                    this._aiScriptShowStatus('No scripts to duplicate', 'error');
+                    return;
+                }
+                this.blockCode.addScriptStacks(copy.map(s => ({
+                    blocks: s.blocks.map(b => ({
+                        blockId: b.blockId,
+                        values: b.values,
+                        children: b.children
+                    }))
+                })));
+                this._aiScriptShowStatus('Duplicated ' + copy.length + ' stacks!', 'success');
+            }
+            return;
+        }
+
+        // Explain command — just shows text, no code changes
+        if (cmdDef.mode === 'explain') {
+            const existing = this._aiGetExistingScriptsContext();
+            if (!existing) {
+                this._aiScriptShowStatus('No scripts to explain', 'error');
+                return;
+            }
+            const btn = document.getElementById('ai-script-btn');
+            const input = document.getElementById('ai-script-input');
+            btn.disabled = true;
+            input.disabled = true;
+            this._aiScriptShowStatus('Analyzing...', 'loading');
+
+            try {
+                const res = await fetch('/api/ai/script', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: 'Explain what these scripts do in 1-2 short sentences. Be specific about the behaviors. ' + (extra ? 'Focus on: ' + extra : ''),
+                        existingScripts: existing,
+                        explain: true
+                    })
+                });
+                if (!res.ok) {
+                    this._aiScriptShowStatus('Failed to explain', 'error');
+                    return;
+                }
+                const data = await res.json();
+                const explanation = data.explanation || data.stacks;
+                this._aiScriptShowStatus(typeof explanation === 'string' ? explanation : 'Scripts analyzed', 'success');
+            } catch {
+                this._aiScriptShowStatus('Connection error', 'error');
+            } finally {
+                btn.disabled = false;
+                input.disabled = false;
+                input.focus();
+            }
+            return;
+        }
+
+        // AI replace commands (cleanup, fix, simplify, enhance)
+        if (cmdDef.mode === 'replace') {
+            const existing = this._aiGetExistingScriptsContext();
+            if (!existing) {
+                this._aiScriptShowStatus('No scripts to ' + cmdDef.label.toLowerCase(), 'error');
+                return;
+            }
+            const btn = document.getElementById('ai-script-btn');
+            const input = document.getElementById('ai-script-input');
+            btn.disabled = true;
+            input.disabled = true;
+            this._aiScriptShowStatus(cmdDef.label + '...', 'loading');
+
+            try {
+                const prompt = cmdDef.aiPrompt + (extra ? ' Additional instructions: ' + extra : '');
+                const res = await fetch('/api/ai/script', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt,
+                        existingScripts: existing,
+                        replaceMode: true
+                    })
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: 'Request failed' }));
+                    this._aiScriptShowStatus(err.error || 'Failed', 'error');
+                    return;
+                }
+                const data = await res.json();
+                const stacks = data.stacks;
+                if (!stacks || stacks.length === 0) {
+                    this._aiScriptShowStatus('No changes needed', 'success');
+                    return;
+                }
+
+                // Replace: clear existing and add new
+                this.blockCode.workspaceScripts = [];
+                const added = this.blockCode.addScriptStacks(stacks);
+                if (added === 0) {
+                    this._aiScriptShowStatus('No valid results', 'error');
+                    return;
+                }
+                this._aiScriptShowStatus(cmdDef.label + ' done! ' + added + ' script' + (added !== 1 ? 's' : ''), 'success');
+                this.toast(cmdDef.label + ' complete', 'success');
+            } catch {
+                this._aiScriptShowStatus('Connection error', 'error');
+            } finally {
+                btn.disabled = false;
+                input.disabled = false;
+                input.focus();
+            }
+            return;
+        }
+    }
+
+    _aiGetExistingScriptsContext() {
+        if (!this.blockCode.workspaceScripts || this.blockCode.workspaceScripts.length === 0) return '';
+        const blocks = this.blockCode.blocks;
+        const describe = (b) => {
+            const def = blocks[b.blockId];
+            const label = def ? def.label : b.blockId;
+            let s = b.blockId;
+            // Show readable label with filled values
+            let readable = label;
+            if (b.values && def && def.inputs) {
+                for (const [k, v] of Object.entries(b.values)) {
+                    readable = readable.replace('{' + k + '}', v);
+                }
+            }
+            s += ' "' + readable + '"';
+            if (b.children && b.children.length > 0) {
+                s += ' { ' + b.children.map(describe).join(', ') + ' }';
+            }
+            return s;
+        };
+
+        return this.blockCode.workspaceScripts.map((stack, i) =>
+            'Stack ' + (i+1) + ': ' + stack.blocks.map(describe).join(' → ')
+        ).join('\n');
+    }
+
+    async _aiGenerateScript(prompt) {
+        const btn = document.getElementById('ai-script-btn');
+        const input = document.getElementById('ai-script-input');
+
+        if (!this.blockCode.targetObject) {
+            this._aiScriptShowStatus('Select an object first', 'error');
+            return;
+        }
+
+        btn.disabled = true;
+        input.disabled = true;
+        this._aiScriptShowStatus('Generating...', 'loading');
+
+        try {
+            const existingScripts = this._aiGetExistingScriptsContext();
+            const res = await fetch('/api/ai/script', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt,
+                    history: this._aiScriptHistory,
+                    existingScripts
+                })
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Request failed' }));
+                this._aiScriptShowStatus(err.error || 'Failed to generate', 'error');
+                return;
+            }
+
+            const data = await res.json();
+            const stacks = data.stacks;
+
+            if (!stacks || stacks.length === 0) {
+                this._aiScriptShowStatus('No scripts generated. Try again.', 'error');
+                return;
+            }
+
+            const added = this.blockCode.addScriptStacks(stacks);
+
+            if (added === 0) {
+                this._aiScriptShowStatus('No valid blocks found. Try again.', 'error');
+                return;
+            }
+
+            // Store conversation history
+            this._aiScriptHistory.push({ role: 'user', content: prompt });
+            this._aiScriptHistory.push({ role: 'assistant', content: JSON.stringify(stacks) });
+            if (this._aiScriptHistory.length > 12) this._aiScriptHistory = this._aiScriptHistory.slice(-12);
+
+            const hasAppend = stacks.some(s => s.appendToStack);
+            const msg = hasAppend ? 'Updated scripts!' : 'Added ' + added + ' script' + (added !== 1 ? 's' : '') + '!';
+            this._aiScriptShowStatus(msg, 'success');
+            this.toast(msg, 'success');
+        } catch (err) {
+            this._aiScriptShowStatus('Connection error. Try again.', 'error');
+        } finally {
+            btn.disabled = false;
             input.disabled = false;
             input.focus();
         }
