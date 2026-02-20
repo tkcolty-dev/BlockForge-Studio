@@ -321,6 +321,9 @@
             <div class="toolbar-user" id="toolbar-user">
                 <div class="toolbar-user-avatar" id="toolbar-user-avatar"></div>
             </div>
+            <button class="tool-btn" id="btn-character" title="Character Designer">
+                <span class="material-icons-round">accessibility_new</span>
+            </button>
             <button class="tool-btn" id="btn-ai-assistant" title="AI Build Assistant">
                 <span class="material-icons-round">auto_awesome</span>
             </button>
@@ -1148,6 +1151,12 @@
                 <div class="settings-section">
                     <div class="settings-section-title">Character Appearance</div>
                     <div class="settings-row">
+                        <button class="action-btn small" id="char-designer-link" style="width:100%">
+                            <span class="material-icons-round" style="font-size:14px">accessibility_new</span>
+                            Open Character Designer
+                        </button>
+                    </div>
+                    <div class="settings-row">
                         <label>Body Color</label>
                         <input type="color" id="setting-player-body" value="#4c97ff">
                     </div>
@@ -1603,6 +1612,100 @@
             <div class="prof-empty hidden" id="prof-empty">
                 <span class="material-icons-round">inventory_2</span>
                 <p>No shared projects yet</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Character Designer Modal -->
+    <div id="character-designer-modal" class="modal-overlay hidden">
+        <div class="modal char-designer-modal">
+            <div class="modal-header">
+                <span class="material-icons-round">accessibility_new</span>
+                <span>Character Designer</span>
+                <button class="modal-close" id="char-designer-close">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="char-designer-body">
+                <div class="char-designer-viewport">
+                    <canvas id="char-designer-canvas"></canvas>
+                </div>
+                <div class="char-designer-controls">
+                    <div class="char-section">
+                        <div class="char-section-title">Add Shape</div>
+                        <div class="char-shape-palette" id="char-shape-palette">
+                            <button class="char-shape-btn" data-shape="box" title="Box"><span class="material-icons-round">check_box_outline_blank</span><span>Box</span></button>
+                            <button class="char-shape-btn" data-shape="sphere" title="Sphere"><span class="material-icons-round">circle</span><span>Sphere</span></button>
+                            <button class="char-shape-btn" data-shape="cylinder" title="Cylinder"><span class="material-icons-round">sports_hockey</span><span>Cylinder</span></button>
+                            <button class="char-shape-btn" data-shape="cone" title="Cone"><span class="material-icons-round">change_history</span><span>Cone</span></button>
+                            <button class="char-shape-btn" data-shape="pyramid" title="Pyramid"><span class="material-icons-round">signal_cellular_4_bar</span><span>Pyramid</span></button>
+                            <button class="char-shape-btn" data-shape="dome" title="Dome"><span class="material-icons-round">brightness_low</span><span>Dome</span></button>
+                            <button class="char-shape-btn" data-shape="wedge" title="Wedge"><span class="material-icons-round">details</span><span>Wedge</span></button>
+                            <button class="char-shape-btn" data-shape="torus" title="Torus"><span class="material-icons-round">panorama_fish_eye</span><span>Torus</span></button>
+                        </div>
+                    </div>
+                    <div class="char-section char-parts-section">
+                        <div class="char-section-title">Parts <span class="char-parts-count" id="char-parts-count">0</span></div>
+                        <div class="char-parts-list" id="char-parts-list">
+                            <div class="char-parts-empty">Click a shape above to add parts</div>
+                        </div>
+                    </div>
+                    <div class="char-section" id="char-properties-panel" style="display:none">
+                        <div class="char-section-title">Properties</div>
+                        <div class="char-prop-grid">
+                            <label>Name</label>
+                            <input type="text" id="char-prop-name" class="char-prop-input" spellcheck="false">
+                            <label>Shape</label>
+                            <select id="char-prop-shape" class="char-prop-input">
+                                <option value="box">Box</option>
+                                <option value="sphere">Sphere</option>
+                                <option value="cylinder">Cylinder</option>
+                                <option value="cone">Cone</option>
+                                <option value="pyramid">Pyramid</option>
+                                <option value="dome">Dome</option>
+                                <option value="wedge">Wedge</option>
+                                <option value="torus">Torus</option>
+                            </select>
+                            <label>Color</label>
+                            <input type="color" id="char-prop-color" class="char-prop-input" value="#4c97ff">
+                            <label>Pos X</label>
+                            <input type="number" id="char-prop-px" class="char-prop-input" step="0.1" value="0">
+                            <label>Pos Y</label>
+                            <input type="number" id="char-prop-py" class="char-prop-input" step="0.1" value="0">
+                            <label>Pos Z</label>
+                            <input type="number" id="char-prop-pz" class="char-prop-input" step="0.1" value="0">
+                            <label>Scale X</label>
+                            <input type="number" id="char-prop-sx" class="char-prop-input" step="0.1" min="0.1" value="1">
+                            <label>Scale Y</label>
+                            <input type="number" id="char-prop-sy" class="char-prop-input" step="0.1" min="0.1" value="1">
+                            <label>Scale Z</label>
+                            <input type="number" id="char-prop-sz" class="char-prop-input" step="0.1" min="0.1" value="1">
+                            <label>Rot X</label>
+                            <input type="number" id="char-prop-rx" class="char-prop-input" step="5" value="0">
+                            <label>Rot Y</label>
+                            <input type="number" id="char-prop-ry" class="char-prop-input" step="5" value="0">
+                            <label>Rot Z</label>
+                            <input type="number" id="char-prop-rz" class="char-prop-input" step="5" value="0">
+                        </div>
+                        <div class="char-prop-actions">
+                            <button class="action-btn small" id="char-btn-duplicate">
+                                <span class="material-icons-round" style="font-size:14px">content_copy</span> Duplicate
+                            </button>
+                            <button class="action-btn small danger" id="char-btn-delete">
+                                <span class="material-icons-round" style="font-size:14px">delete</span> Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="char-designer-footer">
+                <button class="action-btn" id="char-btn-reset">
+                    <span class="material-icons-round" style="font-size:14px">restart_alt</span> Reset to Default
+                </button>
+                <div style="display:flex;gap:8px">
+                    <button class="action-btn" id="char-btn-cancel">Cancel</button>
+                    <button class="action-btn primary" id="char-btn-save">Save Character</button>
+                </div>
             </div>
         </div>
     </div>

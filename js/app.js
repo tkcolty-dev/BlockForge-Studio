@@ -36,6 +36,7 @@ class App {
         this.initPublish();
         this.initCollab();
         this.initAIAssistant();
+        this.initCharacterDesigner();
 
         this.VERSION = '1.0.0';
         this.currentProjectId = null;
@@ -245,6 +246,7 @@ class App {
 
     _doStartPlay() {
         this.runtime.playerColors = this.gameSettings.playerColors;
+        this.runtime.characterParts = this.gameSettings.characterParts || null;
         this.runtime._uiScreens = this.uiScreens;
         this.runtime.start(this.gameSettings);
     }
@@ -286,8 +288,8 @@ class App {
     // ===== Object Library =====
 
     initObjectLibrary() {
-        // Shape buttons
-        document.querySelectorAll('[data-shape]').forEach(btn => {
+        // Shape buttons (exclude character designer buttons)
+        document.querySelectorAll('[data-shape]:not(.char-shape-btn)').forEach(btn => {
             btn.addEventListener('click', () => {
                 const shape = btn.dataset.shape;
                 const obj = this.scene3d.addObject(shape, {
@@ -1417,7 +1419,8 @@ class App {
                 speed: this.gameSettings.speed,
                 jumpForce: this.gameSettings.jumpForce,
                 sensitivity: this.gameSettings.sensitivity,
-                keyBindings: this.gameSettings.keyBindings
+                keyBindings: this.gameSettings.keyBindings,
+                characterParts: this.gameSettings.characterParts
             }
         };
     }
@@ -1488,6 +1491,7 @@ class App {
             if (data.environment.jumpForce) this.gameSettings.jumpForce = data.environment.jumpForce;
             if (data.environment.sensitivity) this.gameSettings.sensitivity = data.environment.sensitivity;
             if (data.environment.keyBindings) this.gameSettings.keyBindings = data.environment.keyBindings;
+            if (data.environment.characterParts) this.gameSettings.characterParts = data.environment.characterParts;
         }
 
         this.refreshExplorer();
@@ -1950,6 +1954,7 @@ class App {
         this.scene3d.setWeather('none');
         this.gameSettings.bgMusic = 'none';
         this.gameSettings.musicVolume = 30;
+        this.gameSettings.characterParts = null;
 
         // Apply template if selected
         if (templateKey && templateKey !== 'empty' && this.templates && this.templates[templateKey]) {
@@ -2826,6 +2831,373 @@ class App {
                 this.gameSettings.playerColors[part] = e.target.value;
             });
         });
+    }
+
+    // ===== Character Designer =====
+
+    initCharacterDesigner() {
+        this._charRenderer = null;
+        this._charScene = null;
+        this._charCamera = null;
+        this._charControls = null;
+        this._charGroup = null;
+        this._charAnimId = null;
+        this._charWorkingParts = [];
+        this._charSelectedIndex = -1;
+        this._charPartMeshes = [];
+
+        const modal = document.getElementById('character-designer-modal');
+
+        // Open from toolbar
+        document.getElementById('btn-character').addEventListener('click', () => this._charOpen());
+
+        // Open from settings link
+        const designerLink = document.getElementById('char-designer-link');
+        if (designerLink) {
+            designerLink.addEventListener('click', () => {
+                document.getElementById('settings-modal').classList.add('hidden');
+                this._charOpen();
+            });
+        }
+
+        // Close
+        document.getElementById('char-designer-close').addEventListener('click', () => this._charClose());
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) this._charClose();
+        });
+
+        // Shape palette
+        document.querySelectorAll('.char-shape-btn').forEach(btn => {
+            btn.addEventListener('click', () => this._charAddPart(btn.dataset.shape));
+        });
+
+        // Property inputs
+        ['char-prop-name', 'char-prop-color',
+         'char-prop-px', 'char-prop-py', 'char-prop-pz',
+         'char-prop-sx', 'char-prop-sy', 'char-prop-sz',
+         'char-prop-rx', 'char-prop-ry', 'char-prop-rz'].forEach(id => {
+            document.getElementById(id).addEventListener('input', () => this._charOnPropertyChange());
+        });
+        document.getElementById('char-prop-shape').addEventListener('change', () => this._charOnPropertyChange());
+
+        // Duplicate / Delete
+        document.getElementById('char-btn-duplicate').addEventListener('click', () => this._charDuplicatePart());
+        document.getElementById('char-btn-delete').addEventListener('click', () => this._charDeletePart());
+
+        // Footer
+        document.getElementById('char-btn-reset').addEventListener('click', () => {
+            this._charWorkingParts = [];
+            this._charSelectedIndex = -1;
+            this._charRebuildPreview();
+            this._charRenderPartsList();
+            this._charHideProperties();
+        });
+        document.getElementById('char-btn-cancel').addEventListener('click', () => this._charClose());
+        document.getElementById('char-btn-save').addEventListener('click', () => {
+            this.gameSettings.characterParts = JSON.parse(JSON.stringify(this._charWorkingParts));
+            this.hasUnsavedChanges = true;
+            this.toast('Character saved', 'success');
+            this._charClose();
+        });
+
+        // Viewport click for selection
+        document.getElementById('char-designer-canvas').addEventListener('click', (e) => this._charOnViewportClick(e));
+    }
+
+    _charOpen() {
+        const modal = document.getElementById('character-designer-modal');
+        modal.classList.remove('hidden');
+
+        const canvas = document.getElementById('char-designer-canvas');
+
+        // Lazy init Three.js
+        if (!this._charRenderer) {
+            this._charRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            this._charRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this._charRenderer.shadowMap.enabled = true;
+
+            this._charScene = new THREE.Scene();
+            this._charScene.background = new THREE.Color(0x1a1a2e);
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+            this._charScene.add(ambient);
+            const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+            dir.position.set(5, 10, 5);
+            dir.castShadow = true;
+            this._charScene.add(dir);
+
+            const grid = new THREE.GridHelper(10, 20, 0x444466, 0x333355);
+            this._charScene.add(grid);
+
+            this._charCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+            this._charCamera.position.set(3, 2.5, 3);
+
+            this._charControls = new THREE.OrbitControls(this._charCamera, canvas);
+            this._charControls.target.set(0, 0.8, 0);
+            this._charControls.enableDamping = true;
+            this._charControls.dampingFactor = 0.1;
+
+            this._charGroup = new THREE.Group();
+            this._charScene.add(this._charGroup);
+
+            window.addEventListener('resize', () => {
+                if (!document.getElementById('character-designer-modal').classList.contains('hidden')) {
+                    this._charResize();
+                }
+            });
+        }
+
+        // Load working copy
+        this._charWorkingParts = JSON.parse(JSON.stringify(this.gameSettings.characterParts || []));
+        this._charSelectedIndex = -1;
+
+        this._charResize();
+        this._charRebuildPreview();
+        this._charRenderPartsList();
+        this._charHideProperties();
+        this._charStartRender();
+    }
+
+    _charClose() {
+        document.getElementById('character-designer-modal').classList.add('hidden');
+        this._charStopRender();
+    }
+
+    _charStartRender() {
+        if (this._charAnimId) return;
+        const loop = () => {
+            this._charAnimId = requestAnimationFrame(loop);
+            if (this._charControls) this._charControls.update();
+            if (this._charRenderer && this._charScene && this._charCamera) {
+                this._charRenderer.render(this._charScene, this._charCamera);
+            }
+        };
+        loop();
+    }
+
+    _charStopRender() {
+        if (this._charAnimId) {
+            cancelAnimationFrame(this._charAnimId);
+            this._charAnimId = null;
+        }
+    }
+
+    _charResize() {
+        const canvas = document.getElementById('char-designer-canvas');
+        const viewport = canvas.parentElement;
+        if (!viewport || !this._charRenderer) return;
+        const w = viewport.clientWidth;
+        const h = viewport.clientHeight;
+        this._charRenderer.setSize(w, h);
+        if (this._charCamera) {
+            this._charCamera.aspect = w / h;
+            this._charCamera.updateProjectionMatrix();
+        }
+    }
+
+    _charAddPart(shape) {
+        const names = { box: 'Box', sphere: 'Sphere', cylinder: 'Cylinder', cone: 'Cone', pyramid: 'Pyramid', dome: 'Dome', wedge: 'Wedge', torus: 'Torus' };
+        const count = this._charWorkingParts.filter(p => p.shape === shape).length;
+        const part = {
+            id: 'part_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            name: (names[shape] || 'Part') + ' ' + (count + 1),
+            shape,
+            color: '#4c97ff',
+            offset: { x: 0, y: 0.5, z: 0 },
+            scale: { x: 1, y: 1, z: 1 },
+            rotation: { x: 0, y: 0, z: 0 }
+        };
+        this._charWorkingParts.push(part);
+        this._charSelectedIndex = this._charWorkingParts.length - 1;
+        this._charRebuildPreview();
+        this._charRenderPartsList();
+        this._charShowProperties(part);
+    }
+
+    _charCreateGeometry(shape) {
+        switch (shape) {
+            case 'sphere': return new THREE.SphereGeometry(0.5, 16, 12);
+            case 'cylinder': return new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+            case 'cone': return new THREE.ConeGeometry(0.5, 1, 16);
+            case 'pyramid': { const g = new THREE.ConeGeometry(0.7, 1, 4); g.rotateY(Math.PI / 4); return g; }
+            case 'dome': return new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+            case 'wedge': {
+                const ws = new THREE.Shape();
+                ws.moveTo(0, 0); ws.lineTo(1, 0); ws.lineTo(0, 1); ws.lineTo(0, 0);
+                const g = new THREE.ExtrudeGeometry(ws, { depth: 1, bevelEnabled: false });
+                g.center();
+                return g;
+            }
+            case 'torus': return new THREE.TorusGeometry(0.35, 0.15, 12, 24);
+            default: return new THREE.BoxGeometry(1, 1, 1);
+        }
+    }
+
+    _charRebuildPreview() {
+        if (!this._charGroup) return;
+        while (this._charGroup.children.length > 0) {
+            this._charGroup.remove(this._charGroup.children[0]);
+        }
+        this._charPartMeshes = [];
+
+        if (this._charWorkingParts.length === 0) {
+            // Ghost of default character
+            const ghostMat = new THREE.MeshStandardMaterial({ color: 0x4c97ff, transparent: true, opacity: 0.25, roughness: 0.6 });
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8), ghostMat);
+            body.position.y = 0.8;
+            this._charGroup.add(body);
+            const headMat = ghostMat.clone();
+            headMat.color.set(0xf5cba7);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8), headMat);
+            head.position.y = 1.85;
+            this._charGroup.add(head);
+            return;
+        }
+
+        this._charWorkingParts.forEach((part, i) => {
+            const geom = this._charCreateGeometry(part.shape);
+            const isSelected = i === this._charSelectedIndex;
+            const mat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(part.color || '#4c97ff'),
+                roughness: 0.5,
+                metalness: 0.1,
+                emissive: isSelected ? new THREE.Color(0x222222) : new THREE.Color(0x000000)
+            });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(part.offset?.x || 0, part.offset?.y || 0, part.offset?.z || 0);
+            mesh.scale.set(part.scale?.x || 1, part.scale?.y || 1, part.scale?.z || 1);
+            mesh.rotation.set(
+                (part.rotation?.x || 0) * Math.PI / 180,
+                (part.rotation?.y || 0) * Math.PI / 180,
+                (part.rotation?.z || 0) * Math.PI / 180
+            );
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData._charPartIndex = i;
+            this._charGroup.add(mesh);
+            this._charPartMeshes.push(mesh);
+        });
+    }
+
+    _charRenderPartsList() {
+        const list = document.getElementById('char-parts-list');
+        document.getElementById('char-parts-count').textContent = this._charWorkingParts.length;
+
+        if (this._charWorkingParts.length === 0) {
+            list.innerHTML = '<div class="char-parts-empty">Click a shape above to add parts</div>';
+            return;
+        }
+
+        list.innerHTML = '';
+        this._charWorkingParts.forEach((part, i) => {
+            const item = document.createElement('div');
+            item.className = 'char-part-item' + (i === this._charSelectedIndex ? ' selected' : '');
+            item.innerHTML = `<span class="char-part-dot" style="background:${part.color}"></span><span>${part.name}</span>`;
+            item.addEventListener('click', () => {
+                this._charSelectedIndex = i;
+                this._charRebuildPreview();
+                this._charRenderPartsList();
+                this._charShowProperties(part);
+            });
+            list.appendChild(item);
+        });
+    }
+
+    _charShowProperties(part) {
+        document.getElementById('char-properties-panel').style.display = '';
+        document.getElementById('char-prop-name').value = part.name || '';
+        document.getElementById('char-prop-shape').value = part.shape || 'box';
+        document.getElementById('char-prop-color').value = part.color || '#4c97ff';
+        document.getElementById('char-prop-px').value = part.offset?.x ?? 0;
+        document.getElementById('char-prop-py').value = part.offset?.y ?? 0;
+        document.getElementById('char-prop-pz').value = part.offset?.z ?? 0;
+        document.getElementById('char-prop-sx').value = part.scale?.x ?? 1;
+        document.getElementById('char-prop-sy').value = part.scale?.y ?? 1;
+        document.getElementById('char-prop-sz').value = part.scale?.z ?? 1;
+        document.getElementById('char-prop-rx').value = part.rotation?.x ?? 0;
+        document.getElementById('char-prop-ry').value = part.rotation?.y ?? 0;
+        document.getElementById('char-prop-rz').value = part.rotation?.z ?? 0;
+    }
+
+    _charHideProperties() {
+        document.getElementById('char-properties-panel').style.display = 'none';
+    }
+
+    _charOnPropertyChange() {
+        if (this._charSelectedIndex < 0 || this._charSelectedIndex >= this._charWorkingParts.length) return;
+        const part = this._charWorkingParts[this._charSelectedIndex];
+        part.name = document.getElementById('char-prop-name').value;
+        part.shape = document.getElementById('char-prop-shape').value;
+        part.color = document.getElementById('char-prop-color').value;
+        part.offset = {
+            x: parseFloat(document.getElementById('char-prop-px').value) || 0,
+            y: parseFloat(document.getElementById('char-prop-py').value) || 0,
+            z: parseFloat(document.getElementById('char-prop-pz').value) || 0
+        };
+        part.scale = {
+            x: parseFloat(document.getElementById('char-prop-sx').value) || 1,
+            y: parseFloat(document.getElementById('char-prop-sy').value) || 1,
+            z: parseFloat(document.getElementById('char-prop-sz').value) || 1
+        };
+        part.rotation = {
+            x: parseFloat(document.getElementById('char-prop-rx').value) || 0,
+            y: parseFloat(document.getElementById('char-prop-ry').value) || 0,
+            z: parseFloat(document.getElementById('char-prop-rz').value) || 0
+        };
+        this._charRebuildPreview();
+        // Update list item inline
+        const items = document.querySelectorAll('.char-part-item');
+        if (items[this._charSelectedIndex]) {
+            const dot = items[this._charSelectedIndex].querySelector('.char-part-dot');
+            if (dot) dot.style.background = part.color;
+            const label = items[this._charSelectedIndex].querySelector('span:last-child');
+            if (label) label.textContent = part.name;
+        }
+    }
+
+    _charOnViewportClick(e) {
+        if (!this._charCamera || !this._charPartMeshes.length) return;
+        const canvas = e.target;
+        const rect = canvas.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+            ((e.clientX - rect.left) / rect.width) * 2 - 1,
+            -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, this._charCamera);
+        const hits = raycaster.intersectObjects(this._charPartMeshes);
+        if (hits.length > 0) {
+            const idx = hits[0].object.userData._charPartIndex;
+            if (idx !== undefined && idx >= 0 && idx < this._charWorkingParts.length) {
+                this._charSelectedIndex = idx;
+                this._charRebuildPreview();
+                this._charRenderPartsList();
+                this._charShowProperties(this._charWorkingParts[idx]);
+            }
+        }
+    }
+
+    _charDuplicatePart() {
+        if (this._charSelectedIndex < 0 || this._charSelectedIndex >= this._charWorkingParts.length) return;
+        const src = this._charWorkingParts[this._charSelectedIndex];
+        const clone = JSON.parse(JSON.stringify(src));
+        clone.id = 'part_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+        clone.name = src.name + ' Copy';
+        clone.offset.y += 0.5;
+        this._charWorkingParts.push(clone);
+        this._charSelectedIndex = this._charWorkingParts.length - 1;
+        this._charRebuildPreview();
+        this._charRenderPartsList();
+        this._charShowProperties(clone);
+    }
+
+    _charDeletePart() {
+        if (this._charSelectedIndex < 0 || this._charSelectedIndex >= this._charWorkingParts.length) return;
+        this._charWorkingParts.splice(this._charSelectedIndex, 1);
+        this._charSelectedIndex = -1;
+        this._charRebuildPreview();
+        this._charRenderPartsList();
+        this._charHideProperties();
     }
 
     saveProject(silent) {

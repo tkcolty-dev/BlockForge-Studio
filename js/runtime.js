@@ -507,35 +507,59 @@ class Runtime {
         const isPointClick = this.controlScheme === 'point-click';
         const showBody = isThirdPerson || isTopDown || isPointClick;
 
-        // Create player body
-        const playerGeom = new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8);
-        const bodyColor = this.playerColors?.body || '#4c97ff';
-        const playerMat = showBody
-            ? new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.6 })
-            : new THREE.MeshBasicMaterial({ visible: false });
-        const playerMesh = new THREE.Mesh(playerGeom, playerMat);
-        playerMesh.position.copy(spawnPos);
-        playerMesh.castShadow = showBody;
-        playerMesh.receiveShadow = showBody;
-        this.scene3d.scene.add(playerMesh);
+        let playerMesh;
+        let playerHeight = 1.6;
 
-        // For visible modes, add a head so orientation is clear
-        if (showBody) {
-            const headGeom = new THREE.SphereGeometry(0.25, 12, 8);
-            const headColor = this.playerColors?.head || '#f5cba7';
-            const headMat = new THREE.MeshStandardMaterial({ color: headColor, roughness: 0.6 });
-            const head = new THREE.Mesh(headGeom, headMat);
-            head.position.y = 1.05;
-            head.castShadow = true;
-            playerMesh.add(head);
+        // Custom character or default
+        if (this.characterParts && this.characterParts.length > 0 && showBody) {
+            playerMesh = this._buildCustomCharacterMesh(this.characterParts);
+            playerMesh.position.copy(spawnPos);
+            // Compute bounding box height for collision
+            const box = new THREE.Box3().setFromObject(playerMesh);
+            playerHeight = box.max.y - box.min.y;
+            if (playerHeight < 0.5) playerHeight = 1.6;
+            // Center the mesh vertically so bottom sits at spawn
+            const center = box.getCenter(new THREE.Vector3());
+            playerMesh.children.forEach(child => {
+                child.position.y -= center.y - playerHeight / 2;
+            });
+        } else if (this.characterParts && this.characterParts.length > 0 && !showBody) {
+            // First-person: invisible collision body
+            const playerGeom = new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8);
+            const playerMat = new THREE.MeshBasicMaterial({ visible: false });
+            playerMesh = new THREE.Mesh(playerGeom, playerMat);
+            playerMesh.position.copy(spawnPos);
+        } else {
+            // Default character
+            const playerGeom = new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8);
+            const bodyColor = this.playerColors?.body || '#4c97ff';
+            const playerMat = showBody
+                ? new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.6 })
+                : new THREE.MeshBasicMaterial({ visible: false });
+            playerMesh = new THREE.Mesh(playerGeom, playerMat);
+            playerMesh.position.copy(spawnPos);
+            playerMesh.castShadow = showBody;
+            playerMesh.receiveShadow = showBody;
 
-            const noseGeom = new THREE.BoxGeometry(0.08, 0.08, 0.12);
-            const detailColor = this.playerColors?.detail || '#e0b090';
-            const noseMat = new THREE.MeshStandardMaterial({ color: detailColor });
-            const nose = new THREE.Mesh(noseGeom, noseMat);
-            nose.position.set(0, 1.03, 0.28);
-            playerMesh.add(nose);
+            if (showBody) {
+                const headGeom = new THREE.SphereGeometry(0.25, 12, 8);
+                const headColor = this.playerColors?.head || '#f5cba7';
+                const headMat = new THREE.MeshStandardMaterial({ color: headColor, roughness: 0.6 });
+                const head = new THREE.Mesh(headGeom, headMat);
+                head.position.y = 1.05;
+                head.castShadow = true;
+                playerMesh.add(head);
+
+                const noseGeom = new THREE.BoxGeometry(0.08, 0.08, 0.12);
+                const detailColor = this.playerColors?.detail || '#e0b090';
+                const noseMat = new THREE.MeshStandardMaterial({ color: detailColor });
+                const nose = new THREE.Mesh(noseGeom, noseMat);
+                nose.position.set(0, 1.03, 0.28);
+                playerMesh.add(nose);
+            }
         }
+
+        this.scene3d.scene.add(playerMesh);
 
         this.playerController = {
             mesh: playerMesh,
@@ -546,7 +570,7 @@ class Runtime {
             isGrounded: false,
             yaw: 0,
             pitch: 0,
-            height: 1.6,
+            height: playerHeight,
             tpDistance: 8,
             tpAngle: 0.5
         };
@@ -572,6 +596,48 @@ class Runtime {
             cam.lookAt(spawnPos.x, 0, spawnPos.z);
             this._moveTarget = null;
         }
+    }
+
+    _buildCustomCharacterMesh(parts) {
+        const group = new THREE.Group();
+        parts.forEach(part => {
+            let geom;
+            switch (part.shape) {
+                case 'sphere': geom = new THREE.SphereGeometry(0.5, 16, 12); break;
+                case 'cylinder': geom = new THREE.CylinderGeometry(0.5, 0.5, 1, 16); break;
+                case 'cone': geom = new THREE.ConeGeometry(0.5, 1, 16); break;
+                case 'pyramid': geom = new THREE.ConeGeometry(0.7, 1, 4); geom.rotateY(Math.PI / 4); break;
+                case 'dome': geom = new THREE.SphereGeometry(0.5, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2); break;
+                case 'wedge': {
+                    const ws = new THREE.Shape();
+                    ws.moveTo(0, 0); ws.lineTo(1, 0); ws.lineTo(0, 1); ws.lineTo(0, 0);
+                    geom = new THREE.ExtrudeGeometry(ws, { depth: 1, bevelEnabled: false });
+                    geom.center();
+                    break;
+                }
+                case 'torus': geom = new THREE.TorusGeometry(0.35, 0.15, 12, 24); break;
+                default: geom = new THREE.BoxGeometry(1, 1, 1); break;
+            }
+            const mat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(part.color || '#4c97ff'),
+                roughness: 0.5,
+                metalness: 0.1
+            });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(part.offset?.x || 0, part.offset?.y || 0, part.offset?.z || 0);
+            mesh.scale.set(part.scale?.x || 1, part.scale?.y || 1, part.scale?.z || 1);
+            if (part.rotation) {
+                mesh.rotation.set(
+                    (part.rotation.x || 0) * Math.PI / 180,
+                    (part.rotation.y || 0) * Math.PI / 180,
+                    (part.rotation.z || 0) * Math.PI / 180
+                );
+            }
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            group.add(mesh);
+        });
+        return group;
     }
 
     _updateThirdPersonCamera() {
