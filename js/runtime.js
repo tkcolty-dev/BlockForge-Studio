@@ -272,6 +272,9 @@ class Runtime {
         if (this._gameCrosshair) this._gameCrosshair.classList.remove('hidden');
         viewportContainer.style.cursor = 'none';
 
+        // Start quick animations on all objects
+        this.scene3d.objects.forEach(obj => this.startQuickAnimations(obj));
+
         // Compile and start scripts
         this.scene3d.objects.forEach(obj => {
             const compiled = this.blockCode.compileScripts(obj);
@@ -1021,6 +1024,39 @@ class Runtime {
             cam.position.lerp(camTarget, 0.05);
             cam.lookAt(newPos.x, 0, newPos.z);
         }
+    }
+
+    startQuickAnimations(obj) {
+        const qa = obj.userData.quickAnimations;
+        if (!qa || !qa.length) return;
+        qa.forEach(a => {
+            switch (a.type) {
+                case 'spin':
+                    this.activeAnimations.push({ type: 'spin', object: obj, axis: (a.axis || 'y').toUpperCase(), speed: a.speed || 1, elapsed: 0 });
+                    break;
+                case 'bounce':
+                    this.activeAnimations.push({ type: 'bounce', object: obj, baseY: obj.position.y, height: a.height || 2, speed: a.speed || 2, elapsed: 0 });
+                    break;
+                case 'hover':
+                    this.activeAnimations.push({ type: 'hover', object: obj, baseY: obj.position.y, height: a.height || 0.5, speed: a.speed || 1.5, phase: 0, elapsed: 0 });
+                    break;
+                case 'orbit':
+                    this.activeAnimations.push({ type: 'orbit', object: obj, centerX: obj.position.x, centerZ: obj.position.z, radius: a.radius || 3, speed: a.speed || 1, elapsed: 0 });
+                    break;
+                case 'scalePulse':
+                    this.activeAnimations.push({ type: 'scalePulse', object: obj, min: 0.8, max: 1.2, speed: a.speed || 2, baseScale: obj.scale.clone(), elapsed: 0 });
+                    break;
+                case 'zigzag':
+                    this.activeAnimations.push({ type: 'zigzag', object: obj, baseX: obj.position.x, width: a.width || 3, speed: a.speed || 2, phase: 0, elapsed: 0 });
+                    break;
+                case 'wander':
+                    this.activeAnimations.push({ type: 'wander', object: obj, radius: a.area || 5, speed: a.speed || 1.5, baseX: obj.position.x, baseZ: obj.position.z, targetX: obj.position.x, targetZ: obj.position.z, elapsed: 0, nextChange: 0 });
+                    break;
+                case 'patrol':
+                    this.activeAnimations.push({ type: 'patrol', object: obj, baseX: obj.position.x, distance: a.distance || 5, speed: a.speed || 2, elapsed: 0 });
+                    break;
+            }
+        });
     }
 
     updateAnimations(dt) {

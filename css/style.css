@@ -6527,3 +6527,116 @@ kbd {
 .keyframe-item .kf-actions button:hover { color: var(--text); background: rgba(255,255,255,0.06); }
 .keyframe-item .kf-actions button.danger:hover { color: #e74c3c; }
 .keyframe-item .kf-actions .material-icons-round { font-size: 14px; }
+
+/* Quick Animation Grid */
+.quick-anim-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 8px 12px;
+}
+.quick-anim-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.15s;
+}
+.quick-anim-btn:hover {
+    background: rgba(255,255,255,0.06);
+    color: var(--text);
+}
+.quick-anim-btn.active {
+    background: rgba(74,144,217,0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.quick-anim-btn .material-icons-round {
+    font-size: 16px;
+}
+
+/* Quick Animation Controls */
+.quick-anim-controls {
+    padding: 0 12px 4px;
+}
+.quick-anim-controls:empty {
+    display: none;
+}
+.quick-anim-control-group {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+}
+.quick-anim-control-group .qa-label {
+    font-size: 10px;
+    color: var(--accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+.qa-control-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.qa-control-row:last-child { margin-bottom: 0; }
+.qa-control-row label {
+    font-size: 11px;
+    color: var(--text-dim);
+    min-width: 50px;
+}
+.qa-control-row input[type="range"] {
+    flex: 1;
+    height: 4px;
+    accent-color: var(--accent);
+}
+.qa-control-row .qa-value {
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 28px;
+    text-align: right;
+}
+.qa-control-row select {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 11px;
+    padding: 2px 4px;
+}
+
+/* Advanced Keyframes Toggle */
+.advanced-toggle {
+    cursor: pointer;
+    user-select: none;
+}
+.advanced-toggle:hover {
+    background: rgba(255,255,255,0.03);
+}
+.advanced-toggle-icon {
+    font-size: 18px !important;
+    color: var(--text-dim);
+    transition: transform 0.2s;
+}
+.advanced-toggle.expanded .advanced-toggle-icon {
+    transform: rotate(180deg);
+}
+.advanced-kf-body {
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+}
+.advanced-kf-body.collapsed {
+    max-height: 0;
+    overflow: hidden;
+}

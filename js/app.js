@@ -6525,6 +6525,9 @@ class App {
                 if (obj && msg.objectData.animations) {
                     obj.userData.animations = msg.objectData.animations;
                 }
+                if (obj && msg.objectData.quickAnimations) {
+                    obj.userData.quickAnimations = msg.objectData.quickAnimations;
+                }
                 this.refreshExplorer();
                 this.updateObjectCount();
                 this._collabBroadcastPaused = false;
@@ -6632,7 +6635,8 @@ class App {
                     scripts: mesh.userData.scripts,
                     customParts: mesh.userData.customParts,
                     customObjectId: mesh.userData.customObjectId,
-                    animations: mesh.userData.animations || null
+                    animations: mesh.userData.animations || null,
+                    quickAnimations: mesh.userData.quickAnimations || null
                 }
             });
         };
@@ -7442,9 +7446,48 @@ class App {
 
     // ===== Animate Tab =====
 
+    static QUICK_ANIM_PRESETS = [
+        { type: 'spin',       label: 'Spin',    icon: 'sync',                   controls: [{ key: 'speed', label: 'Speed', min: 0.1, max: 5, step: 0.1, def: 1 }, { key: 'axis', label: 'Axis', kind: 'select', options: ['x','y','z'], def: 'y' }] },
+        { type: 'bounce',     label: 'Bounce',  icon: 'arrow_upward',           controls: [{ key: 'speed', label: 'Speed', min: 0.5, max: 5, step: 0.1, def: 2 }, { key: 'height', label: 'Height', min: 0.5, max: 5, step: 0.1, def: 2 }] },
+        { type: 'hover',      label: 'Hover',   icon: 'flight',                 controls: [{ key: 'speed', label: 'Speed', min: 0.5, max: 4, step: 0.1, def: 1.5 }, { key: 'height', label: 'Height', min: 0.1, max: 2, step: 0.1, def: 0.5 }] },
+        { type: 'orbit',      label: 'Orbit',   icon: 'autorenew',              controls: [{ key: 'speed', label: 'Speed', min: 0.1, max: 4, step: 0.1, def: 1 }, { key: 'radius', label: 'Radius', min: 1, max: 10, step: 0.5, def: 3 }] },
+        { type: 'scalePulse', label: 'Pulse',   icon: 'radio_button_checked',   controls: [{ key: 'speed', label: 'Speed', min: 0.5, max: 5, step: 0.1, def: 2 }] },
+        { type: 'zigzag',     label: 'Zigzag',  icon: 'show_chart',             controls: [{ key: 'speed', label: 'Speed', min: 0.5, max: 5, step: 0.1, def: 2 }, { key: 'width', label: 'Width', min: 1, max: 8, step: 0.5, def: 3 }] },
+        { type: 'wander',     label: 'Wander',  icon: 'explore',                controls: [{ key: 'speed', label: 'Speed', min: 0.5, max: 4, step: 0.1, def: 1.5 }, { key: 'area', label: 'Area', min: 2, max: 15, step: 1, def: 5 }] },
+        { type: 'patrol',     label: 'Patrol',  icon: 'swap_horiz',             controls: [{ key: 'speed', label: 'Speed', min: 0.5, max: 5, step: 0.1, def: 2 }, { key: 'distance', label: 'Distance', min: 1, max: 15, step: 0.5, def: 5 }] },
+    ];
+
     initAnimateTab() {
         this._selectedAnimName = null;
         this._animPreviewRAF = null;
+
+        // Build quick animation grid
+        const grid = document.getElementById('quick-anim-grid');
+        App.QUICK_ANIM_PRESETS.forEach(preset => {
+            const btn = document.createElement('button');
+            btn.className = 'quick-anim-btn';
+            btn.dataset.type = preset.type;
+            btn.innerHTML = `<span class="material-icons-round">${preset.icon}</span>${preset.label}`;
+            btn.addEventListener('click', () => this._toggleQuickAnim(preset));
+            grid.appendChild(btn);
+        });
+
+        // Advanced keyframe toggle
+        document.getElementById('advanced-kf-toggle').addEventListener('click', () => {
+            const toggle = document.getElementById('advanced-kf-toggle');
+            const body = document.getElementById('advanced-kf-body');
+            const isCollapsed = body.classList.contains('collapsed');
+            if (isCollapsed) {
+                body.classList.remove('collapsed');
+                body.style.maxHeight = body.scrollHeight + 'px';
+                toggle.classList.add('expanded');
+            } else {
+                body.style.maxHeight = body.scrollHeight + 'px';
+                requestAnimationFrame(() => { body.style.maxHeight = '0'; });
+                body.classList.add('collapsed');
+                toggle.classList.remove('expanded');
+            }
+        });
 
         document.getElementById('btn-add-animation').addEventListener('click', () => {
             const obj = this.scene3d.selectedObject;
@@ -7521,6 +7564,78 @@ class App {
         this._selectedAnimName = null;
         document.getElementById('anim-editor').classList.add('hidden');
         this._renderAnimList(obj);
+        this._renderQuickAnimGrid(obj);
+    }
+
+    _toggleQuickAnim(preset) {
+        const obj = this.scene3d.selectedObject;
+        if (!obj) return;
+        if (!obj.userData.quickAnimations) obj.userData.quickAnimations = [];
+        this.saveUndoState();
+        const idx = obj.userData.quickAnimations.findIndex(a => a.type === preset.type);
+        if (idx >= 0) {
+            obj.userData.quickAnimations.splice(idx, 1);
+        } else {
+            const entry = { type: preset.type };
+            preset.controls.forEach(c => { entry[c.key] = c.def; });
+            obj.userData.quickAnimations.push(entry);
+        }
+        this._renderQuickAnimGrid(obj);
+        this._broadcastQuickAnimations(obj);
+    }
+
+    _renderQuickAnimGrid(obj) {
+        const grid = document.getElementById('quick-anim-grid');
+        const controls = document.getElementById('quick-anim-controls');
+        const qa = (obj && obj.userData.quickAnimations) || [];
+
+        // Update active states on buttons
+        grid.querySelectorAll('.quick-anim-btn').forEach(btn => {
+            const isActive = qa.some(a => a.type === btn.dataset.type);
+            btn.classList.toggle('active', isActive);
+        });
+
+        // Render control sliders for active animations
+        controls.innerHTML = '';
+        qa.forEach(anim => {
+            const preset = App.QUICK_ANIM_PRESETS.find(p => p.type === anim.type);
+            if (!preset) return;
+            const group = document.createElement('div');
+            group.className = 'quick-anim-control-group';
+            group.innerHTML = `<div class="qa-label">${preset.label}</div>`;
+            preset.controls.forEach(c => {
+                const row = document.createElement('div');
+                row.className = 'qa-control-row';
+                if (c.kind === 'select') {
+                    row.innerHTML = `<label>${c.label}</label><select>${c.options.map(o => `<option value="${o}"${anim[c.key] === o ? ' selected' : ''}>${o.toUpperCase()}</option>`).join('')}</select>`;
+                    row.querySelector('select').addEventListener('change', (e) => {
+                        anim[c.key] = e.target.value;
+                        this._broadcastQuickAnimations(obj);
+                    });
+                } else {
+                    const val = anim[c.key] != null ? anim[c.key] : c.def;
+                    row.innerHTML = `<label>${c.label}</label><input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${val}"><span class="qa-value">${val}</span>`;
+                    row.querySelector('input').addEventListener('input', (e) => {
+                        const v = parseFloat(e.target.value);
+                        anim[c.key] = v;
+                        row.querySelector('.qa-value').textContent = v;
+                        this._broadcastQuickAnimations(obj);
+                    });
+                }
+                group.appendChild(row);
+            });
+            controls.appendChild(group);
+        });
+    }
+
+    _broadcastQuickAnimations(obj) {
+        if (!obj || !this.collab) return;
+        this._collabSend({
+            type: 'update-property',
+            collabId: obj.userData.collabId,
+            prop: 'quickAnimations',
+            value: obj.userData.quickAnimations || []
+        });
     }
 
     _renderAnimList(obj) {

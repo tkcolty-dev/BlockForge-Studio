@@ -880,43 +880,59 @@
                     <p>Select an object to create animations</p>
                 </div>
                 <div id="animate-content" class="hidden">
+                    <!-- Quick Animations -->
                     <div class="panel-section">
-                        <div class="section-header">
-                            <span>Animations</span>
-                            <button class="section-action-btn" id="btn-add-animation" title="Add Animation">
-                                <span class="material-icons-round">add</span>
-                            </button>
-                        </div>
-                        <div id="anim-list" class="anim-list"></div>
+                        <div class="section-header"><span>Quick Animations</span></div>
+                        <div id="quick-anim-grid" class="quick-anim-grid"></div>
+                        <div id="quick-anim-controls" class="quick-anim-controls"></div>
                     </div>
-                    <div id="anim-editor" class="hidden">
-                        <div class="panel-section">
-                            <div class="section-header"><span id="anim-editor-title">Animation</span></div>
-                            <div class="prop-row">
-                                <label>Name</label>
-                                <input type="text" id="anim-name" class="prop-input" spellcheck="false">
-                            </div>
-                            <div class="prop-row">
-                                <label>Loop</label>
-                                <input type="checkbox" id="anim-loop">
-                            </div>
+
+                    <!-- Advanced Keyframes (collapsible) -->
+                    <div class="panel-section">
+                        <div class="section-header advanced-toggle" id="advanced-kf-toggle">
+                            <span>Advanced Keyframes</span>
+                            <span class="material-icons-round advanced-toggle-icon">expand_more</span>
                         </div>
-                        <div class="panel-section">
-                            <div class="section-header">
-                                <span>Keyframes</span>
-                                <button class="section-action-btn" id="btn-capture-keyframe" title="Capture Current Transform">
-                                    <span class="material-icons-round">fiber_manual_record</span>
-                                </button>
+                        <div id="advanced-kf-body" class="advanced-kf-body collapsed">
+                            <div style="padding-top:6px">
+                                <div class="section-header" style="border:none;padding-top:0">
+                                    <span>Animations</span>
+                                    <button class="section-action-btn" id="btn-add-animation" title="Add Animation">
+                                        <span class="material-icons-round">add</span>
+                                    </button>
+                                </div>
+                                <div id="anim-list" class="anim-list"></div>
                             </div>
-                            <div id="keyframe-list" class="keyframe-list"></div>
-                        </div>
-                        <div class="action-buttons" style="padding:8px 12px;gap:6px">
-                            <button class="action-btn small" id="btn-preview-anim">
-                                <span class="material-icons-round">play_arrow</span> Preview
-                            </button>
-                            <button class="action-btn small danger" id="btn-delete-anim">
-                                <span class="material-icons-round">delete</span> Delete
-                            </button>
+                            <div id="anim-editor" class="hidden">
+                                <div class="panel-section">
+                                    <div class="section-header"><span id="anim-editor-title">Animation</span></div>
+                                    <div class="prop-row">
+                                        <label>Name</label>
+                                        <input type="text" id="anim-name" class="prop-input" spellcheck="false">
+                                    </div>
+                                    <div class="prop-row">
+                                        <label>Loop</label>
+                                        <input type="checkbox" id="anim-loop">
+                                    </div>
+                                </div>
+                                <div class="panel-section">
+                                    <div class="section-header">
+                                        <span>Keyframes</span>
+                                        <button class="section-action-btn" id="btn-capture-keyframe" title="Capture Current Transform">
+                                            <span class="material-icons-round">fiber_manual_record</span>
+                                        </button>
+                                    </div>
+                                    <div id="keyframe-list" class="keyframe-list"></div>
+                                </div>
+                                <div class="action-buttons" style="padding:8px 12px;gap:6px">
+                                    <button class="action-btn small" id="btn-preview-anim">
+                                        <span class="material-icons-round">play_arrow</span> Preview
+                                    </button>
+                                    <button class="action-btn small danger" id="btn-delete-anim">
+                                        <span class="material-icons-round">delete</span> Delete
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

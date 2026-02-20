@@ -1826,7 +1826,8 @@ class Scene3D {
                 textureId: obj.userData.textureId || null,
                 tileScale: obj.userData.tileScale || null,
                 childColors: childColors,
-                animations: obj.userData.animations || null
+                animations: obj.userData.animations || null,
+                quickAnimations: obj.userData.quickAnimations || null
             };
 
             // Custom object data
@@ -1871,6 +1872,7 @@ class Scene3D {
             const obj = this.addObject(item.type, opts);
             obj.userData.scripts = item.scripts || [];
             if (item.animations) obj.userData.animations = item.animations;
+            if (item.quickAnimations) obj.userData.quickAnimations = item.quickAnimations;
             if (item.material && obj.material) {
                 obj.material.roughness = item.material.roughness;
                 obj.material.metalness = item.material.metalness;
@@ -1988,6 +1990,9 @@ class Scene3D {
                         default: obj.material.roughness = 0.6; obj.material.metalness = 0.1; break;
                     }
                 }
+                break;
+            case 'quickAnimations':
+                obj.userData.quickAnimations = value;
                 break;
         }
         this._needsRender = true;
