@@ -133,15 +133,22 @@ class App {
             });
         }
 
-        // Auto-save every 60 seconds (skip for collab guests)
+        // Auto-save every 15 seconds (skip for collab guests)
         setInterval(() => {
-            if (this.currentProjectId && !this._collabGuest()) {
+            if (this.currentProjectId && this.hasUnsavedChanges && !this._collabGuest()) {
                 this.saveProject(true);
             }
-        }, 60000);
+        }, 15000);
 
-        // Update autosave indicator every 30 seconds
-        setInterval(() => this.updateAutosaveIndicator(), 30000);
+        // Update autosave indicator every 15 seconds
+        setInterval(() => this.updateAutosaveIndicator(), 15000);
+
+        // Save before page unload (tab close / navigate away)
+        window.addEventListener('beforeunload', () => {
+            if (this.currentProjectId && this.hasUnsavedChanges && !this._collabGuest()) {
+                this.saveProject(true);
+            }
+        });
     }
 
     // ===== Toolbar =====
@@ -2856,22 +2863,47 @@ class App {
         // Cloud sync — save to server
         if (this._cachedUser && !this._offlineMode) {
             const entry = index[this.currentProjectId];
-            fetch('/api/user/projects/' + this.currentProjectId, {
+            const syncBody = JSON.stringify({
+                name: entry.name,
+                project_data: JSON.stringify(data),
+                thumbnail: entry.thumbnail,
+                favorite: entry.favorite,
+                shared: entry.shared,
+                description: entry.description,
+                tags: entry.tags,
+                created_at: entry.createdAt,
+                modified_at: entry.modifiedAt
+            });
+            const syncUrl = '/api/user/projects/' + this.currentProjectId;
+            fetch(syncUrl, {
                 method: 'PUT',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: entry.name,
-                    project_data: JSON.stringify(data),
-                    thumbnail: entry.thumbnail,
-                    favorite: entry.favorite,
-                    shared: entry.shared,
-                    description: entry.description,
-                    tags: entry.tags,
-                    created_at: entry.createdAt,
-                    modified_at: entry.modifiedAt
-                })
-            }).catch(() => {});
+                body: syncBody
+            }).then(res => {
+                if (!res.ok) {
+                    console.warn('Cloud save failed, retrying...', res.status);
+                    // Retry once after 2 seconds
+                    setTimeout(() => {
+                        fetch(syncUrl, {
+                            method: 'PUT',
+                            credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: syncBody
+                        }).catch(() => {});
+                    }, 2000);
+                }
+            }).catch(() => {
+                // Retry once after 2 seconds on network error
+                setTimeout(() => {
+                    fetch(syncUrl, {
+                        method: 'PUT',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: syncBody
+                    }).catch(() => {});
+                }, 2000);
+            });
         }
 
         this.hasUnsavedChanges = false;
@@ -2912,6 +2944,17 @@ class App {
         this.redoStack = [];
         this.hasUnsavedChanges = true;
         this.updateToolbarProjectName();
+        // Debounced auto-save: save 3 seconds after last change
+        this._debouncedSave();
+    }
+
+    _debouncedSave() {
+        if (this._saveTimeout) clearTimeout(this._saveTimeout);
+        this._saveTimeout = setTimeout(() => {
+            if (this.currentProjectId && this.hasUnsavedChanges && !this._collabGuest()) {
+                this.saveProject(true);
+            }
+        }, 3000);
     }
 
     undo() {
@@ -4399,6 +4442,12 @@ class App {
     }
 
     async handleSignOut() {
+        // Save any unsaved changes before logging out
+        if (this.currentProjectId && this.hasUnsavedChanges && !this._collabGuest()) {
+            this.saveProject(true);
+            // Wait briefly for server sync to complete
+            await new Promise(r => setTimeout(r, 500));
+        }
         try { await fetch('/api/logout', { method: 'POST' }); } catch (e) { /* ok */ }
         this._cachedUser = null;
         localStorage.removeItem('blockforge_guest_user');
