@@ -7359,7 +7359,8 @@ class App {
                     body: JSON.stringify({
                         prompt,
                         existingScripts: existing,
-                        replaceMode: true
+                        replaceMode: true,
+                        customSoundNames: this.customSounds.map(s => s.name)
                     })
                 });
                 if (!res.ok) {
@@ -7441,7 +7442,8 @@ class App {
                 body: JSON.stringify({
                     prompt,
                     history: this._aiScriptHistory,
-                    existingScripts
+                    existingScripts,
+                    customSoundNames: this.customSounds.map(s => s.name)
                 })
             });
 

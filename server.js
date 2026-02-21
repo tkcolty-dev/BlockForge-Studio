@@ -1267,6 +1267,7 @@ health_set_damage | damage:number=10
 
 ## Sound (command)
 sound_play | sound:select[pop,ding,whoosh,boom,jump,coin,hurt,powerup,laser,explosion,splash,click,bell,alarm,magic,swoosh,beep,chime]=pop
+sound_play_custom | sound:select[DYNAMIC]=<name> — plays a user-uploaded custom sound. ONLY use when the user explicitly names a custom sound. The available custom sound names are provided in context.
 sound_volume | percent:number=100
 sound_pitch | freq:number=440, dur:number=0.3
 sound_stop_all | (none)
@@ -1533,7 +1534,7 @@ Replace example — existing Stack 1 has event_collide → health_change amount=
 [{"replaceStack":1,"blocks":[{"blockId":"event_collide"},{"blockId":"health_change","values":{"amount":-5}}]}]`;
 
 app.post('/api/ai/script', authenticate, async (req, res) => {
-    const { prompt, history, existingScripts, explain, replaceMode } = req.body;
+    const { prompt, history, existingScripts, explain, replaceMode, customSoundNames } = req.body;
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
         return res.status(400).json({ error: 'Prompt is required' });
     }
@@ -1580,6 +1581,12 @@ app.post('/api/ai/script', authenticate, async (req, res) => {
             } else {
                 messages.push({ role: 'system', content: 'Object already has these scripts:\n' + existingScripts.slice(0, 2000) + '\n\nDo NOT duplicate existing behaviors. Add new complementary scripts.' });
             }
+        }
+
+        // Inject custom sound names
+        if (Array.isArray(customSoundNames) && customSoundNames.length > 0) {
+            const names = customSoundNames.slice(0, 50).map(n => String(n).slice(0, 100));
+            messages.push({ role: 'system', content: 'Custom sounds uploaded by the user: ' + names.join(', ') + '\nWhen the user mentions one of these sound names, use sound_play_custom with that name. Example: {"blockId":"sound_play_custom","values":{"sound":"' + names[0] + '"}}' });
         }
 
         // Conversation history
