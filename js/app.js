@@ -2051,6 +2051,7 @@ class App {
         const index = this.getProjectIndex();
         this.currentProjectId = id;
         this.projectName = (index[id] && index[id].name) || data.name || 'My Game';
+        if (this._aiLoadProjectCmds) this._aiLoadProjectCmds();
 
         this.undoStack = [];
         this.redoStack = [];
@@ -6954,13 +6955,19 @@ class App {
         const helpBtn = document.getElementById('ai-script-help-btn');
         const helpPanel = document.getElementById('ai-script-help');
 
-        helpBtn.addEventListener('click', () => helpPanel.classList.toggle('hidden'));
+        helpBtn.addEventListener('click', () => {
+            helpPanel.classList.toggle('hidden');
+            if (!helpPanel.classList.contains('hidden')) this._aiRenderCustomCmds();
+        });
         document.getElementById('ai-script-help-close').addEventListener('click', () => helpPanel.classList.add('hidden'));
         this._aiScriptHistory = [];
         this._aiGhostCmd = null;
         this._aiCmdIdx = -1;
 
-        this._aiScriptCommands = [
+        // Custom command creation
+        document.getElementById('ai-custom-save').addEventListener('click', () => this._aiSaveCustomCmd());
+
+        this._aiBuiltInCommands = [
             { cmd: '/cleanup', icon: 'auto_fix_high', color: '#6366f1', label: 'Clean Up', desc: 'Optimize and tidy existing scripts', mode: 'replace', aiPrompt: 'Clean up, optimize, and remove redundancies from these scripts. Keep the same behaviors but make them cleaner and more efficient. Merge stacks that share the same hat block if appropriate.' },
             { cmd: '/fix', icon: 'build', color: '#ef4444', label: 'Fix Scripts', desc: 'Find and fix issues in current scripts', mode: 'replace', aiPrompt: 'Analyze these scripts for bugs or issues. Fix any problems like missing events, broken logic, or ineffective blocks. Return the corrected scripts.' },
             { cmd: '/explain', icon: 'help_outline', color: '#3b82f6', label: 'Explain', desc: 'Explain what the current scripts do', mode: 'explain' },
@@ -6970,7 +6977,11 @@ class App {
             { cmd: '/duplicate', icon: 'content_copy', color: '#06b6d4', label: 'Duplicate', desc: 'Duplicate all scripts to a new copy', mode: 'local' },
         ];
 
+        // Merged list of built-in + custom commands
+        this._aiScriptCommands = this._aiGetAllCommands();
+
         const renderCmdList = (filter) => {
+            this._aiScriptCommands = this._aiGetAllCommands();
             const filtered = filter
                 ? this._aiScriptCommands.filter(c => c.cmd.startsWith(filter) || c.label.toLowerCase().includes(filter.slice(1)))
                 : this._aiScriptCommands;
@@ -7132,6 +7143,112 @@ class App {
         }
     }
 
+    _aiGetAllCommands() {
+        const custom = this._aiGetCustomCmds().map(c => ({
+            cmd: '/' + c.name,
+            icon: 'star',
+            color: c.scope === 'global' ? '#a78bfa' : '#22c55e',
+            label: c.scope === 'global' ? 'Global' : 'Project',
+            desc: c.prompt.length > 50 ? c.prompt.slice(0, 47) + '...' : c.prompt,
+            mode: 'custom',
+            aiPrompt: c.prompt,
+            custom: true
+        }));
+        return [...this._aiBuiltInCommands, ...custom];
+    }
+
+    _aiGetCustomCmds() {
+        const global = JSON.parse(localStorage.getItem('ai_custom_commands') || '[]');
+        const project = (this.currentProjectId && this._projectCustomCmds) ? this._projectCustomCmds : [];
+        return [...global.map(c => ({ ...c, scope: 'global' })), ...project.map(c => ({ ...c, scope: 'project' }))];
+    }
+
+    _aiSaveCustomCmd() {
+        const nameInput = document.getElementById('ai-custom-name');
+        const promptInput = document.getElementById('ai-custom-prompt');
+        const globalCheck = document.getElementById('ai-custom-global');
+
+        let name = nameInput.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        const prompt = promptInput.value.trim();
+        if (!name || !prompt) {
+            this._aiScriptShowStatus('Enter a name and prompt', 'error');
+            return;
+        }
+
+        // Don't allow overriding built-in commands
+        if (this._aiBuiltInCommands.some(c => c.cmd === '/' + name)) {
+            this._aiScriptShowStatus('Cannot override built-in commands', 'error');
+            return;
+        }
+
+        if (globalCheck.checked) {
+            const cmds = JSON.parse(localStorage.getItem('ai_custom_commands') || '[]');
+            // Remove existing with same name
+            const filtered = cmds.filter(c => c.name !== name);
+            filtered.push({ name, prompt });
+            localStorage.setItem('ai_custom_commands', JSON.stringify(filtered));
+        } else {
+            if (!this._projectCustomCmds) this._projectCustomCmds = [];
+            this._projectCustomCmds = this._projectCustomCmds.filter(c => c.name !== name);
+            this._projectCustomCmds.push({ name, prompt });
+            this._aiSaveProjectCmds();
+        }
+
+        nameInput.value = '';
+        promptInput.value = '';
+        this._aiScriptCommands = this._aiGetAllCommands();
+        this._aiRenderCustomCmds();
+        this._aiScriptShowStatus('Saved /' + name, 'success');
+    }
+
+    _aiDeleteCustomCmd(name, scope) {
+        if (scope === 'global') {
+            const cmds = JSON.parse(localStorage.getItem('ai_custom_commands') || '[]');
+            localStorage.setItem('ai_custom_commands', JSON.stringify(cmds.filter(c => c.name !== name)));
+        } else {
+            if (this._projectCustomCmds) {
+                this._projectCustomCmds = this._projectCustomCmds.filter(c => c.name !== name);
+                this._aiSaveProjectCmds();
+            }
+        }
+        this._aiScriptCommands = this._aiGetAllCommands();
+        this._aiRenderCustomCmds();
+    }
+
+    _aiSaveProjectCmds() {
+        if (!this.currentProjectId) return;
+        const key = 'project_custom_cmds_' + this.currentProjectId;
+        localStorage.setItem(key, JSON.stringify(this._projectCustomCmds || []));
+    }
+
+    _aiLoadProjectCmds() {
+        if (!this.currentProjectId) { this._projectCustomCmds = []; return; }
+        const key = 'project_custom_cmds_' + this.currentProjectId;
+        this._projectCustomCmds = JSON.parse(localStorage.getItem(key) || '[]');
+        this._aiScriptCommands = this._aiGetAllCommands();
+    }
+
+    _aiRenderCustomCmds() {
+        const container = document.getElementById('ai-custom-cmds-list');
+        if (!container) return;
+        const cmds = this._aiGetCustomCmds();
+        if (cmds.length === 0) {
+            container.innerHTML = '<div style="font-size:11px;color:var(--text-dim);padding:4px 0">No custom commands yet</div>';
+            return;
+        }
+        container.innerHTML = cmds.map(c =>
+            `<div class="ai-custom-cmd">
+                <span class="ai-custom-cmd-name">/${c.name}</span>
+                <span class="ai-custom-cmd-prompt">${c.prompt}</span>
+                <span class="ai-custom-cmd-scope ${c.scope}">${c.scope === 'global' ? 'All' : 'Project'}</span>
+                <button class="ai-custom-cmd-del" data-name="${c.name}" data-scope="${c.scope}" title="Delete"><span class="material-icons-round">close</span></button>
+            </div>`
+        ).join('');
+        container.querySelectorAll('.ai-custom-cmd-del').forEach(btn => {
+            btn.addEventListener('click', () => this._aiDeleteCustomCmd(btn.dataset.name, btn.dataset.scope));
+        });
+    }
+
     async _aiRunCommand(raw) {
         const parts = raw.split(/\s+/);
         const cmdName = parts[0].toLowerCase();
@@ -7145,6 +7262,13 @@ class App {
 
         if (!this.blockCode.targetObject) {
             this._aiScriptShowStatus('Select an object first', 'error');
+            return;
+        }
+
+        // Custom commands — run the saved prompt through normal AI generation
+        if (cmdDef.mode === 'custom') {
+            const prompt = extra ? cmdDef.aiPrompt + '. ' + extra : cmdDef.aiPrompt;
+            this._aiGenerateScript(prompt);
             return;
         }
 

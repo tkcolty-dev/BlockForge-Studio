@@ -1086,6 +1086,23 @@
                             <li>AI remembers your last few prompts for follow-ups</li>
                         </ul>
                     </div>
+                    <div class="ai-help-section">
+                        <div class="ai-help-label">Custom Commands</div>
+                        <div id="ai-custom-cmds-list"></div>
+                        <div class="ai-custom-create">
+                            <input type="text" id="ai-custom-name" placeholder="Command name (e.g. myenemy)" maxlength="20" spellcheck="false">
+                            <input type="text" id="ai-custom-prompt" placeholder="What it does (e.g. enemy that shoots fireballs)" maxlength="500" spellcheck="false">
+                            <div class="ai-custom-row">
+                                <label class="ai-custom-scope">
+                                    <input type="checkbox" id="ai-custom-global" checked>
+                                    <span>All projects</span>
+                                </label>
+                                <button id="ai-custom-save" class="ai-custom-save-btn">
+                                    <span class="material-icons-round">add</span> Save Command
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div id="script-workspace">
                     <div id="workspace-canvas">

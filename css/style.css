@@ -1699,6 +1699,140 @@ input[type="checkbox"] {
     margin-bottom: 2px;
 }
 
+/* Custom commands */
+.ai-custom-create {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 6px;
+}
+
+.ai-custom-create input[type="text"] {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 5px 8px;
+    font-size: 11px;
+    color: var(--text);
+    outline: none;
+}
+
+.ai-custom-create input[type="text"]:focus {
+    border-color: var(--accent);
+}
+
+.ai-custom-create input[type="text"]::placeholder {
+    color: var(--text-dim);
+}
+
+.ai-custom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ai-custom-scope {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.ai-custom-scope input[type="checkbox"] {
+    width: 13px;
+    height: 13px;
+    accent-color: var(--accent);
+}
+
+.ai-custom-save-btn {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    background: linear-gradient(135deg, #a78bfa, #6366f1);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.ai-custom-save-btn:hover {
+    opacity: 0.85;
+}
+
+.ai-custom-save-btn .material-icons-round {
+    font-size: 14px;
+}
+
+.ai-custom-cmd {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.ai-custom-cmd:last-child {
+    border-bottom: none;
+}
+
+.ai-custom-cmd-name {
+    font-weight: 600;
+    color: #a78bfa;
+    min-width: 70px;
+}
+
+.ai-custom-cmd-prompt {
+    flex: 1;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-custom-cmd-scope {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.ai-custom-cmd-scope.global {
+    background: rgba(99,102,241,0.15);
+    color: #a78bfa;
+}
+
+.ai-custom-cmd-scope.project {
+    background: rgba(34,197,94,0.15);
+    color: #22c55e;
+}
+
+.ai-custom-cmd-del {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    opacity: 0.5;
+    flex-shrink: 0;
+}
+
+.ai-custom-cmd-del:hover {
+    opacity: 1;
+    color: #ef4444;
+}
+
+.ai-custom-cmd-del .material-icons-round {
+    font-size: 15px;
+}
+
 .script-stack .block + .block {
     margin-top: -2px;
 }
