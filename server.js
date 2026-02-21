@@ -1349,13 +1349,24 @@ camera_shake | intensity:number=0.3, time:number=0.5
 camera_fov | fov:number=75
 
 ## UI (command)
-ui_show_screen | screen:select[(none)]=(none)
-ui_hide_screen | screen:select[(none)]=(none)
-ui_hide_all | (none)
 ui_show_text_overlay | text:text=Level 1, time:number=2
 ui_show_number | label:text=Score, value:number=0
 ui_set_number | label:text=Score, value:number=0
 ui_change_number | label:text=Score, value:number=1
+ui_add_text | text:text=Hello, x:number=50, y:number=50
+ui_add_button | text:text=Click, msg:text=clicked
+ui_hide_all | (none)
+
+## HUD / Display (from Variables category)
+var_show | var:select[score,health,coins,speed,level,timer]=score — shows variable as persistent HUD element
+var_show_message | text:text=You win!, time:number=3 — temporary centered message
+var_show_dialog | text:text=Hello! — dialog box
+var_show_lives | (none) — shows lives counter on HUD
+var_show_timer | (none) — shows timer on HUD
+health_show_bar | (none) — shows health bar on HUD
+enemy_show_health | (none) — shows enemy health bar above object
+looks_say | text:text=Hello!, time:number=2 — speech bubble above object
+looks_billboard_text | text:text=Label — permanent label floating above object
 
 # Rules
 1. Every NEW stack MUST start with a hat block (event_*,shoot_event_*).
@@ -1401,6 +1412,63 @@ Boss: event_start → enemy_set_as(200) → enemy_show_health → looks_size(200
 Animated Decoration: event_start → control_forever { motion_hover + looks_scale_pulse } or motion_orbit or motion_bounce. Add glow/particles for magic items.
 Score System: event_start → var_set(score,0) → var_show(score). Increment via var_change on other events.
 Respawn: event_health_zero → fx_fade_out(0.5) → var_change_lives(-1) → var_load_checkpoint → fx_fade_in(0.5) → health_set(100).
+
+# UI & HUD Guide
+
+## How UI blocks work
+- var_show(score/health/coins/timer/lives) — creates a PERSISTENT HUD element in the corner. Use once at game start.
+- ui_show_number(label, value) — creates a custom number display on screen. Use ui_change_number to update it.
+- ui_show_text_overlay(text, time) — big centered text that fades away. Great for "Level 1", "Game Over", announcements.
+- var_show_message(text, time) — temporary message text on screen, similar to overlay.
+- var_show_dialog(text) — dialog-style popup text.
+- looks_say(text, time) — speech bubble ABOVE the object (3D world, not HUD).
+- looks_billboard_text(text) — permanent floating label ABOVE the object.
+- ui_add_text(text, x, y) — place text on screen at position. x/y are percentages: 50,50 = center. 50,10 = top center. 10,90 = bottom left.
+- ui_add_button(text, msg) — adds a clickable button on screen. When clicked, broadcasts the msg. Listen with event_message.
+- health_show_bar — persistent health bar on HUD.
+- enemy_show_health — health bar floating above THIS object.
+
+## UI positioning (for ui_add_text / ui_add_button)
+x and y are PERCENTAGES of screen (0-100):
+- Top-left: x=10, y=10
+- Top-center: x=50, y=10
+- Top-right: x=90, y=10
+- Center: x=50, y=50
+- Bottom-left: x=10, y=90
+- Bottom-center: x=50, y=90
+- Bottom-right: x=90, y=90
+
+## When to use what
+- Show score/coins/health on screen → var_show or ui_show_number
+- Temporary announcement → ui_show_text_overlay
+- Label on an object → looks_billboard_text or looks_say
+- Interactive button → ui_add_button + event_message listener
+- NPC dialog → looks_say (above object) or var_show_dialog (screen popup)
+- Enemy health bar → enemy_show_health (floats above enemy)
+- Player health bar → health_show_bar (HUD corner)
+- Custom HUD number → ui_show_number + ui_change_number
+
+## Color blocks
+- looks_color(color) — change the object's main color. Use hex like #ff0000 (red), #00ff00 (green), #0000ff (blue), #ffff00 (yellow), #ff8800 (orange), #aa00ff (purple), #ffffff (white), #000000 (black), #888888 (gray).
+- looks_tint(color, amount%) — tint/overlay a color. amount is 0-100.
+- looks_glow(color, intensity) — emission glow. intensity 0-1. Great for magic/sci-fi.
+- looks_flash(color, times) — flash a color briefly.
+- looks_player_color(part, color) — change player body/head/detail color.
+- looks_npc_color(part, color) — change NPC body/head/legs color.
+- looks_trail(color) — leave a colored trail behind.
+- looks_particles(type, color) — emit colored particles (burst/sparkle/fire/snow).
+- fx_flash_screen(color) — flash the whole screen a color (damage, pickup, etc).
+- fx_screen_tint(color, opacity%) — persistent screen tint overlay.
+
+## Common colors
+Red: #ff0000, #e74c3c, #ff4444
+Blue: #0000ff, #3498db, #4c97ff, #00ccff
+Green: #00ff00, #2ecc71, #22c55e
+Yellow: #ffff00, #ffd700, #f1c40f
+Orange: #ff8800, #e67e22, #ff6600
+Purple: #aa00ff, #9b59b6, #a78bfa
+Pink: #ff69b4, #e91e63, #ff1493
+White: #ffffff, Cyan: #00ffff, Black: #000000
 
 # Examples
 
