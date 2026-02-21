@@ -938,7 +938,11 @@ app.delete('/api/user/projects/:id', authenticate, async (req, res) => {
 const AI_SYSTEM_PROMPT = `You are the AI build engine for Cobalt Studio, a 3D block-building game editor. You translate natural language descriptions into precise 3D object placements. Respond with ONLY a JSON array — no text, no markdown fences, no explanation.
 
 # Object Schema
-Each object: {"type","position":{"x","y","z"},"rotation":{"x","y","z"},"scale":{"x","y","z"},"color":"#hex6","name":"string"}
+Each object: {"action":"add|modify|remove","type","position":{"x","y","z"},"rotation":{"x","y","z"},"scale":{"x","y","z"},"color":"#hex6","name":"string","target":"exact object name"}
+- "action" defaults to "add" if omitted. Use "modify" or "remove" to change/delete existing objects.
+- "target" is required for modify/remove — must match an existing object name exactly (from scene context).
+- For "modify": include ONLY the properties to change (e.g. just scale, just color, just position). Omit unchanged properties.
+- For "remove": only "action" and "target" are needed. No other fields required.
 - rotation is in DEGREES (0-360). Optional — omit if no rotation needed.
 
 # Available Types
@@ -1007,8 +1011,30 @@ If the user mentions a style, adapt accordingly:
 - Nature: trees, rocks (grey spheres/boxes), water (blue planes), flowers
 - Spooky: dark colors, cobwebs (thin planes), tombstones, dead trees
 
-# Handling Follow-up Requests
-When the user asks to modify, add to, or extend a previous build, place NEW objects that complement or extend what's already in the scene. Do NOT recreate existing objects. Use the scene context provided to understand positions and avoid overlaps.
+# Handling Follow-up Requests & Feedback
+You can ADD, MODIFY, and REMOVE objects. Read the scene context carefully.
+
+## Adding new objects
+When the user asks to add or extend, use action "add" (or omit action). Place new objects that complement existing ones. Do NOT recreate existing objects.
+
+## Modifying existing objects
+When the user says things like "make it shorter", "change the color", "move it left", "that's too big", "make it look better" — use action "modify" with "target" set to the exact object name from scene context. Only include the properties to change.
+Examples:
+- "the tower is too tall" → {"action":"modify","target":"Left Tower","scale":{"x":2,"y":3,"z":2}}
+- "make the roof red" → {"action":"modify","target":"Keep Roof","color":"#8B0000"}
+- "move the bench to the left" → {"action":"modify","target":"Park Bench","position":{"x":-3,"y":0,"z":0}}
+
+## Removing objects
+When the user says "remove that", "delete the tree", "get rid of the fence" — use action "remove" with "target" set to the exact object name.
+Examples:
+- "remove the tree" → {"action":"remove","target":"Tree"}
+- "delete the left tower" → {"action":"remove","target":"Left Tower"}
+
+## Improving / Redesigning
+When the user says "make it look better", "improve this", "that looks bad" — analyze what exists in the scene context, then return a MIX of modify (fix proportions, colors, positions), remove (delete ugly/redundant parts), and add (new details, decorations, better structure). Be creative but keep the core design intent.
+
+## Identifying objects
+When user says "that" or "it" without specifying — look at conversation history for the most recently discussed/created object. If ambiguous, modify the most prominent object (largest or most central). If the user selected an object, its name will be in the context.
 
 # Examples
 
@@ -1111,8 +1137,49 @@ app.post('/api/ai/build', authenticate, async (req, res) => {
         // Validate and sanitize each object
         const validTypes = new Set(['box','sphere','cylinder','cone','plane','wedge','torus','tube','stairs','pyramid','dome','arch','wall','corner','tree','house','platform','bridge','crate','gem','coin','light-point','custom']);
         const validShapes = new Set(['box','sphere','cylinder','cone','pyramid','dome','wedge']);
+        const validActions = new Set(['add', 'modify', 'remove']);
         const sanitized = objects.slice(0, 50).map(obj => {
+            const action = validActions.has(obj.action) ? obj.action : 'add';
+
+            // Remove action — just need target name
+            if (action === 'remove') {
+                if (typeof obj.target !== 'string' || !obj.target.trim()) return null;
+                return { action: 'remove', target: obj.target.slice(0, 50) };
+            }
+
+            // Modify action — only changed properties + target
+            if (action === 'modify') {
+                if (typeof obj.target !== 'string' || !obj.target.trim()) return null;
+                const result = { action: 'modify', target: obj.target.slice(0, 50) };
+                if (obj.position) {
+                    result.position = {
+                        x: Number(obj.position.x) || 0,
+                        y: Number(obj.position.y) || 0,
+                        z: Number(obj.position.z) || 0
+                    };
+                }
+                if (obj.scale) {
+                    result.scale = {
+                        x: Math.min(Math.abs(Number(obj.scale.x) || 1), 50),
+                        y: Math.min(Math.abs(Number(obj.scale.y) || 1), 50),
+                        z: Math.min(Math.abs(Number(obj.scale.z) || 1), 50)
+                    };
+                }
+                if (obj.color && /^#[0-9a-fA-F]{6}$/.test(obj.color)) result.color = obj.color;
+                if (obj.rotation) {
+                    result.rotation = {
+                        x: Number(obj.rotation.x) || 0,
+                        y: Number(obj.rotation.y) || 0,
+                        z: Number(obj.rotation.z) || 0
+                    };
+                }
+                if (typeof obj.name === 'string') result.name = obj.name.slice(0, 50);
+                return result;
+            }
+
+            // Add action (default)
             const result = {
+                action: 'add',
                 type: validTypes.has(obj.type) ? obj.type : 'box',
                 position: {
                     x: Number(obj.position?.x) || 0,
@@ -1153,7 +1220,7 @@ app.post('/api/ai/build', authenticate, async (req, res) => {
                 }));
             }
             return result;
-        });
+        }).filter(Boolean);
 
         res.json({ objects: sanitized });
     } catch (err) {

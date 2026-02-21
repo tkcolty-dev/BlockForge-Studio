@@ -6816,7 +6816,7 @@ class App {
             for (const obj of this.scene3d.objects) {
                 if (obj.userData && obj.userData.objectType === 'baseplate') continue;
                 if (obj.userData && obj.userData.objectType === 'spawn') continue;
-                objects.push({
+                const o = {
                     name: obj.name || 'Unnamed',
                     type: obj.userData?.objectType || 'box',
                     position: {
@@ -6829,13 +6829,32 @@ class App {
                         y: Math.round(obj.scale.y * 100) / 100,
                         z: Math.round(obj.scale.z * 100) / 100
                     }
-                });
+                };
+                // Include color
+                if (obj.material && obj.material.color) {
+                    o.color = '#' + obj.material.color.getHexString();
+                }
+                // Include rotation if non-zero
+                const rx = Math.round(obj.rotation.x * 180 / Math.PI * 100) / 100;
+                const ry = Math.round(obj.rotation.y * 180 / Math.PI * 100) / 100;
+                const rz = Math.round(obj.rotation.z * 180 / Math.PI * 100) / 100;
+                if (rx || ry || rz) o.rotation = `[${rx},${ry},${rz}]`;
+                objects.push(o);
             }
         }
         if (objects.length === 0) return '';
-        // Keep it concise — summarize if too many objects
         const limited = objects.slice(0, 30);
-        let ctx = limited.map(o => `${o.name} (${o.type}) at [${o.position.x},${o.position.y},${o.position.z}] scale [${o.scale.x},${o.scale.y},${o.scale.z}]`).join('\n');
+        let ctx = limited.map(o => {
+            let s = `${o.name} (${o.type}) at [${o.position.x},${o.position.y},${o.position.z}] scale [${o.scale.x},${o.scale.y},${o.scale.z}]`;
+            if (o.color) s += ` color ${o.color}`;
+            if (o.rotation) s += ` rot ${o.rotation}`;
+            return s;
+        }).join('\n');
+        // Note which object is selected
+        if (this.scene3d.selectedObject) {
+            const sel = this.scene3d.selectedObject;
+            ctx += '\n[Selected: ' + (sel.name || 'Unnamed') + ']';
+        }
         if (objects.length > 30) ctx += `\n...and ${objects.length - 30} more objects`;
         return ctx;
     }
@@ -6908,14 +6927,51 @@ class App {
             // Keep history bounded
             if (this._aiHistory.length > 12) this._aiHistory = this._aiHistory.slice(-12);
 
-            // Calculate offset from camera target so structures appear in front of the user
+            // Calculate offset from camera target so new structures appear in front of the user
             const target = this.scene3d.orbitControls.target;
             const offsetX = target.x;
             const offsetZ = target.z;
 
             this.saveUndoState();
 
+            let added = 0, modified = 0, removed = 0;
+
             for (const obj of objects) {
+                const action = obj.action || 'add';
+
+                if (action === 'remove' && obj.target) {
+                    const found = this.scene3d.objects.find(o =>
+                        o.name && o.name.toLowerCase() === obj.target.toLowerCase()
+                    );
+                    if (found) {
+                        this.scene3d.removeObject(found);
+                        removed++;
+                    }
+                    continue;
+                }
+
+                if (action === 'modify' && obj.target) {
+                    const found = this.scene3d.objects.find(o =>
+                        o.name && o.name.toLowerCase() === obj.target.toLowerCase()
+                    );
+                    if (found) {
+                        if (obj.position) found.position.set(obj.position.x, obj.position.y, obj.position.z);
+                        if (obj.scale) found.scale.set(obj.scale.x, obj.scale.y, obj.scale.z);
+                        if (obj.color && found.material && found.material.color) found.material.color.set(obj.color);
+                        if (obj.rotation) {
+                            found.rotation.set(
+                                (obj.rotation.x || 0) * Math.PI / 180,
+                                (obj.rotation.y || 0) * Math.PI / 180,
+                                (obj.rotation.z || 0) * Math.PI / 180
+                            );
+                        }
+                        if (obj.name) found.name = obj.name;
+                        modified++;
+                    }
+                    continue;
+                }
+
+                // Default: add
                 const opts = {
                     name: obj.name,
                     position: {
@@ -6929,12 +6985,21 @@ class App {
                 if (obj.rotation) opts.rotation = obj.rotation;
                 if (obj.customParts) opts.customParts = obj.customParts;
                 this.scene3d.addObject(obj.type, opts);
+                added++;
             }
 
+            this.scene3d._needsRender = true;
             this.refreshExplorer();
             this.updateObjectCount();
-            this._aiAddMessage('Placed ' + objects.length + ' object' + (objects.length !== 1 ? 's' : '') + '!', 'ai-result');
-            this.toast('AI placed ' + objects.length + ' objects', 'success');
+            if (this.scene3d.selectedObject) this.onObjectSelected(this.scene3d.selectedObject);
+
+            const parts = [];
+            if (added > 0) parts.push('Added ' + added);
+            if (modified > 0) parts.push('Modified ' + modified);
+            if (removed > 0) parts.push('Removed ' + removed);
+            const msg = parts.join(', ') + ' object' + ((added + modified + removed) !== 1 ? 's' : '') + '!';
+            this._aiAddMessage(msg, 'ai-result');
+            this.toast(msg, 'success');
         } catch (err) {
             loadingEl.remove();
             this._aiAddMessage('Connection error. Please try again.', 'ai-error');
