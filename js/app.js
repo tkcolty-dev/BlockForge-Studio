@@ -6983,11 +6983,16 @@ class App {
             ).join('');
             cmdList.classList.remove('hidden');
             cmdList.querySelectorAll('.ai-cmd-item').forEach(el => {
-                el.addEventListener('click', () => {
-                    input.value = el.dataset.cmd + ' ';
+                el.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); // prevent blur from hiding dropdown
+                    const cmd = el.dataset.cmd;
+                    input.value = '';
+                    ghost.textContent = '';
+                    this._aiGhostCmd = null;
+                    input.style.background = '';
                     cmdList.classList.add('hidden');
                     this._aiCmdIdx = -1;
-                    input.focus();
+                    this._aiRunCommand(cmd);
                 });
             });
         };
