@@ -1957,6 +1957,17 @@ class App {
         document.getElementById('title-screen').classList.add('hidden');
         this._updateGuestRestrictions();
         setTimeout(() => this.scene3d.onResize(), 50);
+        // Show getting-started tutorial on first ever project entry
+        if (this._tutorialPending) {
+            this._tutorialPending = false;
+            setTimeout(() => {
+                const modal = document.getElementById('tutorial-modal');
+                if (modal && this._startTutorial) {
+                    this._startTutorial('getting-started');
+                    modal.classList.remove('hidden');
+                }
+            }, 500);
+        }
     }
 
     createNewProject(name, templateKey) {
@@ -3785,12 +3796,13 @@ class App {
             modal.classList.remove('hidden');
         });
 
-        // Show getting started on first visit
-        const seen = localStorage.getItem('blockforge_tutorial_seen');
-        if (!seen) {
+        // Expose startTutorial for deferred use
+        this._startTutorial = startTutorial;
+
+        // Show getting started on first visit (deferred until user is in the editor, not auth screen)
+        this._tutorialPending = !localStorage.getItem('blockforge_tutorial_seen');
+        if (this._tutorialPending) {
             localStorage.setItem('blockforge_tutorial_seen', 'true');
-            startTutorial('getting-started');
-            modal.classList.remove('hidden');
         }
     }
 
@@ -4764,6 +4776,7 @@ class App {
     }
 
     async loadCaptcha() {
+        this._captchaExpectedAnswer = null;
         try {
             const res = await fetch('/api/captcha');
             if (res.ok) {
@@ -4771,6 +4784,14 @@ class App {
                 document.getElementById('auth-captcha-label').textContent = data.question;
                 document.getElementById('auth-captcha-answer').value = '';
                 this._captchaToken = data.token;
+                // Parse expected answer from question for client-side validation
+                const m = data.question.match(/What is (\d+)\s*([+\-x×])\s*(\d+)/i);
+                if (m) {
+                    const a = parseInt(m[1]), b = parseInt(m[3]), op = m[2];
+                    if (op === '+') this._captchaExpectedAnswer = a + b;
+                    else if (op === '-') this._captchaExpectedAnswer = a - b;
+                    else this._captchaExpectedAnswer = a * b;
+                }
             }
         } catch (e) {
             document.getElementById('auth-captcha-label').textContent = 'Could not load bot check';
@@ -4823,7 +4844,21 @@ class App {
         const usernameOk = username.length >= 3 && username.length <= 20 && /^[a-zA-Z0-9_]+$/.test(username) && hint.classList.contains('hint-success');
         const passwordOk = password.length >= 4;
         const confirmOk = confirm.length > 0 && password === confirm;
-        const captchaOk = captcha.length > 0;
+        // CAPTCHA: must match the expected answer
+        const captchaNum = Number(captcha);
+        const captchaOk = captcha.length > 0 && this._captchaExpectedAnswer != null && !isNaN(captchaNum) && captchaNum === this._captchaExpectedAnswer;
+
+        // Show feedback on captcha field
+        const captchaInput = document.getElementById('auth-captcha-answer');
+        if (captcha.length > 0 && this._captchaExpectedAnswer != null) {
+            if (captchaOk) {
+                captchaInput.style.borderColor = '#4CAF50';
+            } else {
+                captchaInput.style.borderColor = '#ff4444';
+            }
+        } else {
+            captchaInput.style.borderColor = '';
+        }
 
         btn.disabled = !(usernameOk && passwordOk && confirmOk && captchaOk);
     }
@@ -4928,6 +4963,11 @@ class App {
     }
 
     async handleSignOut() {
+        if (this._offlineMode) {
+            // Guest user — just show auth screen to sign in/up
+            this.showAuthScreen();
+            return;
+        }
         // Save any unsaved changes before logging out
         if (this.currentProjectId && this.hasUnsavedChanges && !this._collabGuest()) {
             this.saveProject(true);
@@ -5000,6 +5040,16 @@ class App {
                 this._updateInboxBadge();
             } else {
                 inboxBtn.classList.add('hidden');
+            }
+        }
+
+        // Sign out button — show "Sign In" for guests, "Sign Out" for logged-in users
+        const signOutBtn = document.getElementById('btn-sign-out');
+        if (signOutBtn) {
+            if (this._offlineMode) {
+                signOutBtn.textContent = 'Sign In';
+            } else {
+                signOutBtn.textContent = 'Sign Out';
             }
         }
     }
