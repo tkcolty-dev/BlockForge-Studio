@@ -1363,19 +1363,22 @@ ui_change_number | label:text=Score, value:number=1
 3. Command blocks and c-blocks go inside stacks. Reporters cannot be standalone.
 4. Keep scripts focused: one behavior per stack. Use multiple stacks for different triggers.
 5. When the user says "also", "add", "make it also", or refers to extending existing behavior, APPEND to an existing stack using "appendToStack" instead of creating a duplicate hat.
-6. Think about what the user ACTUALLY wants. "make a door" means a full door system (click to open, animation, sound). "make an enemy" means chase + attack + defeat logic. Be thorough.
-7. Use control_forever with children for continuous behaviors (spinning, hovering, patrolling). Use single commands for one-shot actions.
-8. Combine multiple effects for polish: add sounds, particles, visual feedback when things happen.
+6. When the user gives FEEDBACK about existing scripts ("too fast", "too slow", "too big", "change the color", "make it slower", "reduce the damage", "wrong direction", etc.), use "replaceStack" to modify the existing stack with corrected values. Keep all the blocks the same but adjust the values they're complaining about.
+7. Think about what the user ACTUALLY wants. "make a door" means a full door system (click to open, animation, sound). "make an enemy" means chase + attack + defeat logic. Be thorough.
+8. Use control_forever with children for continuous behaviors (spinning, hovering, patrolling). Use single commands for one-shot actions.
+9. Combine multiple effects for polish: add sounds, particles, visual feedback when things happen.
 
 # Output Format
 JSON array of stacks.
 
 New stack: { "blocks": [ { "blockId": "...", "values": {...}, "children": [...] } ] }
 Append to existing: { "appendToStack": <stack number>, "blocks": [ ...blocks to add... ] }
+Replace/modify existing: { "replaceStack": <stack number>, "blocks": [ ...complete replacement blocks... ] }
 
 When appending, do NOT include a hat block — just the command/c-blocks to add.
+When replacing, include the FULL stack (including the hat block) with modified values.
 Only include "values" keys that differ from defaults. Omit "children" if empty.
-Existing scripts context labels stacks as "Stack 1:", "Stack 2:", etc. Use those numbers for appendToStack.
+Existing scripts context labels stacks as "Stack 1:", "Stack 2:", etc. Use those numbers for appendToStack/replaceStack.
 
 # Common Patterns
 
@@ -1447,7 +1450,19 @@ Append example — existing Stack 1 has event_start → motion_spin. User says "
 [{"appendToStack":1,"blocks":[{"blockId":"looks_glow","values":{"color":"#00ffff","val":0.8}}]}]
 
 Append example — existing Stack 1 has event_start → stuff, Stack 2 has event_click → stuff. User says "also play a sound when clicked":
-[{"appendToStack":2,"blocks":[{"blockId":"sound_play","values":{"sound":"pop"}}]}]`;
+[{"appendToStack":2,"blocks":[{"blockId":"sound_play","values":{"sound":"pop"}}]}]
+
+Replace example — existing Stack 1 has event_start → control_forever { motion_spin speed=5 }. User says "it spins too fast":
+[{"replaceStack":1,"blocks":[{"blockId":"event_start"},{"blockId":"control_forever","children":[{"blockId":"motion_spin","values":{"speed":1}}]}]}]
+
+Replace example — existing Stack 1 has event_click → motion_glide y=3 time=0.5. User says "make it go higher and slower":
+[{"replaceStack":1,"blocks":[{"blockId":"event_click"},{"blockId":"motion_glide","values":{"y":8,"time":2}}]}]
+
+Replace example — existing Stack 1 has event_start → enemy_set_as health=50 → enemy_follow speed=3. User says "the enemy is too fast and has too much health":
+[{"replaceStack":1,"blocks":[{"blockId":"event_start"},{"blockId":"enemy_set_as","values":{"health":25}},{"blockId":"enemy_follow","values":{"speed":1.5}}]}]
+
+Replace example — existing Stack 1 has event_collide → health_change amount=-20. User says "it does too much damage, make it 5":
+[{"replaceStack":1,"blocks":[{"blockId":"event_collide"},{"blockId":"health_change","values":{"amount":-5}}]}]`;
 
 app.post('/api/ai/script', authenticate, async (req, res) => {
     const { prompt, history, existingScripts, explain, replaceMode } = req.body;
@@ -1573,7 +1588,9 @@ app.post('/api/ai/script', authenticate, async (req, res) => {
                 return block;
             });
             const result = { blocks };
-            if (typeof stack.appendToStack === 'number' && stack.appendToStack > 0) {
+            if (typeof stack.replaceStack === 'number' && stack.replaceStack > 0) {
+                result.replaceStack = stack.replaceStack;
+            } else if (typeof stack.appendToStack === 'number' && stack.appendToStack > 0) {
                 result.appendToStack = stack.appendToStack;
             }
             return result;

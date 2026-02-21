@@ -7347,8 +7347,9 @@ class App {
             this._aiScriptHistory.push({ role: 'assistant', content: JSON.stringify(stacks) });
             if (this._aiScriptHistory.length > 12) this._aiScriptHistory = this._aiScriptHistory.slice(-12);
 
+            const hasReplace = stacks.some(s => s.replaceStack);
             const hasAppend = stacks.some(s => s.appendToStack);
-            const msg = hasAppend ? 'Updated scripts!' : 'Added ' + added + ' script' + (added !== 1 ? 's' : '') + '!';
+            const msg = hasReplace ? 'Modified scripts!' : hasAppend ? 'Updated scripts!' : 'Added ' + added + ' script' + (added !== 1 ? 's' : '') + '!';
             this._aiScriptShowStatus(msg, 'success');
             this.toast(msg, 'success');
         } catch (err) {

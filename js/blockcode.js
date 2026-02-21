@@ -1478,14 +1478,34 @@ class BlockCode {
         for (const stack of stacks) {
             if (!Array.isArray(stack.blocks) || stack.blocks.length === 0) continue;
 
+            // Check if AI wants to replace an existing stack
+            const replaceIdx = typeof stack.replaceStack === 'number' ? stack.replaceStack - 1 : -1;
+            if (replaceIdx >= 0 && replaceIdx < this.workspaceScripts.length) {
+                const validBlocks = [];
+                for (const block of stack.blocks) {
+                    const blockData = this._buildBlockData(block);
+                    if (blockData) validBlocks.push(blockData);
+                }
+                if (validBlocks.length > 0) {
+                    const old = this.workspaceScripts[replaceIdx];
+                    this.workspaceScripts[replaceIdx] = {
+                        id: old.id,
+                        x: old.x,
+                        y: old.y,
+                        blocks: validBlocks
+                    };
+                    added++;
+                }
+                continue;
+            }
+
             // Check if AI wants to append to an existing stack
             const appendIdx = typeof stack.appendToStack === 'number' ? stack.appendToStack - 1 : -1;
             if (appendIdx >= 0 && appendIdx < this.workspaceScripts.length) {
-                // Append mode: add non-hat blocks to existing stack
                 let appended = 0;
                 for (const block of stack.blocks) {
                     const def = this.blocks[block.blockId];
-                    if (!def || def.type === 'hat') continue; // skip hats when appending
+                    if (!def || def.type === 'hat') continue;
                     const blockData = this._buildBlockData(block);
                     if (blockData) {
                         this.workspaceScripts[appendIdx].blocks.push(blockData);
