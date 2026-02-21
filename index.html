@@ -96,6 +96,15 @@
                     <span class="material-icons-round">inbox</span>
                     <span class="admin-inbox-badge hidden" id="admin-inbox-badge">0</span>
                 </button>
+                <button class="friend-inbox-btn" id="btn-friend-inbox" title="Friend Requests">
+                    <span class="material-icons-round">mail</span>
+                    <span class="friend-inbox-badge hidden" id="friend-inbox-badge">0</span>
+                </button>
+                <div class="friend-inbox-dropdown hidden" id="friend-inbox-dropdown">
+                    <div class="friend-inbox-header">Friend Requests</div>
+                    <div id="friend-inbox-list"></div>
+                    <div id="friend-inbox-empty" style="display:none;text-align:center;padding:16px;color:var(--text-dim);font-size:12px">No pending requests</div>
+                </div>
                 <button class="title-signout-btn" id="btn-sign-out">Sign Out</button>
             </div>
         </div>
@@ -130,6 +139,7 @@
                 <button class="title-tab-btn" data-title-tab="friends">
                     <span class="material-icons-round">people</span>
                     Friends
+                    <span class="friend-tab-badge hidden" id="friend-tab-badge">0</span>
                 </button>
             </div>
             <!-- My Projects Tab -->

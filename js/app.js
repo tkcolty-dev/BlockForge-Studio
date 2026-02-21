@@ -45,6 +45,7 @@ class App {
         this.initGallery();
         this.initColorblindMode();
         this.initFriends();
+        this.initFriendInbox();
         this.initCommunityTemplates();
         this.initTerrainSculpting();
 
@@ -5083,6 +5084,9 @@ class App {
             }
         }
 
+        // Friend inbox badge
+        this._updateFriendBadge();
+
         // Sign out button — show "Sign In" for guests, "Sign Out" for logged-in users
         const signOutBtn = document.getElementById('btn-sign-out');
         if (signOutBtn) {
@@ -8602,6 +8606,80 @@ class App {
         });
     }
 
+    initFriendInbox() {
+        const btn = document.getElementById('btn-friend-inbox');
+        const dropdown = document.getElementById('friend-inbox-dropdown');
+        if (!btn || !dropdown) return;
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = !dropdown.classList.contains('hidden');
+            if (isOpen) {
+                dropdown.classList.add('hidden');
+            } else {
+                dropdown.classList.remove('hidden');
+                this._renderFriendInbox();
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!dropdown.contains(e.target) && e.target !== btn) {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) this._updateFriendBadge();
+        });
+    }
+
+    async _updateFriendBadge() {
+        try {
+            const resp = await fetch('/api/friends');
+            if (!resp.ok) return;
+            const { pending } = await resp.json();
+            const count = (pending || []).filter(p => p.incoming).length;
+            const badge = document.getElementById('friend-inbox-badge');
+            const tabBadge = document.getElementById('friend-tab-badge');
+            if (badge) {
+                badge.textContent = count;
+                badge.classList.toggle('hidden', count === 0);
+            }
+            if (tabBadge) {
+                tabBadge.textContent = count;
+                tabBadge.classList.toggle('hidden', count === 0);
+            }
+        } catch { /* silent */ }
+    }
+
+    async _renderFriendInbox() {
+        const list = document.getElementById('friend-inbox-list');
+        const empty = document.getElementById('friend-inbox-empty');
+        if (!list || !empty) return;
+        try {
+            const resp = await fetch('/api/friends');
+            if (!resp.ok) return;
+            const { pending } = await resp.json();
+            const incoming = (pending || []).filter(p => p.incoming);
+            if (incoming.length > 0) {
+                empty.style.display = 'none';
+                list.innerHTML = incoming.map(p => `
+                    <div class="friend-item">
+                        <div class="friend-avatar" style="background:${p.avatarColor || '#3498db'}">${(p.displayName || '?')[0].toUpperCase()}</div>
+                        <span class="friend-name">${p.displayName}</span>
+                        <div class="friend-actions">
+                            <button class="accept" onclick="app._acceptFriend(${p.id})">Accept</button>
+                            <button class="decline" onclick="app._removeFriend(${p.id})">Decline</button>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                list.innerHTML = '';
+                empty.style.display = '';
+            }
+        } catch { /* silent */ }
+    }
+
     async _sendFriendRequest(username) {
         if (!username) return;
         try {
@@ -8692,11 +8770,15 @@ class App {
         await fetch('/api/friends/accept', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ friendshipId: id }) });
         this.toast('Friend added!');
         this._renderFriendsTab();
+        this._updateFriendBadge();
+        this._renderFriendInbox();
     }
 
     async _removeFriend(id) {
         await fetch('/api/friends/' + id, { method: 'DELETE' });
         this._renderFriendsTab();
+        this._updateFriendBadge();
+        this._renderFriendInbox();
     }
 
     _timeAgo(ts) {

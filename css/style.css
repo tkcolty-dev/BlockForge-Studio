@@ -4259,6 +4259,7 @@ kbd {
 
 /* ===== Title Screen User Info ===== */
 .title-user-info {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -4325,6 +4326,7 @@ kbd {
 }
 
 .title-tab-btn {
+    position: relative;
     background: none;
     border: none;
     border-radius: 8px;
@@ -5657,6 +5659,96 @@ kbd {
     border-radius: 9px;
     color: white;
     font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+/* ===== Friend Inbox Button & Dropdown ===== */
+.friend-inbox-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--bg-medium);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.friend-inbox-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+    background: var(--bg-light);
+}
+
+.friend-inbox-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: #e74c3c;
+    border-radius: 9px;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.friend-inbox-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 6px;
+    width: 300px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    z-index: 1000;
+}
+
+.friend-inbox-header {
+    padding: 12px 16px;
+    font-weight: 600;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+}
+
+.friend-inbox-dropdown .friend-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.friend-inbox-dropdown .friend-item:last-child {
+    border-bottom: none;
+}
+
+.friend-tab-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    background: #e74c3c;
+    border-radius: 8px;
+    color: white;
+    font-size: 10px;
     font-weight: 700;
     display: flex;
     align-items: center;
