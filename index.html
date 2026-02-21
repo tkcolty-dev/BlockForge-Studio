@@ -127,6 +127,10 @@
                     <span class="material-icons-round">favorite</span>
                     Favorites
                 </button>
+                <button class="title-tab-btn" data-title-tab="friends">
+                    <span class="material-icons-round">people</span>
+                    Friends
+                </button>
             </div>
             <!-- My Projects Tab -->
             <div id="tab-my-projects" class="title-tab-content active">
@@ -213,6 +217,28 @@
                     <span class="material-icons-round">favorite_border</span>
                     <p>No favorites yet</p>
                     <span class="empty-hint">Favorite projects from the Explore tab to see them here</span>
+                </div>
+            </div>
+            <!-- Friends Tab -->
+            <div id="tab-friends" class="title-tab-content">
+                <div class="friends-add-bar">
+                    <input type="text" id="friend-add-input" placeholder="Add friend by username..." spellcheck="false" autocomplete="off">
+                    <button id="friend-add-btn">Add</button>
+                </div>
+                <div id="friend-pending-section" style="display:none">
+                    <div class="friends-section-label">Pending Requests</div>
+                    <div id="friend-pending-list"></div>
+                </div>
+                <div class="friends-section-label">Friends</div>
+                <div id="friend-list"></div>
+                <div id="friend-empty" style="display:none;text-align:center;padding:20px;color:var(--text-dim);font-size:13px">
+                    <span class="material-icons-round" style="font-size:32px;display:block;margin-bottom:8px">people_outline</span>
+                    No friends yet. Add someone by username!
+                </div>
+                <div class="friends-section-label" style="margin-top:24px">Activity Feed</div>
+                <div id="activity-feed"></div>
+                <div id="activity-empty" style="display:none;text-align:center;padding:16px;color:var(--text-dim);font-size:12px">
+                    No recent activity from friends
                 </div>
             </div>
         </div>
@@ -549,36 +575,60 @@
 
             <!-- Terrain Tab -->
             <div class="tab-content" id="tab-terrain">
-                <div class="panel-section">
-                    <div class="section-header"><span>Terrain Tools</span></div>
-                    <div class="terrain-tools">
-                        <button class="object-btn" data-terrain="flat" title="Flat Ground">
-                            <span class="material-icons-round">square</span>
-                            <span>Flat</span>
-                        </button>
-                        <button class="object-btn" data-terrain="raise" title="Raise Terrain">
-                            <span class="material-icons-round">landscape</span>
-                            <span>Raise</span>
-                        </button>
-                        <button class="object-btn" data-terrain="water" title="Add Water">
-                            <span class="material-icons-round">water</span>
-                            <span>Water</span>
-                        </button>
-                        <button class="object-btn" data-terrain="paint" title="Paint Terrain">
-                            <span class="material-icons-round">brush</span>
-                            <span>Paint</span>
-                        </button>
+                <div class="panel-section" id="terrain-create-panel">
+                    <div class="section-header"><span>Terrain Sculpting</span></div>
+                    <div class="terrain-create-section" id="terrain-no-terrain">
+                        <p>Create a heightmap terrain to sculpt</p>
+                        <div class="terrain-presets">
+                            <button class="terrain-preset-btn" data-terrain-size="32">Small 32x32</button>
+                            <button class="terrain-preset-btn" data-terrain-size="64">Medium 64x64</button>
+                            <button class="terrain-preset-btn" data-terrain-size="128">Large 128x128</button>
+                        </div>
                     </div>
-                </div>
-                <div class="panel-section">
-                    <div class="section-header"><span>Terrain Materials</span></div>
-                    <div class="material-swatches">
-                        <button class="swatch" data-material="grass" style="background:#4a7c3f" title="Grass"></button>
-                        <button class="swatch" data-material="dirt" style="background:#8B7355" title="Dirt"></button>
-                        <button class="swatch" data-material="sand" style="background:#C2B280" title="Sand"></button>
-                        <button class="swatch" data-material="stone" style="background:#808080" title="Stone"></button>
-                        <button class="swatch" data-material="snow" style="background:#FFFAFA" title="Snow"></button>
-                        <button class="swatch" data-material="lava" style="background:#CF1020" title="Lava"></button>
+                    <div id="terrain-tools-panel" style="display:none">
+                        <div class="terrain-brush-tools">
+                            <button class="terrain-tool-btn active" data-brush="raise" title="Raise">
+                                <span class="material-icons-round">arrow_upward</span>
+                                <span>Raise</span>
+                            </button>
+                            <button class="terrain-tool-btn" data-brush="lower" title="Lower">
+                                <span class="material-icons-round">arrow_downward</span>
+                                <span>Lower</span>
+                            </button>
+                            <button class="terrain-tool-btn" data-brush="smooth" title="Smooth">
+                                <span class="material-icons-round">blur_on</span>
+                                <span>Smooth</span>
+                            </button>
+                            <button class="terrain-tool-btn" data-brush="flatten" title="Flatten">
+                                <span class="material-icons-round">horizontal_rule</span>
+                                <span>Flatten</span>
+                            </button>
+                            <button class="terrain-tool-btn" data-brush="paint" title="Paint">
+                                <span class="material-icons-round">brush</span>
+                                <span>Paint</span>
+                            </button>
+                        </div>
+                        <div class="terrain-slider-group">
+                            <label>Brush Size <span id="terrain-brush-size-val">3</span></label>
+                            <input type="range" id="terrain-brush-size" min="1" max="10" value="3">
+                        </div>
+                        <div class="terrain-slider-group">
+                            <label>Strength <span id="terrain-brush-strength-val">0.5</span></label>
+                            <input type="range" id="terrain-brush-strength" min="1" max="10" value="5">
+                        </div>
+                        <div id="terrain-paint-colors" style="display:none">
+                            <div class="terrain-paint-swatches">
+                                <button class="terrain-paint-swatch active" data-tcolor="#4a7c3f" style="background:#4a7c3f" title="Grass"></button>
+                                <button class="terrain-paint-swatch" data-tcolor="#8B7355" style="background:#8B7355" title="Dirt"></button>
+                                <button class="terrain-paint-swatch" data-tcolor="#C2B280" style="background:#C2B280" title="Sand"></button>
+                                <button class="terrain-paint-swatch" data-tcolor="#808080" style="background:#808080" title="Stone"></button>
+                                <button class="terrain-paint-swatch" data-tcolor="#FFFAFA" style="background:#FFFAFA" title="Snow"></button>
+                                <button class="terrain-paint-swatch" data-tcolor="#CF1020" style="background:#CF1020" title="Lava"></button>
+                            </div>
+                        </div>
+                        <button class="terrain-delete-btn" id="terrain-delete-btn">
+                            <span class="material-icons-round" style="font-size:14px;vertical-align:middle">delete</span> Delete Terrain
+                        </button>
                     </div>
                 </div>
                 <div class="panel-section">
@@ -1023,6 +1073,10 @@
                     <span class="cat-color" style="background:#E91E63"></span>
                     UI
                 </div>
+                <div class="palette-category palette-3d-only" data-category="cloud">
+                    <span class="cat-color" style="background:#2196F3"></span>
+                    Cloud
+                </div>
             </div>
 
             <!-- Block Drawer (blocks for selected category) -->
@@ -1250,6 +1304,14 @@
                         </label>
                         <span class="setting-desc">Automatically save changes every 15 seconds and on scene edits</span>
                     </div>
+                    <div class="settings-row">
+                        <label>Color Blind Mode</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="setting-colorblind">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-desc">Use high-contrast block colors for color vision deficiency</span>
+                    </div>
                 </div>
                 <div class="settings-section">
                     <div class="settings-section-title">Key Bindings</div>
@@ -1410,6 +1472,13 @@
                 <p style="color:var(--text-dim);font-size:12px;margin-bottom:16px">Choose a template to start building from. This will replace your current scene.</p>
                 <div class="template-grid" id="template-grid">
                     <!-- Populated dynamically -->
+                </div>
+                <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                        <span style="font-weight:600;font-size:14px">Community Templates</span>
+                        <input type="text" id="community-template-search" placeholder="Search..." style="background:var(--bg-medium);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 10px;font-size:12px;width:160px;outline:none" spellcheck="false" autocomplete="off">
+                    </div>
+                    <div class="community-template-grid" id="community-template-grid"></div>
                 </div>
             </div>
         </div>
@@ -1665,6 +1734,7 @@
             <div class="publish-dialog-footer">
                 <button class="publish-cancel-btn" id="publish-cancel">Cancel</button>
                 <button class="publish-unpublish-btn hidden" id="publish-unpublish">Unpublish</button>
+                <button class="publish-submit-btn" id="publish-as-template" style="background:linear-gradient(135deg,#2196F3,#1976D2);margin-right:4px">Template</button>
                 <button class="publish-submit-btn" id="publish-submit">Publish</button>
             </div>
         </div>

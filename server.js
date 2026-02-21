@@ -187,6 +187,58 @@ async function initDb() {
             viewed_at TIMESTAMP DEFAULT NOW()
         )
     `);
+
+    // Cloud data variables
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS cloud_data (
+            project_id TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL DEFAULT '0',
+            updated_at BIGINT NOT NULL,
+            PRIMARY KEY (project_id, key)
+        )
+    `);
+
+    // Shared templates (community marketplace)
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS shared_templates (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            creator TEXT NOT NULL,
+            tags TEXT DEFAULT '[]',
+            thumbnail TEXT,
+            template_data TEXT NOT NULL,
+            published_at BIGINT NOT NULL,
+            use_count INTEGER DEFAULT 0
+        )
+    `);
+
+    // Friendships
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS friendships (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            friend_id INTEGER NOT NULL REFERENCES users(id),
+            status TEXT NOT NULL CHECK (status IN ('pending', 'accepted')),
+            created_at BIGINT NOT NULL,
+            UNIQUE(user_id, friend_id)
+        )
+    `);
+
+    // Activity feed
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS activity_feed (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            type TEXT NOT NULL,
+            data TEXT DEFAULT '{}',
+            created_at BIGINT NOT NULL
+        )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_feed(user_id, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_id, status)`);
 }
 
 const AVATAR_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63', '#00bcd4'];
@@ -635,6 +687,12 @@ app.post('/api/projects', authenticate, async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (id) DO UPDATE SET name = $3, description = $4, creator = $5, tags = $6, thumbnail = $7, published_at = $8, project_data = $9`,
         [id, req.user.id, name.trim(), (description || '').trim(), creator, JSON.stringify(tags || []), thumbnail || null, Date.now(), JSON.stringify(projectData)]
+    );
+
+    // Log activity for friends feed
+    await pool.query(
+        'INSERT INTO activity_feed (user_id, type, data, created_at) VALUES ($1, $2, $3, $4)',
+        [req.user.id, 'published_project', JSON.stringify({ projectId: id, name: name.trim() }), Date.now()]
     );
 
     res.json({ ok: true });
@@ -1745,6 +1803,155 @@ app.post('/api/ai/script', authenticate, async (req, res) => {
     }
 });
 
+// ===== Cloud Data API =====
+const _cloudRateLimit = new Map(); // userId -> { count, resetAt }
+
+app.get('/api/cloud-data/:projectId', authenticate, async (req, res) => {
+    const { rows } = await pool.query('SELECT key, value, updated_at FROM cloud_data WHERE project_id = $1', [req.params.projectId]);
+    res.json(rows);
+});
+
+app.get('/api/cloud-data/:projectId/:key', authenticate, async (req, res) => {
+    const { rows } = await pool.query('SELECT value FROM cloud_data WHERE project_id = $1 AND key = $2', [req.params.projectId, req.params.key]);
+    res.json({ value: rows.length ? rows[0].value : '0' });
+});
+
+app.put('/api/cloud-data/:projectId/:key', authenticate, async (req, res) => {
+    // Rate limit: 10 writes per minute per user
+    const now = Date.now();
+    let rl = _cloudRateLimit.get(req.user.id);
+    if (!rl || now > rl.resetAt) { rl = { count: 0, resetAt: now + 60000 }; _cloudRateLimit.set(req.user.id, rl); }
+    rl.count++;
+    if (rl.count > 10) return res.status(429).json({ error: 'Rate limit exceeded (10/min)' });
+
+    const value = String(req.body.value ?? '0').slice(0, 1000);
+    await pool.query(
+        `INSERT INTO cloud_data (project_id, key, value, updated_at) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (project_id, key) DO UPDATE SET value = $3, updated_at = $4`,
+        [req.params.projectId, req.params.key, value, now]
+    );
+    res.json({ ok: true });
+});
+
+app.delete('/api/cloud-data/:projectId/:key', authenticate, async (req, res) => {
+    await pool.query('DELETE FROM cloud_data WHERE project_id = $1 AND key = $2', [req.params.projectId, req.params.key]);
+    res.json({ ok: true });
+});
+
+// ===== Template Marketplace API =====
+
+app.get('/api/templates', async (req, res) => {
+    const sort = req.query.sort === 'newest' ? 'published_at DESC' : 'use_count DESC';
+    const search = req.query.search ? `%${req.query.search}%` : null;
+    let query = `SELECT id, name, description, creator, tags, thumbnail, published_at, use_count FROM shared_templates`;
+    const params = [];
+    if (search) { query += ` WHERE name ILIKE $1 OR description ILIKE $1`; params.push(search); }
+    query += ` ORDER BY ${sort} LIMIT 50`;
+    const { rows } = await pool.query(query, params);
+    res.json(rows.map(r => ({ ...r, tags: JSON.parse(r.tags || '[]') })));
+});
+
+app.post('/api/templates', authenticate, async (req, res) => {
+    const { name, description, tags, thumbnail, templateData } = req.body;
+    if (!name || !templateData) return res.status(400).json({ error: 'Name and data required' });
+    const id = 'tmpl_' + crypto.randomBytes(8).toString('hex');
+    const { rows: userRows } = await pool.query('SELECT display_name FROM users WHERE id = $1', [req.user.id]);
+    const creator = userRows[0]?.display_name || req.user.username;
+    await pool.query(
+        `INSERT INTO shared_templates (id, user_id, name, description, creator, tags, thumbnail, template_data, published_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [id, req.user.id, name.slice(0, 60), (description || '').slice(0, 200), creator, JSON.stringify(tags || []), thumbnail || null, JSON.stringify(templateData), Date.now()]
+    );
+    // Log activity
+    await pool.query('INSERT INTO activity_feed (user_id, type, data, created_at) VALUES ($1, $2, $3, $4)',
+        [req.user.id, 'published_template', JSON.stringify({ templateId: id, name }), Date.now()]);
+    res.json({ id });
+});
+
+app.delete('/api/templates/:id', authenticate, async (req, res) => {
+    await pool.query('DELETE FROM shared_templates WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+    res.json({ ok: true });
+});
+
+app.post('/api/templates/:id/use', async (req, res) => {
+    await pool.query('UPDATE shared_templates SET use_count = use_count + 1 WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query('SELECT template_data FROM shared_templates WHERE id = $1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Template not found' });
+    res.json({ templateData: JSON.parse(rows[0].template_data) });
+});
+
+// ===== Friends API =====
+
+app.post('/api/friends/request', authenticate, async (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ error: 'Username required' });
+    const { rows: targetRows } = await pool.query('SELECT id FROM users WHERE LOWER(username) = LOWER($1)', [username]);
+    if (!targetRows.length) return res.status(404).json({ error: 'User not found' });
+    const friendId = targetRows[0].id;
+    if (friendId === req.user.id) return res.status(400).json({ error: 'Cannot friend yourself' });
+    // Check existing
+    const { rows: existing } = await pool.query(
+        'SELECT id, status FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)', [req.user.id, friendId]);
+    if (existing.length) return res.status(400).json({ error: existing[0].status === 'accepted' ? 'Already friends' : 'Request already pending' });
+    await pool.query('INSERT INTO friendships (user_id, friend_id, status, created_at) VALUES ($1, $2, $3, $4)', [req.user.id, friendId, 'pending', Date.now()]);
+    res.json({ ok: true });
+});
+
+app.post('/api/friends/accept', authenticate, async (req, res) => {
+    const { friendshipId } = req.body;
+    await pool.query('UPDATE friendships SET status = $1 WHERE id = $2 AND friend_id = $3', ['accepted', friendshipId, req.user.id]);
+    res.json({ ok: true });
+});
+
+app.delete('/api/friends/:id', authenticate, async (req, res) => {
+    await pool.query('DELETE FROM friendships WHERE id = $1 AND (user_id = $2 OR friend_id = $2)', [req.params.id, req.user.id]);
+    res.json({ ok: true });
+});
+
+app.get('/api/friends', authenticate, async (req, res) => {
+    const { rows } = await pool.query(`
+        SELECT f.id, f.user_id, f.friend_id, f.status, f.created_at,
+               u1.username as user_username, u1.display_name as user_display, u1.avatar_color as user_color,
+               u2.username as friend_username, u2.display_name as friend_display, u2.avatar_color as friend_color
+        FROM friendships f
+        JOIN users u1 ON f.user_id = u1.id
+        JOIN users u2 ON f.friend_id = u2.id
+        WHERE f.user_id = $1 OR f.friend_id = $1
+        ORDER BY f.created_at DESC
+    `, [req.user.id]);
+    const friends = [];
+    const pending = [];
+    rows.forEach(r => {
+        const isRequester = r.user_id === req.user.id;
+        const other = isRequester
+            ? { username: r.friend_username, displayName: r.friend_display, avatarColor: r.friend_color }
+            : { username: r.user_username, displayName: r.user_display, avatarColor: r.user_color };
+        const entry = { id: r.id, ...other, status: r.status };
+        if (r.status === 'accepted') friends.push(entry);
+        else if (r.status === 'pending') pending.push({ ...entry, incoming: !isRequester });
+    });
+    res.json({ friends, pending });
+});
+
+app.get('/api/activity', authenticate, async (req, res) => {
+    // Get friend IDs
+    const { rows: friendRows } = await pool.query(`
+        SELECT CASE WHEN user_id = $1 THEN friend_id ELSE user_id END as fid
+        FROM friendships WHERE status = 'accepted' AND (user_id = $1 OR friend_id = $1)
+    `, [req.user.id]);
+    const friendIds = friendRows.map(r => r.fid);
+    if (!friendIds.length) return res.json([]);
+    const placeholders = friendIds.map((_, i) => `$${i + 1}`).join(',');
+    const { rows } = await pool.query(
+        `SELECT a.*, u.display_name, u.avatar_color FROM activity_feed a
+         JOIN users u ON a.user_id = u.id
+         WHERE a.user_id IN (${placeholders})
+         ORDER BY a.created_at DESC LIMIT 30`,
+        friendIds
+    );
+    res.json(rows.map(r => ({ ...r, data: JSON.parse(r.data || '{}') })));
+});
+
 // ===== WebSocket Collab Server =====
 
 const server = http.createServer(app);
@@ -1773,8 +1980,8 @@ function broadcastToRoom(roomCode, msg, excludeWs) {
 
 function getMemberList(room) {
     const list = [];
-    for (const [, info] of room.members) {
-        const member = { userId: info.userId, displayName: info.displayName, avatar: info.avatar };
+    for (const [ws, info] of room.members) {
+        const member = { userId: info.userId, displayName: info.displayName, avatar: info.avatar, role: ws === room.hostWs ? 'host' : (info.role || 'editor') };
         if (info.avatarUrl) member.avatarUrl = info.avatarUrl;
         if (info.avatarColor) member.avatarColor = info.avatarColor;
         list.push(member);
@@ -1937,17 +2144,49 @@ wss.on('connection', (ws) => {
                 }
                 break;
             }
+            case 'set-role': {
+                // Host-only: change a member's role
+                for (const [code, room] of rooms) {
+                    if (room.hostWs === ws) {
+                        for (const [memberWs, info] of room.members) {
+                            if (info.userId === msg.targetUserId) {
+                                info.role = msg.role; // 'editor' or 'viewer'
+                                memberWs.send(JSON.stringify({ type: 'role-changed', role: msg.role }));
+                                broadcastToRoom(code, { type: 'member-update', members: getMemberList(room) });
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+                break;
+            }
             case 'add-object':
             case 'remove-object':
             case 'update-transform':
             case 'update-property':
             case 'update-environment':
             case 'update-character':
+            case 'terrain-edit':
+            case 'terrain-create': {
+                // Reject edit messages from viewers
+                for (const [code, room] of rooms) {
+                    if (room.members.has(ws)) {
+                        const info = room.members.get(ws);
+                        if (ws !== room.hostWs && info.role === 'viewer') {
+                            ws.send(JSON.stringify({ type: 'error', message: 'Viewers cannot edit' }));
+                            return;
+                        }
+                        broadcastToRoom(code, msg, ws);
+                        break;
+                    }
+                }
+                break;
+            }
             case 'vote-request':
             case 'vote-response':
             case 'vote-passed':
             case 'vote-failed': {
-                // Relay to all other members in the same room
                 for (const [code, room] of rooms) {
                     if (room.members.has(ws)) {
                         broadcastToRoom(code, msg, ws);

@@ -197,6 +197,14 @@ class Runtime {
             });
         });
 
+        // Init local vars on each object
+        this.scene3d.objects.forEach(obj => {
+            obj.userData.localVars = {};
+        });
+
+        // Cloud cache
+        this._cloudCache = {};
+
         // Pre-cache bounding boxes for collision detection
         this.scene3d.objects.forEach(obj => {
             obj.userData._cachedBox = new THREE.Box3().setFromObject(obj);
@@ -2076,6 +2084,86 @@ class Runtime {
                     case '<=': cond = varVal <= checkVal; break;
                 }
                 if (cond && cmd.children) {
+                    await this.executeCommands(obj, cmd.children);
+                }
+                break;
+            }
+
+            // === Local Variables (per-object) ===
+            case 'setLocalVar': {
+                if (!obj.userData.localVars) obj.userData.localVars = {};
+                obj.userData.localVars[v.var || 'myLocal'] = parseFloat(v.value) || 0;
+                break;
+            }
+            case 'changeLocalVar': {
+                if (!obj.userData.localVars) obj.userData.localVars = {};
+                const lv = v.var || 'myLocal';
+                obj.userData.localVars[lv] = (obj.userData.localVars[lv] || 0) + (parseFloat(v.amount) || 1);
+                break;
+            }
+            case 'ifLocalVar': {
+                if (!obj.userData.localVars) obj.userData.localVars = {};
+                const lvVal = obj.userData.localVars[v.var] || 0;
+                const lvCheck = parseFloat(v.value) || 0;
+                let lvCond = false;
+                switch (v.op) {
+                    case '>': lvCond = lvVal > lvCheck; break;
+                    case '<': lvCond = lvVal < lvCheck; break;
+                    case '=': lvCond = lvVal === lvCheck; break;
+                    case '>=': lvCond = lvVal >= lvCheck; break;
+                    case '<=': lvCond = lvVal <= lvCheck; break;
+                }
+                if (lvCond && cmd.children) {
+                    await this.executeCommands(obj, cmd.children);
+                }
+                break;
+            }
+            case 'showLocalVar': {
+                if (!obj.userData.localVars) obj.userData.localVars = {};
+                const lvName = v.var || 'myLocal';
+                const lvValue = obj.userData.localVars[lvName] || 0;
+                const label = (obj.userData.name || 'Object') + '.' + lvName;
+                this.addHUDElement(label, lvValue);
+                break;
+            }
+
+            // === Cloud Data Variables ===
+            case 'cloudSet': {
+                const ck = v.key || 'highscore';
+                const cv = String(v.value ?? 0);
+                if (!this._cloudCache) this._cloudCache = {};
+                this._cloudCache[ck] = cv;
+                this._cloudStore(ck, cv);
+                break;
+            }
+            case 'cloudGet': {
+                const ck2 = v.key || 'highscore';
+                const val = await this._cloudFetch(ck2);
+                this.addHUDElement('cloud:' + ck2, val);
+                break;
+            }
+            case 'cloudChange': {
+                const ck3 = v.key || 'highscore';
+                const current = parseFloat(await this._cloudFetch(ck3)) || 0;
+                const newVal = current + (parseFloat(v.amount) || 1);
+                if (!this._cloudCache) this._cloudCache = {};
+                this._cloudCache[ck3] = String(newVal);
+                this._cloudStore(ck3, String(newVal));
+                break;
+            }
+            case 'cloudIf': {
+                const ck4 = v.key || 'highscore';
+                const cloudVal = parseFloat(await this._cloudFetch(ck4)) || 0;
+                const cloudCheck = parseFloat(v.value) || 0;
+                let cloudCond = false;
+                switch (v.op) {
+                    case '>': cloudCond = cloudVal > cloudCheck; break;
+                    case '<': cloudCond = cloudVal < cloudCheck; break;
+                    case '=': cloudCond = cloudVal === cloudCheck; break;
+                    case '>=': cloudCond = cloudVal >= cloudCheck; break;
+                    case '<=': cloudCond = cloudVal <= cloudCheck; break;
+                }
+                if (cloudCond && cmd.children) {
                     await this.executeCommands(obj, cmd.children);
                 }
                 break;
@@ -4352,5 +4440,32 @@ class Runtime {
                 break;
             }
         }
+    }
+
+    // === Cloud Data Helpers ===
+    async _cloudFetch(key) {
+        if (!this._cloudCache) this._cloudCache = {};
+        if (this._cloudCache[key] !== undefined) return this._cloudCache[key];
+        try {
+            const projId = window._app?.currentProjectId;
+            if (!projId) return '0';
+            const resp = await fetch(`/api/cloud-data/${projId}/${encodeURIComponent(key)}`);
+            if (!resp.ok) return '0';
+            const data = await resp.json();
+            this._cloudCache[key] = data.value || '0';
+            return this._cloudCache[key];
+        } catch { return '0'; }
+    }
+
+    async _cloudStore(key, value) {
+        try {
+            const projId = window._app?.currentProjectId;
+            if (!projId) return;
+            await fetch(`/api/cloud-data/${projId}/${encodeURIComponent(key)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ value })
+            });
+        } catch { /* silent */ }
     }
 }

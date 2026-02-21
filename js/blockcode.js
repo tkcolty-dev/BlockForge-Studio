@@ -12,6 +12,7 @@ class BlockCode {
         this.nextBlockId = 1;
         this.customBlocks = {}; // user-created blocks
         this.customVariables = []; // user-created variable names
+        this.customLocalVariables = []; // per-object local variable names
         this.customMessages = []; // user-created message names
         this.onScriptsChanged = null; // collab callback
         this.drawer = document.getElementById('block-drawer');
@@ -56,7 +57,8 @@ class BlockCode {
             items: { name: 'Items', color: '#44BB44', darkColor: '#2D882D' },
             effects: { name: 'Effects', color: '#E67E22', darkColor: '#BA6418' },
             camera: { name: 'Camera', color: '#8E44AD', darkColor: '#6C3483' },
-            ui: { name: 'UI', color: '#E91E63', darkColor: '#C2185B' }
+            ui: { name: 'UI', color: '#E91E63', darkColor: '#C2185B' },
+            cloud: { name: 'Cloud', color: '#2196F3', darkColor: '#1976D2' }
         };
     }
 
@@ -278,6 +280,18 @@ class BlockCode {
             'ui_set_number': { category: 'ui', type: 'command', label: 'Set {label} to {value}', inputs: { label: { type: 'text', default: 'Score' }, value: { type: 'number', default: 0 } }, code: 'uiSetNumber' },
             'ui_change_number': { category: 'ui', type: 'command', label: 'Change {label} by {value}', inputs: { label: { type: 'text', default: 'Score' }, value: { type: 'number', default: 1 } }, code: 'uiChangeNumber' },
 
+            // ===== Local Variables (per-object) =====
+            'local_var_set': { category: 'variables', type: 'command', label: 'Set local {var} to {value}', inputs: { var: { type: 'select', options: ['myLocal'], default: 'myLocal' }, value: { type: 'number', default: 0 } }, code: 'setLocalVar' },
+            'local_var_change': { category: 'variables', type: 'command', label: 'Change local {var} by {amount}', inputs: { var: { type: 'select', options: ['myLocal'], default: 'myLocal' }, amount: { type: 'number', default: 1 } }, code: 'changeLocalVar' },
+            'local_var_if': { category: 'variables', type: 'c-block', label: 'If local {var} {op} {value}', inputs: { var: { type: 'select', options: ['myLocal'], default: 'myLocal' }, op: { type: 'select', options: ['>','<','=','>=','<='], default: '>' }, value: { type: 'number', default: 0 } }, code: 'ifLocalVar' },
+            'local_var_show': { category: 'variables', type: 'command', label: 'Show local {var} on screen', inputs: { var: { type: 'select', options: ['myLocal'], default: 'myLocal' } }, code: 'showLocalVar' },
+
+            // ===== Cloud Data Variables =====
+            'cloud_set': { category: 'cloud', type: 'command', label: 'Set cloud {key} to {value}', inputs: { key: { type: 'text', default: 'highscore' }, value: { type: 'number', default: 0 } }, code: 'cloudSet' },
+            'cloud_get': { category: 'cloud', type: 'command', label: 'Show cloud {key}', inputs: { key: { type: 'text', default: 'highscore' } }, code: 'cloudGet' },
+            'cloud_change': { category: 'cloud', type: 'command', label: 'Change cloud {key} by {amount}', inputs: { key: { type: 'text', default: 'highscore' }, amount: { type: 'number', default: 1 } }, code: 'cloudChange' },
+            'cloud_if': { category: 'cloud', type: 'c-block', label: 'If cloud {key} {op} {value}', inputs: { key: { type: 'text', default: 'highscore' }, op: { type: 'select', options: ['>','<','=','>=','<='], default: '>' }, value: { type: 'number', default: 0 } }, code: 'cloudIf' },
+
         };
     }
 
@@ -324,6 +338,20 @@ class BlockCode {
             makeVarBtn.innerHTML = '<span class="material-icons-round">add_circle</span> Make a Variable';
             makeVarBtn.addEventListener('click', () => this._showMakeVariableDialog());
             this.drawer.appendChild(makeVarBtn);
+
+            const makeLocalBtn = document.createElement('button');
+            makeLocalBtn.className = 'make-block-btn';
+            makeLocalBtn.innerHTML = '<span class="material-icons-round">add_circle</span> Make a Local Variable';
+            makeLocalBtn.addEventListener('click', () => this._showMakeLocalVariableDialog());
+            this.drawer.appendChild(makeLocalBtn);
+        }
+
+        // Show note for Cloud category
+        if (this.activeCategory === 'cloud') {
+            const note = document.createElement('div');
+            note.style.cssText = 'padding:8px 12px;font-size:11px;color:var(--text-dim);line-height:1.5;border:1px solid var(--border);border-radius:6px;margin-bottom:8px;background:rgba(33,150,243,0.05)';
+            note.textContent = 'Cloud variables require an account and work on published projects only. Data persists across sessions.';
+            this.drawer.appendChild(note);
         }
 
         // Show "Make a Block" button for My Blocks category
@@ -460,6 +488,43 @@ class BlockCode {
             const block = this.blocks[id];
             if (block && block.inputs && block.inputs.msg) {
                 block.inputs.msg.options = [...allMsgs];
+            }
+        });
+    }
+
+    _showMakeLocalVariableDialog() {
+        const name = prompt('Local variable name:', 'myLocal');
+        if (!name || !name.trim()) return;
+        const safeName = name.trim().replace(/\s+/g, '_');
+        if (this.customLocalVariables.includes(safeName)) {
+            alert('A local variable with that name already exists.');
+            return;
+        }
+        this.customLocalVariables.push(safeName);
+        this._updateLocalVariableDropdowns();
+        this.renderDrawer();
+    }
+
+    _updateLocalVariableDropdowns() {
+        const allLocal = this.customLocalVariables.length ? this.customLocalVariables : ['myLocal'];
+        const localBlockIds = ['local_var_set', 'local_var_change', 'local_var_if', 'local_var_show'];
+        localBlockIds.forEach(id => {
+            const block = this.blocks[id];
+            if (block && block.inputs && block.inputs.var) {
+                block.inputs.var.options = [...allLocal];
+            }
+        });
+    }
+
+    applyColorblindPalette(enabled) {
+        if (!enabled) {
+            this.categories = this.defineCategories();
+        }
+        // CSS handles the visual overrides; just re-render palette dots
+        document.querySelectorAll('.palette-category').forEach(el => {
+            const cat = el.dataset.category;
+            if (cat && this.categories[cat]) {
+                el.querySelector('.cat-color').style.background = this.categories[cat].color;
             }
         });
     }

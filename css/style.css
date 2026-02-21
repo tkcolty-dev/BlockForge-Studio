@@ -7106,3 +7106,242 @@ kbd {
     max-height: 0;
     overflow: hidden;
 }
+
+/* ===== Color Blind Mode (Wong/IBM palette) ===== */
+body.colorblind-mode .block[data-category="events"],
+body.colorblind-mode .palette-category[data-category="events"] .cat-color { background: #E69F00 !important; }
+body.colorblind-mode .block[data-category="motion"],
+body.colorblind-mode .palette-category[data-category="motion"] .cat-color { background: #0072B2 !important; }
+body.colorblind-mode .block[data-category="control"],
+body.colorblind-mode .palette-category[data-category="control"] .cat-color { background: #D55E00 !important; }
+body.colorblind-mode .block[data-category="looks"],
+body.colorblind-mode .palette-category[data-category="looks"] .cat-color { background: #CC79A7 !important; }
+body.colorblind-mode .block[data-category="physics"],
+body.colorblind-mode .palette-category[data-category="physics"] .cat-color { background: #009E73 !important; }
+body.colorblind-mode .block[data-category="sensing"],
+body.colorblind-mode .palette-category[data-category="sensing"] .cat-color { background: #56B4E9 !important; }
+body.colorblind-mode .block[data-category="sound"],
+body.colorblind-mode .palette-category[data-category="sound"] .cat-color { background: #F0E442 !important; }
+body.colorblind-mode .block[data-category="sound"] { color: #1a1a2e !important; }
+body.colorblind-mode .block[data-category="variables"],
+body.colorblind-mode .palette-category[data-category="variables"] .cat-color { background: #E69F00 !important; }
+body.colorblind-mode .block[data-category="shooting"],
+body.colorblind-mode .palette-category[data-category="shooting"] .cat-color { background: #D55E00 !important; }
+body.colorblind-mode .block[data-category="enemies"],
+body.colorblind-mode .palette-category[data-category="enemies"] .cat-color { background: #882255 !important; }
+body.colorblind-mode .block[data-category="items"],
+body.colorblind-mode .palette-category[data-category="items"] .cat-color { background: #009E73 !important; }
+body.colorblind-mode .block[data-category="effects"],
+body.colorblind-mode .palette-category[data-category="effects"] .cat-color { background: #D55E00 !important; }
+body.colorblind-mode .block[data-category="camera"],
+body.colorblind-mode .palette-category[data-category="camera"] .cat-color { background: #332288 !important; }
+body.colorblind-mode .block[data-category="ui"],
+body.colorblind-mode .palette-category[data-category="ui"] .cat-color { background: #CC79A7 !important; }
+body.colorblind-mode .block[data-category="cloud"],
+body.colorblind-mode .palette-category[data-category="cloud"] .cat-color { background: #0072B2 !important; }
+body.colorblind-mode .c-block[data-category="events"] { border-color: #E69F00 !important; }
+body.colorblind-mode .c-block[data-category="motion"] { border-color: #0072B2 !important; }
+body.colorblind-mode .c-block[data-category="control"] { border-color: #D55E00 !important; }
+body.colorblind-mode .c-block[data-category="looks"] { border-color: #CC79A7 !important; }
+body.colorblind-mode .c-block[data-category="physics"] { border-color: #009E73 !important; }
+body.colorblind-mode .c-block[data-category="sensing"] { border-color: #56B4E9 !important; }
+body.colorblind-mode .c-block[data-category="variables"] { border-color: #E69F00 !important; }
+body.colorblind-mode .c-block[data-category="cloud"] { border-color: #0072B2 !important; }
+
+/* ===== Cloud Data Blocks ===== */
+.block[data-category="cloud"] { background: #2196F3; }
+.c-block[data-category="cloud"] { border-color: #2196F3; }
+.palette-category[data-category="cloud"] .cat-color { background: #2196F3; }
+
+/* ===== Collab Permissions ===== */
+.collab-role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(76,151,255,0.15);
+    color: var(--accent);
+}
+.collab-role-badge.viewer {
+    background: rgba(231,76,60,0.12);
+    color: #e74c3c;
+}
+.collab-member-role {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+}
+.collab-member-role select {
+    background: var(--bg-medium);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 10px;
+    padding: 2px 4px;
+    cursor: pointer;
+}
+.collab-role-select {
+    background: var(--bg-medium);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 10px;
+    padding: 2px 6px;
+    cursor: pointer;
+    margin-left: auto;
+}
+.collab-viewer-notice {
+    background: rgba(231,76,60,0.1);
+    border: 1px solid rgba(231,76,60,0.25);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #e74c3c;
+    text-align: center;
+    margin-top: 8px;
+}
+
+/* ===== Friends & Activity ===== */
+.friend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-medium);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+}
+.friend-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: white;
+    flex-shrink: 0;
+}
+.friend-name { flex: 1; font-size: 13px; font-weight: 500; }
+.friend-status { font-size: 10px; color: var(--text-dim); }
+.friend-actions { display: flex; gap: 4px; }
+.friend-actions button {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 11px;
+    transition: all 0.15s;
+}
+.friend-actions button:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+.friend-actions button.accept { border-color: var(--success); color: var(--success); }
+.friend-actions button.accept:hover { background: rgba(46,204,113,0.15); }
+.friend-actions button.decline { border-color: var(--danger); color: var(--danger); }
+.friend-actions button.decline:hover { background: rgba(231,76,60,0.15); }
+.activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-medium);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+}
+.activity-item .activity-icon {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; background: rgba(76,151,255,0.15); color: var(--accent);
+}
+.activity-item .activity-icon .material-icons-round { font-size: 16px; }
+.activity-text { flex: 1; font-size: 12px; line-height: 1.5; }
+.activity-text strong { font-weight: 600; color: var(--text-bright); }
+.activity-time { font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+.friends-add-bar { display: flex; gap: 6px; margin-bottom: 16px; }
+.friends-add-bar input {
+    flex: 1; background: var(--bg-medium); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); padding: 8px 12px; font-size: 13px; outline: none;
+}
+.friends-add-bar input:focus { border-color: var(--accent); }
+.friends-add-bar button {
+    background: var(--accent); border: none; border-radius: 6px;
+    color: white; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.friends-add-bar button:hover { background: var(--accent-hover); }
+.friends-section-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-dim); margin: 16px 0 8px;
+}
+
+/* ===== Community Templates ===== */
+.community-template-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;
+}
+.community-template-card {
+    background: var(--bg-medium); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px; cursor: pointer; transition: all 0.15s;
+}
+.community-template-card:hover {
+    border-color: var(--accent); transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.community-template-card .ct-thumb {
+    width: 100%; aspect-ratio: 16/9; border-radius: 4px;
+    background: var(--bg-dark); margin-bottom: 8px; overflow: hidden;
+}
+.community-template-card .ct-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.community-template-card .ct-name {
+    font-size: 12px; font-weight: 600; margin-bottom: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.community-template-card .ct-creator { font-size: 10px; color: var(--text-dim); }
+.community-template-card .ct-uses { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+
+/* ===== Terrain Sculpting ===== */
+.terrain-brush-tools {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 12px;
+}
+.terrain-tool-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 8px 4px; background: var(--bg-dark); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text-dim); cursor: pointer; font-size: 10px; transition: all 0.15s;
+}
+.terrain-tool-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+.terrain-tool-btn.active {
+    background: rgba(76,151,255,0.15); border-color: var(--accent); color: var(--accent);
+}
+.terrain-tool-btn .material-icons-round { font-size: 20px; }
+.terrain-slider-group { margin-bottom: 8px; }
+.terrain-slider-group label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; color: var(--text-dim); margin-bottom: 4px;
+}
+.terrain-slider-group input[type="range"] { width: 100%; accent-color: var(--accent); }
+.terrain-create-section { text-align: center; padding: 20px 12px; }
+.terrain-create-section p { font-size: 12px; color: var(--text-dim); margin-bottom: 12px; }
+.terrain-presets { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.terrain-preset-btn {
+    background: var(--bg-medium); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 8px 16px; cursor: pointer; font-size: 12px; transition: all 0.15s;
+}
+.terrain-preset-btn:hover { border-color: var(--accent); background: rgba(76,151,255,0.1); }
+.terrain-delete-btn {
+    background: none; border: 1px solid rgba(231,76,60,0.3); border-radius: 6px;
+    color: #e74c3c; padding: 6px 12px; cursor: pointer; font-size: 11px; width: 100%; margin-top: 12px;
+}
+.terrain-delete-btn:hover { background: rgba(231,76,60,0.1); }
+.terrain-paint-swatches { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+.terrain-paint-swatch {
+    width: 24px; height: 24px; border-radius: 4px; border: 2px solid transparent; cursor: pointer;
+}
+.terrain-paint-swatch.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

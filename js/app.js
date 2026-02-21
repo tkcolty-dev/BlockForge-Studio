@@ -43,6 +43,10 @@ class App {
         this.initAnimateTab();
         this.initLoadingScreen();
         this.initGallery();
+        this.initColorblindMode();
+        this.initFriends();
+        this.initCommunityTemplates();
+        this.initTerrainSculpting();
 
         this.VERSION = '1.0.0';
         this.currentProjectId = null;
@@ -64,6 +68,16 @@ class App {
         this._collabIsHost = false;
         this._collabMembers = [];
         this._collabBroadcastPaused = false;
+        this._collabRole = 'editor';
+
+        // Terrain sculpting state
+        this._terrain = null;
+        this._terrainBrush = { tool: 'raise', radius: 3, strength: 0.5, color: '#4a7c3f' };
+        this._terrainBrushCursor = null;
+        this._terrainSculpting = false;
+
+        // Store app reference for runtime cloud access
+        window._app = this;
 
         this.scene3d.onObjectSelected = (obj) => {
             // Single-select clears any existing multi-select
@@ -1422,12 +1436,13 @@ class App {
     }
 
     _gatherProjectData() {
-        return {
+        const data = {
             version: 1,
             type: '3d',
             name: this.projectName || 'My Game',
             scene: this.scene3d.serialize(),
             customVariables: this.blockCode.customVariables,
+            customLocalVariables: this.blockCode.customLocalVariables,
             customMessages: this.blockCode.customMessages,
             customObjects: this.customObjects,
             uiScreens: this.uiScreens,
@@ -1451,6 +1466,17 @@ class App {
                 loadingScreen: this.gameSettings.loadingScreen
             }
         };
+        // Terrain data
+        if (this._terrain) {
+            const t = this._terrain;
+            data.terrain = {
+                size: t.userData.terrainSize,
+                resolution: t.userData.terrainResolution,
+                heightData: Array.from(t.userData.heightData),
+                colorData: Array.from(t.userData.colorData)
+            };
+        }
+        return data;
     }
 
     _applyProjectData(data) {
@@ -1459,6 +1485,10 @@ class App {
         if (data.customVariables) {
             this.blockCode.customVariables = data.customVariables;
             this.blockCode._updateVariableDropdowns();
+        }
+        if (data.customLocalVariables) {
+            this.blockCode.customLocalVariables = data.customLocalVariables;
+            this.blockCode._updateLocalVariableDropdowns();
         }
         if (data.customMessages) {
             this.blockCode.customMessages = data.customMessages;
@@ -1534,6 +1564,13 @@ class App {
 
         // Update animation dropdowns from scene objects
         this._updateAnimationDropdowns();
+
+        // Restore terrain
+        if (data.terrain) {
+            this._createTerrainFromData(data.terrain);
+        } else {
+            this._removeTerrain();
+        }
 
         this.refreshExplorer();
         this.updateObjectCount();
@@ -1978,9 +2015,12 @@ class App {
         // Reset editor state
         this.scene3d.deserialize([]);
         this.blockCode.customVariables = [];
+        this.blockCode.customLocalVariables = [];
         this.blockCode.customMessages = [];
         this.blockCode._updateVariableDropdowns();
+        this.blockCode._updateLocalVariableDropdowns();
         this.blockCode._updateMessageDropdowns();
+        this._removeTerrain();
         this.customObjects = [];
         this.renderCustomObjectButtons();
         this.uiScreens = [];
@@ -6394,6 +6434,7 @@ class App {
         this._collabIsHost = false;
         this._collabMembers = [];
         this._collabBroadcastPaused = false;
+        this._collabRole = 'editor';
 
         // Unhook broadcasts
         this.scene3d.onObjectAdded = null;
@@ -6503,6 +6544,7 @@ class App {
             case 'room-joined': {
                 this._collabRoom = msg.roomCode;
                 this._collabIsHost = false;
+                this._collabRole = msg.role || 'editor';
                 this._collabMembers = msg.members || [];
                 this._hookCollabBroadcasts();
 
@@ -6658,6 +6700,40 @@ class App {
                 this.toast((labels[msg.action] || msg.action) + ' was declined');
                 break;
             }
+            case 'role-changed': {
+                this._collabRole = msg.role;
+                this.toast(msg.role === 'viewer' ? 'You are now a viewer' : 'You are now an editor', 'info');
+                this._updateCollabUI();
+                break;
+            }
+            case 'member-update': {
+                this._collabMembers = msg.members || [];
+                this._updateCollabUI();
+                this._updatePresenceBar();
+                break;
+            }
+            case 'terrain-create': {
+                this._collabBroadcastPaused = true;
+                this._createTerrain(msg.size, msg.resolution);
+                this._collabBroadcastPaused = false;
+                break;
+            }
+            case 'terrain-edit': {
+                if (!this._terrain) break;
+                const pos = this._terrain.geometry.attributes.position;
+                const colorAttr = this._terrain.geometry.attributes.color;
+                for (const [idx, height] of msg.vertices) {
+                    if (idx < pos.count) {
+                        pos.setY(idx, height);
+                        this._terrain.userData.heightData[idx] = height;
+                    }
+                }
+                pos.needsUpdate = true;
+                if (msg.tool === 'paint' && colorAttr) colorAttr.needsUpdate = true;
+                if (msg.tool !== 'paint') this._terrain.geometry.computeVertexNormals();
+                this.scene3d._needsRender = true;
+                break;
+            }
         }
     }
 
@@ -6665,6 +6741,7 @@ class App {
         // Object added
         this.scene3d.onObjectAdded = (mesh) => {
             if (this._collabBroadcastPaused) return;
+            if (!this._collabCanEdit()) { this.toast('You are a viewer and cannot edit'); return; }
             let color = '#4a90d9';
             if (mesh.material && mesh.material.color) color = '#' + mesh.material.color.getHexString();
             this._collabSend({
@@ -6696,6 +6773,7 @@ class App {
         // Object removed
         this.scene3d.onObjectRemoved = (obj) => {
             if (this._collabBroadcastPaused) return;
+            if (!this._collabCanEdit()) { this.toast('You are a viewer and cannot edit'); return; }
             this._collabSend({
                 type: 'remove-object',
                 collabId: obj.userData.collabId
@@ -6710,6 +6788,7 @@ class App {
             if (origOnChanged) origOnChanged(obj);
 
             if (this._collabBroadcastPaused) return;
+            if (!this._collabCanEdit()) return;
             const now = Date.now();
             if (now - lastTransformBroadcast < 66) return; // ~15fps
             lastTransformBroadcast = now;
@@ -6729,6 +6808,7 @@ class App {
         // Block code script changes
         this.blockCode.onScriptsChanged = (obj, scripts) => {
             if (this._collabBroadcastPaused || !obj.userData.collabId) return;
+            if (!this._collabCanEdit()) { this.toast('You are a viewer and cannot edit'); return; }
             this._collabSend({
                 type: 'update-property',
                 collabId: obj.userData.collabId,
@@ -6796,11 +6876,23 @@ class App {
                 const avatarContent = m.avatarUrl
                     ? `<img src="${m.avatarUrl}" alt="${this._escHtml(m.displayName)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
                     : (m.displayName || '?')[0].toUpperCase();
+                const memberRole = m.role || (i === 0 ? 'host' : 'editor');
+                let roleHtml;
+                if (i === 0) {
+                    roleHtml = '<span class="collab-role-badge host">Host</span>';
+                } else if (this._collabIsHost) {
+                    roleHtml = `<select class="collab-role-select" data-user-id="${m.userId}" onchange="app._setCollabRole(this)">
+                        <option value="editor"${memberRole === 'editor' ? ' selected' : ''}>Editor</option>
+                        <option value="viewer"${memberRole === 'viewer' ? ' selected' : ''}>Viewer</option>
+                    </select>`;
+                } else {
+                    roleHtml = `<span class="collab-role-badge ${memberRole}">${memberRole === 'viewer' ? 'Viewer' : 'Editor'}</span>`;
+                }
                 return `
                 <div class="collab-member-item">
                     <div class="collab-member-avatar" style="background:${bgColor}">${avatarContent}</div>
                     <span class="collab-member-name">${this._escHtml(m.displayName)}</span>
-                    <span class="collab-member-role">${i === 0 ? 'Host' : 'Guest'}</span>
+                    ${roleHtml}
                 </div>`;
             }).join('');
         } else {
@@ -8467,6 +8559,533 @@ class App {
             }
         });
         this.blockCode._updateAnimationDropdowns([...allNames]);
+    }
+
+    // ===== Color Blind Mode =====
+
+    initColorblindMode() {
+        const cb = localStorage.getItem('cobalt_colorblind') === 'true';
+        const toggle = document.getElementById('setting-colorblind');
+        if (cb) {
+            document.body.classList.add('colorblind-mode');
+            if (toggle) toggle.checked = true;
+        }
+        if (toggle) {
+            toggle.addEventListener('change', () => {
+                const enabled = toggle.checked;
+                document.body.classList.toggle('colorblind-mode', enabled);
+                localStorage.setItem('cobalt_colorblind', enabled);
+                this.blockCode.applyColorblindPalette(enabled);
+            });
+        }
+    }
+
+    // ===== Friends & Activity =====
+
+    initFriends() {
+        // Wire friends tab
+        const addBtn = document.getElementById('friend-add-btn');
+        const addInput = document.getElementById('friend-add-input');
+        if (addBtn && addInput) {
+            addBtn.addEventListener('click', () => this._sendFriendRequest(addInput.value.trim()));
+            addInput.addEventListener('keydown', (e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') this._sendFriendRequest(addInput.value.trim());
+            });
+        }
+
+        // Wire friends tab button
+        document.querySelectorAll('[data-title-tab]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.titleTab === 'friends') this._renderFriendsTab();
+            });
+        });
+    }
+
+    async _sendFriendRequest(username) {
+        if (!username) return;
+        try {
+            const resp = await fetch('/api/friends/request', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
+            const data = await resp.json();
+            if (!resp.ok) { this.toast(data.error || 'Failed to send request', 'error'); return; }
+            this.toast('Friend request sent!');
+            document.getElementById('friend-add-input').value = '';
+            this._renderFriendsTab();
+        } catch { this.toast('Failed to send request', 'error'); }
+    }
+
+    async _renderFriendsTab() {
+        try {
+            const [friendResp, actResp] = await Promise.all([
+                fetch('/api/friends'), fetch('/api/activity')
+            ]);
+            const { friends, pending } = await friendResp.json();
+            const activity = await actResp.json();
+
+            // Pending requests
+            const pendingSection = document.getElementById('friend-pending-section');
+            const pendingList = document.getElementById('friend-pending-list');
+            const incoming = pending.filter(p => p.incoming);
+            if (incoming.length > 0) {
+                pendingSection.style.display = '';
+                pendingList.innerHTML = incoming.map(p => `
+                    <div class="friend-item">
+                        <div class="friend-avatar" style="background:${p.avatarColor || '#3498db'}">${(p.displayName || '?')[0].toUpperCase()}</div>
+                        <span class="friend-name">${p.displayName}</span>
+                        <div class="friend-actions">
+                            <button class="accept" onclick="app._acceptFriend(${p.id})">Accept</button>
+                            <button class="decline" onclick="app._removeFriend(${p.id})">Decline</button>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                pendingSection.style.display = 'none';
+            }
+
+            // Friends list
+            const friendList = document.getElementById('friend-list');
+            const friendEmpty = document.getElementById('friend-empty');
+            if (friends.length > 0) {
+                friendEmpty.style.display = 'none';
+                friendList.innerHTML = friends.map(f => `
+                    <div class="friend-item">
+                        <div class="friend-avatar" style="background:${f.avatarColor || '#3498db'}">${(f.displayName || '?')[0].toUpperCase()}</div>
+                        <span class="friend-name">${f.displayName}</span>
+                        <div class="friend-actions">
+                            <button onclick="app._removeFriend(${f.id})">Remove</button>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                friendEmpty.style.display = '';
+                friendList.innerHTML = '';
+            }
+
+            // Activity feed
+            const actFeed = document.getElementById('activity-feed');
+            const actEmpty = document.getElementById('activity-empty');
+            if (activity.length > 0) {
+                actEmpty.style.display = 'none';
+                actFeed.innerHTML = activity.map(a => {
+                    const icon = a.type === 'published_template' ? 'dashboard' : 'publish';
+                    const text = a.type === 'published_template'
+                        ? `<strong>${a.display_name}</strong> published a template: ${a.data.name || 'Untitled'}`
+                        : `<strong>${a.display_name}</strong> published a project: ${a.data.name || 'Untitled'}`;
+                    const ago = this._timeAgo(a.created_at);
+                    return `<div class="activity-item">
+                        <div class="activity-icon"><span class="material-icons-round">${icon}</span></div>
+                        <span class="activity-text">${text}</span>
+                        <span class="activity-time">${ago}</span>
+                    </div>`;
+                }).join('');
+            } else {
+                actEmpty.style.display = '';
+                actFeed.innerHTML = '';
+            }
+        } catch { /* silent */ }
+    }
+
+    async _acceptFriend(id) {
+        await fetch('/api/friends/accept', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ friendshipId: id }) });
+        this.toast('Friend added!');
+        this._renderFriendsTab();
+    }
+
+    async _removeFriend(id) {
+        await fetch('/api/friends/' + id, { method: 'DELETE' });
+        this._renderFriendsTab();
+    }
+
+    _timeAgo(ts) {
+        const diff = Date.now() - ts;
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return mins + 'm ago';
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return hrs + 'h ago';
+        return Math.floor(hrs / 24) + 'd ago';
+    }
+
+    // ===== Community Templates =====
+
+    initCommunityTemplates() {
+        // Load community templates when templates modal opens
+        const searchInput = document.getElementById('community-template-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => this._loadCommunityTemplates(searchInput.value));
+            searchInput.addEventListener('keydown', (e) => e.stopPropagation());
+        }
+
+        // Publish as template button
+        const tmplBtn = document.getElementById('publish-as-template');
+        if (tmplBtn) {
+            tmplBtn.addEventListener('click', () => this._publishAsTemplate());
+        }
+
+        // Wire templates modal to load community templates
+        const origShowTemplates = this.showTemplatesModal?.bind(this);
+        if (document.getElementById('btn-templates')) {
+            document.getElementById('btn-templates').addEventListener('click', () => {
+                this._loadCommunityTemplates('');
+            });
+        }
+    }
+
+    async _loadCommunityTemplates(search = '') {
+        const grid = document.getElementById('community-template-grid');
+        if (!grid) return;
+        try {
+            const url = '/api/templates?sort=popular' + (search ? '&search=' + encodeURIComponent(search) : '');
+            const resp = await fetch(url);
+            const templates = await resp.json();
+            if (!templates.length) {
+                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text-dim);font-size:12px">No community templates yet</div>';
+                return;
+            }
+            grid.innerHTML = templates.map(t => `
+                <div class="community-template-card" data-template-id="${t.id}">
+                    <div class="ct-thumb">${t.thumbnail ? `<img src="${t.thumbnail}" alt="">` : ''}</div>
+                    <div class="ct-name">${t.name}</div>
+                    <div class="ct-creator">by ${t.creator}</div>
+                    <div class="ct-uses">${t.use_count || 0} uses</div>
+                </div>
+            `).join('');
+            grid.querySelectorAll('.community-template-card').forEach(card => {
+                card.addEventListener('click', () => this._useCommunityTemplate(card.dataset.templateId));
+            });
+        } catch {
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text-dim);font-size:12px">Failed to load templates</div>';
+        }
+    }
+
+    async _useCommunityTemplate(id) {
+        try {
+            const resp = await fetch('/api/templates/' + id + '/use', { method: 'POST' });
+            const { templateData } = await resp.json();
+            if (templateData) {
+                this._applyProjectData(templateData);
+                document.getElementById('templates-modal').classList.add('hidden');
+                this.toast('Template applied!');
+                this.markUnsaved();
+            }
+        } catch { this.toast('Failed to load template', 'error'); }
+    }
+
+    async _publishAsTemplate() {
+        const name = document.getElementById('publish-title')?.value || this.projectName || 'Untitled';
+        const desc = document.getElementById('publish-description')?.value || '';
+        const data = this._gatherProjectData();
+        // Strip scripts from template
+        const tmplData = { ...data };
+        if (tmplData.scene) {
+            tmplData.scene = tmplData.scene.map(obj => {
+                const { scripts, ...rest } = obj;
+                return rest;
+            });
+        }
+        try {
+            const resp = await fetch('/api/templates', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, description: desc, templateData: tmplData, thumbnail: this._latestScreenshot })
+            });
+            if (resp.ok) {
+                this.toast('Published as template!');
+            } else {
+                const err = await resp.json();
+                this.toast(err.error || 'Failed to publish template', 'error');
+            }
+        } catch { this.toast('Failed to publish template', 'error'); }
+    }
+
+    // ===== Terrain Sculpting =====
+
+    initTerrainSculpting() {
+        // Create terrain buttons
+        document.querySelectorAll('.terrain-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const res = parseInt(btn.dataset.terrainSize);
+                this._createTerrain(50, res);
+            });
+        });
+
+        // Brush tool buttons
+        document.querySelectorAll('.terrain-tool-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.terrain-tool-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this._terrainBrush.tool = btn.dataset.brush;
+                const paintColors = document.getElementById('terrain-paint-colors');
+                if (paintColors) paintColors.style.display = btn.dataset.brush === 'paint' ? '' : 'none';
+            });
+        });
+
+        // Brush size/strength sliders
+        const sizeSlider = document.getElementById('terrain-brush-size');
+        const strengthSlider = document.getElementById('terrain-brush-strength');
+        if (sizeSlider) {
+            sizeSlider.addEventListener('input', () => {
+                this._terrainBrush.radius = parseInt(sizeSlider.value);
+                document.getElementById('terrain-brush-size-val').textContent = sizeSlider.value;
+            });
+        }
+        if (strengthSlider) {
+            strengthSlider.addEventListener('input', () => {
+                this._terrainBrush.strength = parseInt(strengthSlider.value) / 10;
+                document.getElementById('terrain-brush-strength-val').textContent = (parseInt(strengthSlider.value) / 10).toFixed(1);
+            });
+        }
+
+        // Paint color swatches
+        document.querySelectorAll('.terrain-paint-swatch').forEach(sw => {
+            sw.addEventListener('click', () => {
+                document.querySelectorAll('.terrain-paint-swatch').forEach(s => s.classList.remove('active'));
+                sw.classList.add('active');
+                this._terrainBrush.color = sw.dataset.tcolor;
+            });
+        });
+
+        // Delete terrain button
+        const deleteBtn = document.getElementById('terrain-delete-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => this._removeTerrain());
+        }
+
+        // Terrain sculpt mouse handlers
+        this.scene3d.canvas.addEventListener('pointerdown', (e) => this._onTerrainPointerDown(e));
+        this.scene3d.canvas.addEventListener('pointermove', (e) => this._onTerrainPointerMove(e));
+        this.scene3d.canvas.addEventListener('pointerup', () => { this._terrainSculpting = false; });
+    }
+
+    _createTerrain(size, resolution) {
+        this._removeTerrain();
+        const geo = new THREE.PlaneGeometry(size, size, resolution, resolution);
+        geo.rotateX(-Math.PI / 2);
+        const mat = new THREE.MeshStandardMaterial({
+            vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide
+        });
+
+        // Init vertex colors to grass green
+        const colors = new Float32Array(geo.attributes.position.count * 3);
+        for (let i = 0; i < colors.length; i += 3) {
+            colors[i] = 0.29; colors[i + 1] = 0.49; colors[i + 2] = 0.25; // #4a7c3f
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.receiveShadow = true;
+        mesh.userData.isTerrain = true;
+        mesh.userData.terrainSize = size;
+        mesh.userData.terrainResolution = resolution;
+        mesh.userData.heightData = new Float32Array((resolution + 1) * (resolution + 1));
+        mesh.userData.colorData = new Float32Array(colors);
+        mesh.name = 'Terrain';
+
+        this.scene3d.scene.add(mesh);
+        this._terrain = mesh;
+        this.scene3d._needsRender = true;
+
+        // Show tools, hide create section
+        document.getElementById('terrain-no-terrain').style.display = 'none';
+        document.getElementById('terrain-tools-panel').style.display = '';
+
+        this.markUnsaved();
+
+        // Broadcast to collab if in room
+        if (this._collabWs && this._collabRoom) {
+            this._collabSend({ type: 'terrain-create', size, resolution });
+        }
+    }
+
+    _createTerrainFromData(data) {
+        this._removeTerrain();
+        const { size, resolution, heightData, colorData } = data;
+        const geo = new THREE.PlaneGeometry(size, size, resolution, resolution);
+        geo.rotateX(-Math.PI / 2);
+
+        // Apply height data
+        const pos = geo.attributes.position;
+        const hArr = new Float32Array(heightData);
+        for (let i = 0; i < pos.count && i < hArr.length; i++) {
+            pos.setY(i, hArr[i]);
+        }
+        geo.computeVertexNormals();
+
+        // Apply color data
+        const colors = colorData ? new Float32Array(colorData) : new Float32Array(pos.count * 3);
+        if (!colorData) {
+            for (let i = 0; i < colors.length; i += 3) {
+                colors[i] = 0.29; colors[i + 1] = 0.49; colors[i + 2] = 0.25;
+            }
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const mat = new THREE.MeshStandardMaterial({
+            vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide
+        });
+
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.receiveShadow = true;
+        mesh.userData.isTerrain = true;
+        mesh.userData.terrainSize = size;
+        mesh.userData.terrainResolution = resolution;
+        mesh.userData.heightData = hArr;
+        mesh.userData.colorData = new Float32Array(colors);
+        mesh.name = 'Terrain';
+
+        this.scene3d.scene.add(mesh);
+        this._terrain = mesh;
+        this.scene3d._needsRender = true;
+
+        document.getElementById('terrain-no-terrain').style.display = 'none';
+        document.getElementById('terrain-tools-panel').style.display = '';
+    }
+
+    _removeTerrain() {
+        if (this._terrain) {
+            this.scene3d.scene.remove(this._terrain);
+            this._terrain.geometry.dispose();
+            this._terrain.material.dispose();
+            this._terrain = null;
+            this.scene3d._needsRender = true;
+        }
+        if (this._terrainBrushCursor) {
+            this.scene3d.scene.remove(this._terrainBrushCursor);
+            this._terrainBrushCursor = null;
+        }
+        const noTerrain = document.getElementById('terrain-no-terrain');
+        const toolsPanel = document.getElementById('terrain-tools-panel');
+        if (noTerrain) noTerrain.style.display = '';
+        if (toolsPanel) toolsPanel.style.display = 'none';
+    }
+
+    _onTerrainPointerDown(e) {
+        if (!this._terrain || this.scene3d.isPlaying) return;
+        if (!this._collabCanEdit()) return;
+        // Only sculpt when terrain tab is active
+        const terrainTab = document.getElementById('tab-terrain');
+        if (!terrainTab || !terrainTab.classList.contains('active')) return;
+        if (e.button !== 0) return;
+
+        this._terrainSculpting = true;
+        this._applyTerrainBrush(e);
+    }
+
+    _onTerrainPointerMove(e) {
+        if (!this._terrain || this.scene3d.isPlaying) return;
+        const terrainTab = document.getElementById('tab-terrain');
+        if (!terrainTab || !terrainTab.classList.contains('active')) return;
+
+        if (this._terrainSculpting) {
+            this._applyTerrainBrush(e);
+        }
+    }
+
+    _applyTerrainBrush(e) {
+        const rect = this.scene3d.canvas.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+            ((e.clientX - rect.left) / rect.width) * 2 - 1,
+            -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, this.scene3d.camera);
+        const hits = raycaster.intersectObject(this._terrain);
+        if (!hits.length) return;
+
+        const hit = hits[0];
+        const point = hit.point;
+        const geo = this._terrain.geometry;
+        const pos = geo.attributes.position;
+        const colorAttr = geo.attributes.color;
+        const radius = this._terrainBrush.radius;
+        const strength = this._terrainBrush.strength;
+        const tool = this._terrainBrush.tool;
+        const edits = [];
+
+        // Get center height for flatten tool
+        let centerHeight = 0;
+        if (tool === 'flatten') {
+            let closest = Infinity;
+            for (let i = 0; i < pos.count; i++) {
+                const vx = pos.getX(i), vz = pos.getZ(i);
+                const d = Math.sqrt((vx - point.x) ** 2 + (vz - point.z) ** 2);
+                if (d < closest) { closest = d; centerHeight = pos.getY(i); }
+            }
+        }
+
+        for (let i = 0; i < pos.count; i++) {
+            const vx = pos.getX(i);
+            const vy = pos.getY(i);
+            const vz = pos.getZ(i);
+            const dist = Math.sqrt((vx - point.x) ** 2 + (vz - point.z) ** 2);
+            if (dist > radius) continue;
+
+            // Gaussian falloff
+            const falloff = Math.exp(-(dist * dist) / (radius * radius * 0.5));
+
+            switch (tool) {
+                case 'raise':
+                    pos.setY(i, vy + strength * falloff * 0.3);
+                    break;
+                case 'lower':
+                    pos.setY(i, vy - strength * falloff * 0.3);
+                    break;
+                case 'smooth': {
+                    // Average neighbors
+                    let sum = 0, count = 0;
+                    for (let j = 0; j < pos.count; j++) {
+                        const dx = pos.getX(j) - vx, dz = pos.getZ(j) - vz;
+                        if (Math.abs(dx) < 1.5 && Math.abs(dz) < 1.5) { sum += pos.getY(j); count++; }
+                    }
+                    if (count > 0) pos.setY(i, vy + (sum / count - vy) * falloff * strength);
+                    break;
+                }
+                case 'flatten':
+                    pos.setY(i, vy + (centerHeight - vy) * falloff * strength);
+                    break;
+                case 'paint': {
+                    const c = new THREE.Color(this._terrainBrush.color);
+                    const r = colorAttr.getX(i), g = colorAttr.getY(i), b = colorAttr.getZ(i);
+                    colorAttr.setXYZ(i,
+                        r + (c.r - r) * falloff * strength,
+                        g + (c.g - g) * falloff * strength,
+                        b + (c.b - b) * falloff * strength
+                    );
+                    break;
+                }
+            }
+
+            this._terrain.userData.heightData[i] = pos.getY(i);
+            edits.push([i, pos.getY(i)]);
+        }
+
+        pos.needsUpdate = true;
+        if (tool === 'paint') colorAttr.needsUpdate = true;
+        if (tool !== 'paint') geo.computeVertexNormals();
+        this._terrain.userData.colorData = new Float32Array(colorAttr.array);
+        this.scene3d._needsRender = true;
+        this.markUnsaved();
+
+        // Broadcast delta to collab
+        if (this._collabWs && this._collabRoom && edits.length > 0) {
+            this._collabSend({ type: 'terrain-edit', vertices: edits, tool });
+        }
+    }
+
+    // ===== Collab permissions helpers =====
+
+    _collabCanEdit() {
+        if (!this._collabRoom) return true;
+        if (this._collabIsHost) return true;
+        return this._collabRole === 'editor';
+    }
+
+    _setCollabRole(selectEl) {
+        const userId = parseInt(selectEl.dataset.userId);
+        const role = selectEl.value;
+        this._collabSend({ type: 'set-role', targetUserId: userId, role });
     }
 
     // ===== Toast =====
