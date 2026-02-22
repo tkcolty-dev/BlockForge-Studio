@@ -2183,7 +2183,8 @@ wss.on('connection', (ws) => {
             case 'update-environment':
             case 'update-character':
             case 'terrain-edit':
-            case 'terrain-create': {
+            case 'terrain-create':
+            case 'terrain-remove': {
                 // Reject edit messages from viewers
                 for (const [code, room] of rooms) {
                     if (room.members.has(ws)) {

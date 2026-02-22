@@ -6815,6 +6815,12 @@ class App {
                 this.scene3d._needsRender = true;
                 break;
             }
+            case 'terrain-remove': {
+                this._collabBroadcastPaused = true;
+                this._removeTerrain();
+                this._collabBroadcastPaused = false;
+                break;
+            }
         }
     }
 
@@ -9104,8 +9110,8 @@ class App {
 
         this.markUnsaved();
 
-        // Broadcast to collab if in room
-        if (this._collabWs && this._collabRoom) {
+        // Broadcast to collab if in room (skip if receiving from collab)
+        if (this._collabWs && this._collabRoom && !this._collabBroadcastPaused) {
             this._collabSend({ type: 'terrain-create', size, resolution });
         }
     }
@@ -9158,6 +9164,7 @@ class App {
     }
 
     _removeTerrain() {
+        const hadTerrain = !!this._terrain;
         if (this._terrain) {
             this.scene3d.scene.remove(this._terrain);
             this._terrain.geometry.dispose();
@@ -9173,6 +9180,11 @@ class App {
         const toolsPanel = document.getElementById('terrain-tools-panel');
         if (noTerrain) noTerrain.style.display = '';
         if (toolsPanel) toolsPanel.style.display = 'none';
+
+        // Broadcast terrain removal to collab (skip if receiving from collab)
+        if (hadTerrain && this._collabWs && this._collabRoom && !this._collabBroadcastPaused) {
+            this._collabSend({ type: 'terrain-remove' });
+        }
     }
 
     _onTerrainPointerDown(e) {
