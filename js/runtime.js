@@ -995,7 +995,8 @@ class Runtime {
             const h11 = td.heightData[Math.min(iz + 1, res) * stride + Math.min(ix + 1, res)] || 0;
             const terrainY = h00 * (1 - fx) * (1 - fz) + h10 * fx * (1 - fz) + h01 * (1 - fx) * fz + h11 * fx * fz;
             const groundY = terrainY + child.position.y;
-            if (newPos.y - pc.height / 2 < groundY && pc.velocity.y <= 0) {
+            const playerFeet = newPos.y - pc.height / 2;
+            if (playerFeet < groundY && playerFeet > groundY - 2 && pc.velocity.y <= 0) {
                 newPos.y = groundY + pc.height / 2;
                 pc.velocity.y = 0;
                 pc.isGrounded = true;
