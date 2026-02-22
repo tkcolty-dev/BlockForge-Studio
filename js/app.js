@@ -1474,7 +1474,8 @@ class App {
                 size: t.userData.terrainSize,
                 resolution: t.userData.terrainResolution,
                 heightData: Array.from(t.userData.heightData),
-                colorData: Array.from(t.userData.colorData)
+                colorData: Array.from(t.userData.colorData),
+                terrainCollision: t.userData.terrainCollision !== false
             };
         }
         return data;
@@ -8935,6 +8936,17 @@ class App {
             deleteBtn.addEventListener('click', () => this._removeTerrain());
         }
 
+        // Terrain collision toggle
+        const collisionToggle = document.getElementById('terrain-collision-toggle');
+        if (collisionToggle) {
+            collisionToggle.addEventListener('change', () => {
+                if (this._terrain) {
+                    this._terrain.userData.terrainCollision = collisionToggle.checked;
+                    this.markUnsaved();
+                }
+            });
+        }
+
         // Terrain sculpt mouse handlers
         this.scene3d.canvas.addEventListener('pointerdown', (e) => this._onTerrainPointerDown(e));
         this.scene3d.canvas.addEventListener('pointermove', (e) => this._onTerrainPointerMove(e));
@@ -8963,6 +8975,7 @@ class App {
         mesh.userData.terrainResolution = resolution;
         mesh.userData.heightData = new Float32Array((resolution + 1) * (resolution + 1));
         mesh.userData.colorData = new Float32Array(colors);
+        mesh.userData.terrainCollision = true;
         mesh.name = 'Terrain';
 
         this.scene3d.scene.add(mesh);
@@ -8972,6 +8985,8 @@ class App {
         // Show tools, hide create section
         document.getElementById('terrain-no-terrain').style.display = 'none';
         document.getElementById('terrain-tools-panel').style.display = '';
+        const collToggle = document.getElementById('terrain-collision-toggle');
+        if (collToggle) collToggle.checked = true;
 
         this.markUnsaved();
 
@@ -9015,6 +9030,7 @@ class App {
         mesh.userData.terrainResolution = resolution;
         mesh.userData.heightData = hArr;
         mesh.userData.colorData = new Float32Array(colors);
+        mesh.userData.terrainCollision = data.terrainCollision !== false;
         mesh.name = 'Terrain';
 
         this.scene3d.scene.add(mesh);
@@ -9023,6 +9039,8 @@ class App {
 
         document.getElementById('terrain-no-terrain').style.display = 'none';
         document.getElementById('terrain-tools-panel').style.display = '';
+        const collToggle2 = document.getElementById('terrain-collision-toggle');
+        if (collToggle2) collToggle2.checked = mesh.userData.terrainCollision;
     }
 
     _removeTerrain() {

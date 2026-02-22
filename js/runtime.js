@@ -972,6 +972,36 @@ class Runtime {
             }
         });
 
+        // Terrain heightmap collision
+        this.scene3d.scene.children.forEach(child => {
+            if (!child.userData.isTerrain || !child.userData.terrainCollision) return;
+            const td = child.userData;
+            const halfSize = td.terrainSize / 2;
+            const res = td.terrainResolution;
+            // Player position relative to terrain
+            const lx = newPos.x - child.position.x + halfSize;
+            const lz = newPos.z - child.position.z + halfSize;
+            if (lx < 0 || lx > td.terrainSize || lz < 0 || lz > td.terrainSize) return;
+            // Grid coords
+            const gx = (lx / td.terrainSize) * res;
+            const gz = (lz / td.terrainSize) * res;
+            const ix = Math.floor(gx), iz = Math.floor(gz);
+            const fx = gx - ix, fz = gz - iz;
+            const stride = res + 1;
+            // Bilinear interpolation of height
+            const h00 = td.heightData[iz * stride + ix] || 0;
+            const h10 = td.heightData[iz * stride + Math.min(ix + 1, res)] || 0;
+            const h01 = td.heightData[Math.min(iz + 1, res) * stride + ix] || 0;
+            const h11 = td.heightData[Math.min(iz + 1, res) * stride + Math.min(ix + 1, res)] || 0;
+            const terrainY = h00 * (1 - fx) * (1 - fz) + h10 * fx * (1 - fz) + h01 * (1 - fx) * fz + h11 * fx * fz;
+            const groundY = terrainY + child.position.y;
+            if (newPos.y - pc.height / 2 < groundY && pc.velocity.y <= 0) {
+                newPos.y = groundY + pc.height / 2;
+                pc.velocity.y = 0;
+                pc.isGrounded = true;
+            }
+        });
+
         // World ground
         if (newPos.y - pc.height / 2 < 0) {
             newPos.y = pc.height / 2;
