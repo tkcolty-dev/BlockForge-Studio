@@ -238,6 +238,14 @@ class App {
         document.getElementById('btn-undo').addEventListener('click', () => this.undo());
         document.getElementById('btn-redo').addEventListener('click', () => this.redo());
 
+        // Script Undo/Redo
+        document.getElementById('btn-script-undo').addEventListener('click', () => this.blockCode.scriptUndo());
+        document.getElementById('btn-script-redo').addEventListener('click', () => this.blockCode.scriptRedo());
+
+        // Debug Variables
+        document.getElementById('btn-debug-vars').addEventListener('click', () => this.runtime.toggleDebugVars());
+        document.getElementById('debug-vars-close').addEventListener('click', () => this.runtime.toggleDebugVars());
+
         // Viewport fullscreen
         document.getElementById('btn-fullscreen-viewport').addEventListener('click', () => {
             this.toggleFullscreenViewport();
@@ -1236,15 +1244,24 @@ class App {
                 case 'Z':
                     if (e.ctrlKey || e.metaKey) {
                         e.preventDefault();
-                        if (e.shiftKey) this.redo();
-                        else this.undo();
+                        if (this._isBlockEditorActive()) {
+                            if (e.shiftKey) this.blockCode.scriptRedo();
+                            else this.blockCode.scriptUndo();
+                        } else {
+                            if (e.shiftKey) this.redo();
+                            else this.undo();
+                        }
                     }
                     break;
                 case 'y':
                 case 'Y':
                     if (e.ctrlKey || e.metaKey) {
                         e.preventDefault();
-                        this.redo();
+                        if (this._isBlockEditorActive()) {
+                            this.blockCode.scriptRedo();
+                        } else {
+                            this.redo();
+                        }
                     }
                     break;
                 case 'F5':
@@ -3526,6 +3543,12 @@ class App {
         this.refreshExplorer();
         this.updateObjectCount();
         this.toast('Redo');
+    }
+
+    _isBlockEditorActive() {
+        const editor = document.getElementById('block-editor');
+        if (!editor || editor.classList.contains('collapsed')) return false;
+        return editor.matches(':hover');
     }
 
     // ===== Copy/Paste =====
@@ -7390,6 +7413,47 @@ class App {
             }
             if (e.key === 'Enter') submit();
         });
+
+        // Suggestion chips
+        document.querySelectorAll('.ai-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const prompt = chip.dataset.prompt;
+                if (prompt) {
+                    input.value = '';
+                    this._aiGenerateScript(prompt);
+                }
+            });
+        });
+
+        // Rules mode toggle
+        const rulesBtn = document.getElementById('btn-rules-mode');
+        const rulesPanel = document.getElementById('ai-rules-panel');
+        const chipsEl = document.getElementById('ai-suggestion-chips');
+        rulesBtn.addEventListener('click', () => {
+            const showing = rulesPanel.classList.contains('hidden');
+            rulesPanel.classList.toggle('hidden', !showing);
+            rulesBtn.classList.toggle('active', showing);
+            if (showing) chipsEl.classList.add('hidden');
+            else chipsEl.classList.remove('hidden');
+        });
+
+        document.getElementById('ai-rules-generate').addEventListener('click', () => this._aiGenerateRules());
+    }
+
+    async _aiGenerateRules() {
+        const textarea = document.getElementById('ai-rules-input');
+        const rules = textarea.value.trim().split('\n').filter(r => r.trim());
+        if (rules.length === 0) return;
+
+        if (!this.blockCode.targetObject) {
+            this._aiScriptShowStatus('Select an object first', 'error');
+            return;
+        }
+
+        const combinedPrompt = 'Create scripts for ALL of these rules (each rule should be its own stack):\n' +
+            rules.map((r, i) => (i + 1) + '. ' + r.trim()).join('\n');
+
+        await this._aiGenerateScript(combinedPrompt);
     }
 
     _aiScriptShowStatus(text, type) {

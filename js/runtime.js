@@ -69,6 +69,10 @@ class Runtime {
         this._customSounds = [];
         this._customSoundBuffers = {};
 
+        // Debug variables panel
+        this._debugVarsEnabled = false;
+        this._debugFrameCount = 0;
+
         // Number displays
         this._numberDisplays = new Map();
 
@@ -425,6 +429,12 @@ class Runtime {
         // Clean up screen overlay
         if (this._screenOverlay) { this._screenOverlay.remove(); this._screenOverlay = null; }
         this._timeScale = 1;
+
+        // Clean up debug vars panel
+        this._debugVarsEnabled = false;
+        this._debugFrameCount = 0;
+        const debugPanel = document.getElementById('debug-vars-panel');
+        if (debugPanel) debugPanel.classList.add('hidden');
 
         // Clean up UI screens
         this._activeScreens.forEach(el => el.remove());
@@ -846,6 +856,7 @@ class Runtime {
         this.updateEnemyHealthBars();
         this._checkHealthZero();
         this._checkLivesZero();
+        this.updateDebugVars();
     }
 
     _isKeyBound(action) {
@@ -3781,6 +3792,52 @@ class Runtime {
                 hud.appendChild(numEl);
             });
         }
+    }
+
+    // ===== Debug Variables Panel =====
+
+    toggleDebugVars() {
+        this._debugVarsEnabled = !this._debugVarsEnabled;
+        const panel = document.getElementById('debug-vars-panel');
+        if (panel) panel.classList.toggle('hidden', !this._debugVarsEnabled);
+    }
+
+    updateDebugVars() {
+        if (!this._debugVarsEnabled) return;
+        this._debugFrameCount++;
+        if (this._debugFrameCount % 6 !== 0) return;
+
+        const content = document.getElementById('debug-vars-content');
+        if (!content) return;
+
+        let html = '<div class="debug-section-label">Global Variables</div>';
+        for (const [key, value] of Object.entries(this.variables)) {
+            const v = typeof value === 'number' ? (Number.isInteger(value) ? value : value.toFixed(2)) : value;
+            html += '<div class="debug-var-row"><span class="debug-var-name">' + key + '</span><span class="debug-var-value">' + v + '</span></div>';
+        }
+
+        let hasLocal = false;
+        this.scene3d.objects.forEach(obj => {
+            if (obj.userData.localVars && Object.keys(obj.userData.localVars).length > 0) {
+                if (!hasLocal) { html += '<div class="debug-section-label" style="margin-top:6px">Local Variables</div>'; hasLocal = true; }
+                const name = obj.userData.name || obj.name || 'Object';
+                for (const [k, val] of Object.entries(obj.userData.localVars)) {
+                    const v = typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(2)) : val;
+                    html += '<div class="debug-var-row"><span class="debug-var-name">' + name + '.' + k + '</span><span class="debug-var-value">' + v + '</span></div>';
+                }
+            }
+        });
+
+        html += '<div class="debug-section-label" style="margin-top:6px">System</div>';
+        html += '<div class="debug-var-row"><span class="debug-var-name">lives</span><span class="debug-var-value">' + this._lives + '</span></div>';
+        html += '<div class="debug-var-row"><span class="debug-var-name">gameTimer</span><span class="debug-var-value">' + this.gameTimer.toFixed(1) + 's</span></div>';
+        html += '<div class="debug-var-row"><span class="debug-var-name">projectiles</span><span class="debug-var-value">' + this.projectiles.length + '</span></div>';
+        html += '<div class="debug-var-row"><span class="debug-var-name">activeScripts</span><span class="debug-var-value">' + this.runningScripts.length + '</span></div>';
+        if (this._countdown !== null) {
+            html += '<div class="debug-var-row"><span class="debug-var-name">countdown</span><span class="debug-var-value">' + Math.ceil(this._countdown) + 's</span></div>';
+        }
+
+        content.innerHTML = html;
     }
 
     // ===== Speech Bubbles =====

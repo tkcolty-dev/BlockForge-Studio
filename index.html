@@ -724,9 +724,22 @@
                 <div class="play-hud">
                     <div class="play-info">
                         <span>WASD to move | Arrows to look | Space to jump | ESC to stop</span>
+                        <button id="btn-debug-vars" class="debug-vars-toggle" title="Variable Inspector">
+                            <span class="material-icons-round">bug_report</span>
+                        </button>
                     </div>
                     <div class="game-hud" id="game-hud">
                         <!-- Dynamic HUD elements -->
+                    </div>
+                    <div id="debug-vars-panel" class="debug-vars-panel hidden">
+                        <div class="debug-vars-header">
+                            <span class="material-icons-round" style="font-size:14px">bug_report</span>
+                            <span>Variable Inspector</span>
+                            <button id="debug-vars-close" class="debug-vars-close">
+                                <span class="material-icons-round">close</span>
+                            </button>
+                        </div>
+                        <div id="debug-vars-content" class="debug-vars-content"></div>
                     </div>
                 </div>
             </div>
@@ -1016,6 +1029,12 @@
                 <span class="script-target" id="script-target-name">Game Scripts</span>
             </div>
             <div class="block-editor-controls">
+                <button class="tool-btn" id="btn-script-undo" title="Undo Script Change" disabled>
+                    <span class="material-icons-round">undo</span>
+                </button>
+                <button class="tool-btn" id="btn-script-redo" title="Redo Script Change" disabled>
+                    <span class="material-icons-round">redo</span>
+                </button>
                 <button class="tool-btn" id="btn-clear-script" title="Clear Script">
                     <span class="material-icons-round">delete_sweep</span>
                 </button>
@@ -1116,9 +1135,30 @@
                     <button class="ai-script-help-btn" id="ai-script-help-btn" title="Command Reference">
                         <span class="material-icons-round">help_outline</span>
                     </button>
+                    <button class="tool-btn ai-rules-toggle-btn" id="btn-rules-mode" title="Multi-Rule Mode">
+                        <span class="material-icons-round">description</span>
+                    </button>
                     <button class="ai-script-btn" id="ai-script-btn" title="Generate Script">
                         <span class="material-icons-round">arrow_upward</span>
                     </button>
+                </div>
+                <div id="ai-suggestion-chips" class="ai-suggestion-chips">
+                    <span class="ai-chip" data-prompt="spin when clicked">spin on click</span>
+                    <span class="ai-chip" data-prompt="make this a collectible coin worth 10 points">collectible coin</span>
+                    <span class="ai-chip" data-prompt="chase the player and deal damage on touch">enemy chaser</span>
+                    <span class="ai-chip" data-prompt="open like a door when clicked">door</span>
+                    <span class="ai-chip" data-prompt="bounce the player up like a trampoline">jump pad</span>
+                    <span class="ai-chip" data-prompt="damage the player on touch like lava">hazard</span>
+                </div>
+                <div id="ai-rules-panel" class="ai-rules-panel hidden">
+                    <textarea id="ai-rules-input" rows="4" maxlength="2000"
+                        placeholder="Type one rule per line, e.g.:&#10;when player touches this, collect a coin&#10;when score reaches 10, show You Win!&#10;spin forever and glow blue"></textarea>
+                    <div class="ai-rules-actions">
+                        <button id="ai-rules-generate" class="ai-rules-btn">
+                            <span class="material-icons-round">auto_awesome</span>
+                            Generate All Rules
+                        </button>
+                    </div>
                 </div>
                 <div id="ai-script-help" class="ai-script-help hidden">
                     <div class="ai-help-header">

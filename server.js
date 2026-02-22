@@ -1508,6 +1508,18 @@ looks_billboard_text | text:text=Label — permanent label floating above object
 9. Combine multiple effects for polish: add sounds, particles, visual feedback when things happen.
 10. CRITICAL: Output ONLY the scripts for the current request. NEVER re-output or include scripts from previous requests. Each response must contain ONLY the new/modified stacks, not all scripts combined.
 
+# Natural Language Rule Handling
+When the user provides rules in plain English like "when X happens, do Y":
+- Parse the trigger into the appropriate event hat block
+- Parse the action into the correct command blocks
+- "when player collects N coins" → event_collide(player) + var_change(coins) + var_if_check(coins >= N) with children
+- "when score reaches N" → event_timer(1) + control_forever { var_if_check(score >= N) { actions } }
+- "if player touches this" → event_collide(player) → actions
+- "open the door" → motion_glide(up) + sound_play
+- "show text" → var_show_message or looks_say or ui_show_text_overlay
+- Multiple rules should each become their own stack with appropriate hat blocks
+- Think about what makes gameplay sense, not just literal translation
+
 # Output Format
 JSON array of stacks. Include ONLY the new or modified stacks — never re-output existing unchanged scripts.
 

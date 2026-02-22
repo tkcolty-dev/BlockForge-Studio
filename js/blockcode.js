@@ -34,6 +34,12 @@ class BlockCode {
         this._activeMoveHandler = null;
         this._activeUpHandler = null;
 
+        // Script undo/redo
+        this._scriptUndoStack = [];
+        this._scriptRedoStack = [];
+        this._maxScriptUndo = 30;
+        this._undoSuppressed = false;
+
         // Backpack
         this.backpackItems = [];
         this.onBackpackChanged = null;
@@ -946,6 +952,7 @@ class BlockCode {
     }
 
     _dropNewBlock(e) {
+        this.pushScriptUndo();
         const blockId = this._dragBlockId;
         const blockDef = this._dragBlockDef;
         const instanceId = this.nextBlockId++;
@@ -1012,6 +1019,7 @@ class BlockCode {
     _deleteFromSource() {
         const src = this._dragSource;
         if (!src || src === 'drawer') return;
+        this.pushScriptUndo();
 
         if (src.childIdx !== undefined) {
             const stack = this.workspaceScripts[src.stackIdx];
@@ -1037,6 +1045,7 @@ class BlockCode {
     _startStackSplit(e, stackIdx, blockIdx, blockEl) {
         const stack = this.workspaceScripts[stackIdx];
         if (!stack) return;
+        this.pushScriptUndo();
 
         // Create ghost BEFORE modifying data (DOM still intact)
         const ghost = document.createElement('div');
@@ -1208,7 +1217,7 @@ class BlockCode {
 
         // Wire up input change listeners
         this.workspace.querySelectorAll('.block-input, .block-select').forEach(input => {
-            input.addEventListener('change', () => this._onInputChange(input));
+            input.addEventListener('change', () => { this.pushScriptUndo(); this._onInputChange(input); });
             input.addEventListener('input', () => this._onInputChange(input));
             input.addEventListener('pointerdown', (e) => e.stopPropagation());
             input.addEventListener('click', (e) => e.stopPropagation());
@@ -1455,6 +1464,9 @@ class BlockCode {
         this._cleanupDrag();
         this.saveScriptsToObject();
         this.targetObject = obj;
+        this._scriptUndoStack = [];
+        this._scriptRedoStack = [];
+        this._updateUndoButtons();
         if (obj) {
             this.workspaceScripts = obj.userData.scripts || [];
             if (!Array.isArray(this.workspaceScripts)) {
@@ -1499,7 +1511,61 @@ class BlockCode {
         }
     }
 
+    pushScriptUndo() {
+        if (this._undoSuppressed) return;
+        this._scriptUndoStack.push(JSON.stringify(this.workspaceScripts));
+        if (this._scriptUndoStack.length > this._maxScriptUndo) this._scriptUndoStack.shift();
+        this._scriptRedoStack = [];
+        this._updateUndoButtons();
+    }
+
+    scriptUndo() {
+        if (this._scriptUndoStack.length === 0) return;
+        this._scriptRedoStack.push(JSON.stringify(this.workspaceScripts));
+        const prev = JSON.parse(this._scriptUndoStack.pop());
+        this._undoSuppressed = true;
+        this.workspaceScripts = prev;
+        if (this.targetObject) {
+            this.targetObject.userData.scripts = prev;
+        } else {
+            this.globalScripts = prev;
+        }
+        this.renderWorkspace();
+        if (this.onScriptsChanged && this.targetObject) {
+            this.onScriptsChanged(this.targetObject, this.workspaceScripts);
+        }
+        this._undoSuppressed = false;
+        this._updateUndoButtons();
+    }
+
+    scriptRedo() {
+        if (this._scriptRedoStack.length === 0) return;
+        this._scriptUndoStack.push(JSON.stringify(this.workspaceScripts));
+        const next = JSON.parse(this._scriptRedoStack.pop());
+        this._undoSuppressed = true;
+        this.workspaceScripts = next;
+        if (this.targetObject) {
+            this.targetObject.userData.scripts = next;
+        } else {
+            this.globalScripts = next;
+        }
+        this.renderWorkspace();
+        if (this.onScriptsChanged && this.targetObject) {
+            this.onScriptsChanged(this.targetObject, this.workspaceScripts);
+        }
+        this._undoSuppressed = false;
+        this._updateUndoButtons();
+    }
+
+    _updateUndoButtons() {
+        const undoBtn = document.getElementById('btn-script-undo');
+        const redoBtn = document.getElementById('btn-script-redo');
+        if (undoBtn) undoBtn.disabled = this._scriptUndoStack.length === 0;
+        if (redoBtn) redoBtn.disabled = this._scriptRedoStack.length === 0;
+    }
+
     clearScripts() {
+        this.pushScriptUndo();
         this.workspaceScripts = [];
         if (this.targetObject) {
             this.targetObject.userData.scripts = [];
@@ -1563,6 +1629,7 @@ class BlockCode {
 
     addScriptStacks(stacks) {
         if (!Array.isArray(stacks) || stacks.length === 0) return 0;
+        this.pushScriptUndo();
 
         // Find lowest Y to position new stacks below existing ones
         let maxY = 20;
@@ -1771,6 +1838,8 @@ class BlockCode {
             this._currentCBlockTarget = null;
             return;
         }
+
+        this.pushScriptUndo();
 
         // Check c-block body target
         if (cBlockTarget) {
