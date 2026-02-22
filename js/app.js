@@ -282,6 +282,7 @@ class App {
     }
 
     _startRuntime() {
+        this.blockCode.saveScriptsToObject();
         this.runtime.playerColors = this.gameSettings.playerColors;
         this.runtime.characterParts = this.gameSettings.characterParts || null;
         this.runtime._uiScreens = this.uiScreens;
@@ -1445,6 +1446,7 @@ class App {
             customVariables: this.blockCode.customVariables,
             customLocalVariables: this.blockCode.customLocalVariables,
             customMessages: this.blockCode.customMessages,
+            globalScripts: this.blockCode.globalScripts,
             customObjects: this.customObjects,
             uiScreens: this.uiScreens,
             sounds: this.customSounds,
@@ -1495,6 +1497,9 @@ class App {
         if (data.customMessages) {
             this.blockCode.customMessages = data.customMessages;
             this.blockCode._updateMessageDropdowns();
+        }
+        if (data.globalScripts) {
+            this.blockCode.globalScripts = data.globalScripts;
         }
 
         if (data.customObjects) {

@@ -295,6 +295,19 @@ class Runtime {
             });
         });
 
+        // Compile global (game-level) scripts
+        if (this.blockCode.globalScripts && this.blockCode.globalScripts.length > 0) {
+            const globalObj = { userData: { scripts: this.blockCode.globalScripts, name: 'Game Scripts', isGlobal: true } };
+            const globalCompiled = this.blockCode.compileScripts(globalObj);
+            globalCompiled.forEach(script => {
+                this.runningScripts.push({
+                    object: globalObj,
+                    script: script,
+                    state: 'pending'
+                });
+            });
+        }
+
         // Start game events
         this.triggerEvent('onStart');
 

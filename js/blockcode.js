@@ -9,6 +9,7 @@ class BlockCode {
         this.activeCategory = 'events';
         this.targetObject = null;
         this.workspaceScripts = [];
+        this.globalScripts = []; // Scripts not tied to any object (like Scratch stage)
         this.nextBlockId = 1;
         this.customBlocks = {}; // user-created blocks
         this.customVariables = []; // user-created variable names
@@ -39,6 +40,7 @@ class BlockCode {
 
         this.initPalette();
         this.renderDrawer();
+        this._updatePaletteVisibility();
     }
 
     defineCategories() {
@@ -363,9 +365,13 @@ class BlockCode {
             this.drawer.appendChild(makeBtn);
         }
 
+        // Blocks that require an object context
+        const objectOnlyBlocks = new Set(['event_click', 'event_collide', 'event_enemy_defeated', 'event_item_collected']);
+
         // Render built-in blocks for the active category
         Object.entries(this.blocks).forEach(([blockId, blockDef]) => {
             if (blockDef.category !== this.activeCategory) return;
+            if (!this.targetObject && objectOnlyBlocks.has(blockId)) return;
             const el = this._createBlockEl(blockDef, null);
             el.dataset.blockId = blockId;
             el.addEventListener('pointerdown', (e) => {
@@ -1457,9 +1463,10 @@ class BlockCode {
             }
             document.getElementById('script-target-name').textContent = obj.userData.name;
         } else {
-            this.workspaceScripts = [];
-            document.getElementById('script-target-name').textContent = 'No object selected';
+            this.workspaceScripts = this.globalScripts;
+            document.getElementById('script-target-name').textContent = 'Game Scripts';
         }
+        this._updatePaletteVisibility();
         this._syncNextId();
         this.renderWorkspace();
     }
@@ -1487,6 +1494,8 @@ class BlockCode {
             if (this.onScriptsChanged) {
                 this.onScriptsChanged(this.targetObject, this.workspaceScripts);
             }
+        } else {
+            this.globalScripts = this.workspaceScripts;
         }
     }
 
@@ -1494,8 +1503,31 @@ class BlockCode {
         this.workspaceScripts = [];
         if (this.targetObject) {
             this.targetObject.userData.scripts = [];
+        } else {
+            this.globalScripts = [];
         }
         this.renderWorkspace();
+    }
+
+    // Categories that only make sense on objects (not global game scripts)
+    _objectOnlyCategories = new Set(['motion', 'looks', 'physics', 'shooting', 'enemies', 'items', 'pen']);
+
+    _updatePaletteVisibility() {
+        const isGlobal = !this.targetObject;
+        this.palette.querySelectorAll('.palette-category').forEach(el => {
+            const cat = el.dataset.category;
+            if (this._objectOnlyCategories.has(cat)) {
+                el.style.display = isGlobal ? 'none' : '';
+            }
+        });
+        // If current category is hidden, switch to events
+        if (isGlobal && this._objectOnlyCategories.has(this.activeCategory)) {
+            this.activeCategory = 'events';
+            this.palette.querySelectorAll('.palette-category').forEach(c => {
+                c.classList.toggle('active', c.dataset.category === 'events');
+            });
+        }
+        this.renderDrawer();
     }
 
     _buildBlockData(block) {
