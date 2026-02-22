@@ -239,6 +239,10 @@ async function initDb() {
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_feed(user_id, created_at DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_id, status)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_interactions_project_type ON project_interactions(project_id, type)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_interactions_user ON project_interactions(user_id, type)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_emoji_chats_project ON emoji_chats(project_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_project_views_project ON project_views(project_id, viewed_at)`);
 }
 
 const AVATAR_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63', '#00bcd4'];
@@ -761,25 +765,23 @@ app.post('/api/projects/:id/favorite', authenticate, async (req, res) => {
 // GET /api/projects/:id/stats — get like/favorite counts + user status
 app.get('/api/projects/:id/stats', async (req, res) => {
     const projectId = req.params.id;
-    const { rows: likesRow } = await pool.query("SELECT COUNT(*) as count FROM project_interactions WHERE project_id = $1 AND type = 'like'", [projectId]);
-    const { rows: favsRow } = await pool.query("SELECT COUNT(*) as count FROM project_interactions WHERE project_id = $1 AND type = 'favorite'", [projectId]);
-    const { rows: viewRow } = await pool.query("SELECT COALESCE(view_count, 0) as count FROM shared_projects WHERE id = $1", [projectId]);
-    const likes = parseInt(likesRow[0].count);
-    const favorites = parseInt(favsRow[0].count);
-    const viewCount = viewRow.length > 0 ? parseInt(viewRow[0].count) : 0;
-    let userLiked = false, userFavorited = false;
-    // Check user status from JWT cookie (optional auth)
+    let userId = null;
     const token = req.cookies[COOKIE_NAME];
     if (token) {
-        try {
-            const user = jwt.verify(token, JWT_SECRET);
-            const { rows: ul } = await pool.query("SELECT project_id FROM project_interactions WHERE project_id = $1 AND user_id = $2 AND type = 'like'", [projectId, user.id]);
-            const { rows: uf } = await pool.query("SELECT project_id FROM project_interactions WHERE project_id = $1 AND user_id = $2 AND type = 'favorite'", [projectId, user.id]);
-            userLiked = ul.length > 0;
-            userFavorited = uf.length > 0;
-        } catch { /* invalid token, ignore */ }
+        try { userId = jwt.verify(token, JWT_SECRET).id; } catch { /* ignore */ }
     }
-    res.json({ likes, favorites, viewCount, userLiked, userFavorited });
+    const { rows } = await pool.query(`
+        SELECT
+            COALESCE(sp.view_count, 0) as view_count,
+            (SELECT COUNT(*) FROM project_interactions WHERE project_id = $1 AND type = 'like') as likes,
+            (SELECT COUNT(*) FROM project_interactions WHERE project_id = $1 AND type = 'favorite') as favorites,
+            (SELECT COUNT(*) FROM project_interactions WHERE project_id = $1 AND user_id = $2 AND type = 'like') as user_liked,
+            (SELECT COUNT(*) FROM project_interactions WHERE project_id = $1 AND user_id = $2 AND type = 'favorite') as user_fav
+        FROM shared_projects sp WHERE sp.id = $1
+    `, [projectId, userId]);
+    if (rows.length === 0) return res.json({ likes: 0, favorites: 0, viewCount: 0, userLiked: false, userFavorited: false });
+    const r = rows[0];
+    res.json({ likes: parseInt(r.likes), favorites: parseInt(r.favorites), viewCount: parseInt(r.view_count), userLiked: parseInt(r.user_liked) > 0, userFavorited: parseInt(r.user_fav) > 0 });
 });
 
 // GET /api/user/favorites — get user's favorited community projects
