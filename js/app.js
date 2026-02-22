@@ -6796,14 +6796,21 @@ class App {
                 if (!this._terrain) break;
                 const pos = this._terrain.geometry.attributes.position;
                 const colorAttr = this._terrain.geometry.attributes.color;
-                for (const [idx, height] of msg.vertices) {
+                for (const v of msg.vertices) {
+                    const idx = v[0], height = v[1];
                     if (idx < pos.count) {
                         pos.setY(idx, height);
                         this._terrain.userData.heightData[idx] = height;
+                        if (msg.tool === 'paint' && colorAttr && v.length >= 5) {
+                            colorAttr.setXYZ(idx, v[2], v[3], v[4]);
+                        }
                     }
                 }
                 pos.needsUpdate = true;
-                if (msg.tool === 'paint' && colorAttr) colorAttr.needsUpdate = true;
+                if (msg.tool === 'paint' && colorAttr) {
+                    colorAttr.needsUpdate = true;
+                    this._terrain.userData.colorData = new Float32Array(colorAttr.array);
+                }
                 if (msg.tool !== 'paint') this._terrain.geometry.computeVertexNormals();
                 this.scene3d._needsRender = true;
                 break;
@@ -9265,7 +9272,11 @@ class App {
             }
 
             this._terrain.userData.heightData[i] = pos.getY(i);
-            edits.push([i, pos.getY(i)]);
+            if (tool === 'paint') {
+                edits.push([i, pos.getY(i), colorAttr.getX(i), colorAttr.getY(i), colorAttr.getZ(i)]);
+            } else {
+                edits.push([i, pos.getY(i)]);
+            }
         }
 
         pos.needsUpdate = true;
