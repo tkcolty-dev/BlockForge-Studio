@@ -7478,19 +7478,6 @@ body.colorblind-mode .c-block[data-category="cloud"] { border-color: #0072B2 !im
 /* ===== Script Undo/Redo ===== */
 .block-editor-controls .tool-btn:disabled { opacity: 0.3; pointer-events: none; }
 
-/* ===== AI Suggestion Chips ===== */
-.ai-suggestion-chips {
-    display: flex; gap: 6px; padding: 4px 8px; overflow-x: auto; flex-shrink: 0;
-    scrollbar-width: none;
-}
-.ai-suggestion-chips::-webkit-scrollbar { display: none; }
-.ai-chip {
-    background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25);
-    color: #a78bfa; border-radius: 12px; padding: 3px 10px; font-size: 10px;
-    white-space: nowrap; cursor: pointer; transition: all 0.15s; user-select: none;
-}
-.ai-chip:hover { background: rgba(99,102,241,0.25); border-color: rgba(99,102,241,0.4); color: #c4b5fd; }
-
 /* ===== AI Rules Panel ===== */
 .ai-rules-panel { padding: 8px; border-top: 1px solid var(--border); }
 .ai-rules-panel textarea {

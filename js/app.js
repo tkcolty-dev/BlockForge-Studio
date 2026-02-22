@@ -7414,27 +7414,13 @@ class App {
             if (e.key === 'Enter') submit();
         });
 
-        // Suggestion chips
-        document.querySelectorAll('.ai-chip').forEach(chip => {
-            chip.addEventListener('click', () => {
-                const prompt = chip.dataset.prompt;
-                if (prompt) {
-                    input.value = '';
-                    this._aiGenerateScript(prompt);
-                }
-            });
-        });
-
         // Rules mode toggle
         const rulesBtn = document.getElementById('btn-rules-mode');
         const rulesPanel = document.getElementById('ai-rules-panel');
-        const chipsEl = document.getElementById('ai-suggestion-chips');
         rulesBtn.addEventListener('click', () => {
             const showing = rulesPanel.classList.contains('hidden');
             rulesPanel.classList.toggle('hidden', !showing);
             rulesBtn.classList.toggle('active', showing);
-            if (showing) chipsEl.classList.add('hidden');
-            else chipsEl.classList.remove('hidden');
         });
 
         document.getElementById('ai-rules-generate').addEventListener('click', () => this._aiGenerateRules());
