@@ -7114,9 +7114,15 @@ class App {
                 return;
             }
 
-            // Store conversation history for follow-up requests
+            // Store conversation history (summary only — NOT raw JSON, to prevent AI from re-outputting all previous objects)
             this._aiHistory.push({ role: 'user', content: prompt });
-            this._aiHistory.push({ role: 'assistant', content: JSON.stringify(objects) });
+            const objSummaries = objects.map(o => {
+                const action = o.action || 'add';
+                if (action === 'remove') return 'Removed ' + o.target;
+                if (action === 'modify') return 'Modified ' + o.target;
+                return 'Added ' + (o.name || o.type);
+            }).join(', ');
+            this._aiHistory.push({ role: 'assistant', content: 'Done. ' + objSummaries });
             // Keep history bounded
             if (this._aiHistory.length > 12) this._aiHistory = this._aiHistory.slice(-12);
 
@@ -7726,9 +7732,14 @@ class App {
                 return;
             }
 
-            // Store conversation history
+            // Store conversation history (summary only — NOT raw JSON, to prevent AI from re-outputting all previous scripts)
             this._aiScriptHistory.push({ role: 'user', content: prompt });
-            this._aiScriptHistory.push({ role: 'assistant', content: JSON.stringify(stacks) });
+            const stackSummaries = stacks.map((s, i) => {
+                const action = s.replaceStack ? 'Replaced stack ' + s.replaceStack : s.appendToStack ? 'Appended to stack ' + s.appendToStack : 'New stack';
+                const blockNames = (s.blocks || []).map(b => b.blockId).join(' → ');
+                return action + ': ' + blockNames;
+            }).join('; ');
+            this._aiScriptHistory.push({ role: 'assistant', content: 'Done. ' + stackSummaries });
             if (this._aiScriptHistory.length > 12) this._aiScriptHistory = this._aiScriptHistory.slice(-12);
 
             const hasReplace = stacks.some(s => s.replaceStack);

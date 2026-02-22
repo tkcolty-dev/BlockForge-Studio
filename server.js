@@ -1132,7 +1132,7 @@ app.post('/api/ai/build', authenticate, async (req, res) => {
 
         // Inject scene context if available
         if (sceneContext && typeof sceneContext === 'string' && sceneContext.length > 0) {
-            messages.push({ role: 'system', content: 'Current scene objects already placed:\n' + sceneContext + '\n\nDo NOT recreate these objects. Place new objects that complement or extend what exists. Avoid overlapping with existing positions.' });
+            messages.push({ role: 'system', content: 'Current scene objects already placed:\n' + sceneContext + '\n\nCRITICAL: Output ONLY new objects the user is asking for. Do NOT recreate or re-output any existing objects. Each request should produce ONLY the new objects, not everything combined. Use modify/remove actions only when the user asks to change or delete existing objects.' });
         }
 
         // Add conversation history (last 6 exchanges max)
@@ -1506,9 +1506,10 @@ looks_billboard_text | text:text=Label — permanent label floating above object
 7. Think about what the user ACTUALLY wants. "make a door" means a full door system (click to open, animation, sound). "make an enemy" means chase + attack + defeat logic. Be thorough.
 8. Use control_forever with children for continuous behaviors (spinning, hovering, patrolling). Use single commands for one-shot actions.
 9. Combine multiple effects for polish: add sounds, particles, visual feedback when things happen.
+10. CRITICAL: Output ONLY the scripts for the current request. NEVER re-output or include scripts from previous requests. Each response must contain ONLY the new/modified stacks, not all scripts combined.
 
 # Output Format
-JSON array of stacks.
+JSON array of stacks. Include ONLY the new or modified stacks — never re-output existing unchanged scripts.
 
 New stack: { "blocks": [ { "blockId": "...", "values": {...}, "children": [...] } ] }
 Append to existing: { "appendToStack": <stack number>, "blocks": [ ...blocks to add... ] }
@@ -1706,7 +1707,7 @@ app.post('/api/ai/script', authenticate, async (req, res) => {
             if (replaceMode) {
                 messages.push({ role: 'system', content: 'Object currently has these scripts:\n' + existingScripts.slice(0, 3000) + '\n\nThe user wants you to modify/improve these scripts. Return the COMPLETE replacement set of scripts (all stacks). Do NOT use appendToStack — return full new stacks.' });
             } else {
-                messages.push({ role: 'system', content: 'Object already has these scripts:\n' + existingScripts.slice(0, 2000) + '\n\nDo NOT duplicate existing behaviors. Add new complementary scripts.' });
+                messages.push({ role: 'system', content: 'Object already has these scripts:\n' + existingScripts.slice(0, 2000) + '\n\nCRITICAL: Output ONLY the new scripts the user is asking for. Do NOT re-output or duplicate any existing scripts. Each request should produce ONLY the new behavior, not everything combined.' });
             }
         }
 
