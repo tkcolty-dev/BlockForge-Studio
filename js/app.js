@@ -5748,6 +5748,42 @@ class App {
         if (data.customMessages) this._ppBlockCode.customMessages = data.customMessages;
         if (data.uiScreens) this._ppRuntime._uiScreens = data.uiScreens;
 
+        // Load terrain into viewer
+        if (data.terrain) {
+            const { size, resolution, heightData, colorData, terrainCollision } = data.terrain;
+            const geo = new THREE.PlaneGeometry(size, size, resolution, resolution);
+            geo.rotateX(-Math.PI / 2);
+            const pos = geo.attributes.position;
+            const hArr = new Float32Array(heightData);
+            for (let i = 0; i < pos.count && i < hArr.length; i++) {
+                pos.setY(i, hArr[i]);
+            }
+            geo.computeVertexNormals();
+            const colors = colorData ? new Float32Array(colorData) : new Float32Array(pos.count * 3);
+            if (!colorData) {
+                for (let i = 0; i < colors.length; i += 3) {
+                    colors[i] = 0.29; colors[i + 1] = 0.49; colors[i + 2] = 0.25;
+                }
+            }
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.receiveShadow = true;
+            mesh.userData.isTerrain = true;
+            mesh.userData.terrainSize = size;
+            mesh.userData.terrainResolution = resolution;
+            mesh.userData.heightData = hArr;
+            mesh.userData.colorData = new Float32Array(colors);
+            mesh.userData.terrainCollision = terrainCollision !== false;
+            mesh.name = 'Terrain';
+            this._ppScene3d.scene.add(mesh);
+        }
+
+        // Load global scripts for viewer
+        if (data.globalScripts) {
+            this._ppBlockCode.globalScripts = data.globalScripts;
+        }
+
         // Force a render
         this._ppScene3d._needsRender = true;
 
