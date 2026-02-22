@@ -1728,6 +1728,11 @@ class App {
         this.createNewProject(name, templateKey);
     }
 
+    markUnsaved() {
+        this.hasUnsavedChanges = true;
+        this.updateToolbarProjectName();
+    }
+
     // ===== Toolbar Project Name + Unsaved Indicator =====
 
     updateToolbarProjectName() {
