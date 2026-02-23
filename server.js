@@ -10,7 +10,20 @@ const { WebSocketServer } = require('ws');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+// Derive a stable JWT secret: prefer env var, then derive from DB credentials (stable across restarts), then random fallback
+function getJwtSecret() {
+    if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+    // On Cloud Foundry, derive from the stable DB URI so sessions survive restarts
+    try {
+        const vcap = JSON.parse(process.env.VCAP_SERVICES || '{}');
+        const pgService = (vcap['postgres'] || vcap['postgresql'] || [])[0];
+        if (pgService && pgService.credentials && pgService.credentials.uri) {
+            return crypto.createHash('sha256').update('cobalt-jwt-' + pgService.credentials.uri).digest('hex');
+        }
+    } catch {}
+    return crypto.randomBytes(32).toString('hex');
+}
+const JWT_SECRET = getJwtSecret();
 const COOKIE_NAME = 'cobalt_session';
 const ADMIN_IDS = [1, 2];
 const ADMIN_USERNAMES = ['dev_account1'];
@@ -268,6 +281,7 @@ function setAuthCookie(res, user) {
     );
     res.cookie(COOKIE_NAME, token, {
         httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 30 * 24 * 60 * 60 * 1000
     });

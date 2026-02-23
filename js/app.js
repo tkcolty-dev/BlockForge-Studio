@@ -6481,14 +6481,25 @@ class App {
             }
             const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
             const ws = new WebSocket(`${proto}//${location.host}`);
+            let opened = false;
             ws.onopen = () => {
+                opened = true;
                 this._collabWs = ws;
                 resolve(ws);
             };
             ws.onerror = () => {
-                reject(new Error('WebSocket connection failed'));
+                if (!opened) {
+                    // Connection was rejected (likely 401 — expired session)
+                    reject(new Error('WebSocket connection failed'));
+                }
             };
-            ws.onclose = () => {
+            ws.onclose = (e) => {
+                if (!opened) {
+                    // Never connected — session likely expired, try re-authenticating
+                    this._checkSessionAndReconnect();
+                    reject(new Error('WebSocket connection rejected'));
+                    return;
+                }
                 if (this._collabRoom) {
                     this.toast('Disconnected from room');
                     this._collabCleanup();
@@ -6501,6 +6512,16 @@ class App {
                 } catch {}
             };
         });
+    }
+
+    async _checkSessionAndReconnect() {
+        try {
+            const res = await fetch('/api/me');
+            if (res.status === 401) {
+                this._offlineMode = true;
+                this.toast('Session expired — please sign in again');
+            }
+        } catch {}
     }
 
     _collabCleanup() {
